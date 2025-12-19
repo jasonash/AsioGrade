@@ -24,12 +24,14 @@ function getCurrentAcademicYear(): string {
 interface CourseState {
   // State
   courses: CourseSummary[]
+  currentCourse: CourseSummary | null
   loading: boolean
   error: string | null
   academicYear: string
 
   // Actions
   setAcademicYear: (year: string) => void
+  setCurrentCourse: (course: CourseSummary | null) => void
   fetchCourses: (year?: string) => Promise<void>
   createCourse: (input: CreateCourseInput) => Promise<Course | null>
   clearError: () => void
@@ -38,12 +40,15 @@ interface CourseState {
 export const useCourseStore = create<CourseState>((set, get) => ({
   // Initial state
   courses: [],
+  currentCourse: null,
   loading: false,
   error: null,
   academicYear: getCurrentAcademicYear(),
 
   // Actions
   setAcademicYear: (academicYear) => set({ academicYear }),
+
+  setCurrentCourse: (course) => set({ currentCourse: course }),
 
   clearError: () => set({ error: null }),
 

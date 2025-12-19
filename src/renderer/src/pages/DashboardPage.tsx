@@ -185,8 +185,7 @@ export function DashboardPage(): ReactElement {
                 key={course.id}
                 course={course}
                 onClick={() => {
-                  // TODO: Navigate to course view
-                  console.log('Open course:', course.id)
+                  useCourseStore.getState().setCurrentCourse(course)
                 }}
               />
             ))}

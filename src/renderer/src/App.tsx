@@ -1,7 +1,7 @@
 import type { ReactElement } from 'react'
 import { Layout, type NavItem } from './components/layout'
-import { DashboardPage, PlaceholderPage, SettingsPage } from './pages'
-import { useUIStore } from './stores'
+import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage } from './pages'
+import { useUIStore, useCourseStore } from './stores'
 
 const pageConfig: Record<NavItem, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Your teaching dashboard' },
@@ -19,8 +19,22 @@ const pageConfig: Record<NavItem, { title: string; description: string }> = {
 
 function App(): ReactElement {
   const { activeNav, setActiveNav } = useUIStore()
+  const { currentCourse, setCurrentCourse } = useCourseStore()
+
+  const handleNavigate = (nav: NavItem): void => {
+    // Clear current course when navigating away
+    if (currentCourse) {
+      setCurrentCourse(null)
+    }
+    setActiveNav(nav)
+  }
 
   const renderPage = (): ReactElement => {
+    // Show course view if a course is selected
+    if (activeNav === 'dashboard' && currentCourse) {
+      return <CourseViewPage />
+    }
+
     if (activeNav === 'dashboard') {
       return <DashboardPage />
     }
@@ -40,7 +54,7 @@ function App(): ReactElement {
   }
 
   return (
-    <Layout activeItem={activeNav} onNavigate={setActiveNav}>
+    <Layout activeItem={activeNav} onNavigate={handleNavigate}>
       {renderPage()}
     </Layout>
   )
