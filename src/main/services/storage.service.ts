@@ -1,0 +1,223 @@
+import Store from 'electron-store'
+
+// Schema for type-safe storage
+interface StoreSchema {
+  // Settings
+  settings: {
+    theme: 'dark' | 'light' | 'system'
+    sidebarExpanded: boolean
+    autoSyncOnStart: boolean
+    showSyncStatus: boolean
+  }
+
+  // LLM provider configuration
+  llmProviders: {
+    default: 'openai' | 'anthropic' | 'google' | null
+    openai: {
+      apiKey: string | null
+      model: string
+    }
+    anthropic: {
+      apiKey: string | null
+      model: string
+    }
+    google: {
+      apiKey: string | null
+      model: string
+    }
+    temperature: number
+  }
+
+  // Cache metadata
+  cacheMetadata: Record<
+    string,
+    {
+      version: number
+      lastModified: string
+      lastSynced: string
+    }
+  >
+
+  // Test drafts (local only until published)
+  drafts: Record<
+    string,
+    {
+      id: string
+      classId: string
+      name: string
+      lastModified: string
+      content: unknown // Test content
+    }
+  >
+
+  // Recent classes for quick access
+  recentClasses: string[]
+
+  // Window state
+  windowState: {
+    width: number
+    height: number
+    x?: number
+    y?: number
+    isMaximized: boolean
+  }
+}
+
+// Default values
+const defaults: StoreSchema = {
+  settings: {
+    theme: 'dark',
+    sidebarExpanded: true,
+    autoSyncOnStart: true,
+    showSyncStatus: true
+  },
+  llmProviders: {
+    default: null,
+    openai: {
+      apiKey: null,
+      model: 'gpt-4'
+    },
+    anthropic: {
+      apiKey: null,
+      model: 'claude-3-5-sonnet-20241022'
+    },
+    google: {
+      apiKey: null,
+      model: 'gemini-pro'
+    },
+    temperature: 0.7
+  },
+  cacheMetadata: {},
+  drafts: {},
+  recentClasses: [],
+  windowState: {
+    width: 1200,
+    height: 800,
+    isMaximized: false
+  }
+}
+
+class StorageService {
+  private store: Store<StoreSchema>
+
+  constructor() {
+    this.store = new Store<StoreSchema>({
+      name: 'teachinghelp-storage',
+      defaults,
+      encryptionKey: 'teachinghelp-secure-storage-key' // For basic encryption
+    })
+  }
+
+  // Generic get/set for any key
+  get<K extends keyof StoreSchema>(key: K): StoreSchema[K] {
+    return this.store.get(key)
+  }
+
+  set<K extends keyof StoreSchema>(key: K, value: StoreSchema[K]): void {
+    this.store.set(key, value)
+  }
+
+  // Settings helpers
+  getSettings(): StoreSchema['settings'] {
+    return this.store.get('settings')
+  }
+
+  updateSettings(updates: Partial<StoreSchema['settings']>): void {
+    const current = this.getSettings()
+    this.store.set('settings', { ...current, ...updates })
+  }
+
+  // LLM provider helpers
+  getLLMProviders(): StoreSchema['llmProviders'] {
+    return this.store.get('llmProviders')
+  }
+
+  setLLMApiKey(provider: 'openai' | 'anthropic' | 'google', apiKey: string | null): void {
+    const providers = this.getLLMProviders()
+    providers[provider].apiKey = apiKey
+    this.store.set('llmProviders', providers)
+  }
+
+  setDefaultLLMProvider(provider: 'openai' | 'anthropic' | 'google' | null): void {
+    const providers = this.getLLMProviders()
+    providers.default = provider
+    this.store.set('llmProviders', providers)
+  }
+
+  // Draft management
+  saveDraft(draftId: string, classId: string, name: string, content: unknown): void {
+    const drafts = this.store.get('drafts')
+    drafts[draftId] = {
+      id: draftId,
+      classId,
+      name,
+      lastModified: new Date().toISOString(),
+      content
+    }
+    this.store.set('drafts', drafts)
+  }
+
+  getDraft(draftId: string): StoreSchema['drafts'][string] | null {
+    const drafts = this.store.get('drafts')
+    return drafts[draftId] ?? null
+  }
+
+  listDrafts(): StoreSchema['drafts'][string][] {
+    const drafts = this.store.get('drafts')
+    return Object.values(drafts).sort(
+      (a, b) => new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
+    )
+  }
+
+  deleteDraft(draftId: string): void {
+    const drafts = this.store.get('drafts')
+    delete drafts[draftId]
+    this.store.set('drafts', drafts)
+  }
+
+  // Recent classes
+  addRecentClass(classId: string): void {
+    const recent = this.store.get('recentClasses')
+    const filtered = recent.filter((id) => id !== classId)
+    filtered.unshift(classId)
+    this.store.set('recentClasses', filtered.slice(0, 5)) // Keep only 5 recent
+  }
+
+  getRecentClasses(): string[] {
+    return this.store.get('recentClasses')
+  }
+
+  // Window state for persistence
+  getWindowState(): StoreSchema['windowState'] {
+    return this.store.get('windowState')
+  }
+
+  setWindowState(state: Partial<StoreSchema['windowState']>): void {
+    const current = this.getWindowState()
+    this.store.set('windowState', { ...current, ...state })
+  }
+
+  // Cache metadata for sync
+  getCacheMetadata(key: string): StoreSchema['cacheMetadata'][string] | null {
+    const metadata = this.store.get('cacheMetadata')
+    return metadata[key] ?? null
+  }
+
+  setCacheMetadata(key: string, data: StoreSchema['cacheMetadata'][string]): void {
+    const metadata = this.store.get('cacheMetadata')
+    metadata[key] = data
+    this.store.set('cacheMetadata', metadata)
+  }
+
+  // Clear all data (for logout/reset)
+  clear(): void {
+    this.store.clear()
+    // Re-initialize with defaults
+    Object.entries(defaults).forEach(([key, value]) => {
+      this.store.set(key as keyof StoreSchema, value)
+    })
+  }
+}
+
+// Singleton instance
+export const storageService = new StorageService()

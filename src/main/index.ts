@@ -1,11 +1,18 @@
 import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { registerIpcHandlers } from './ipc/handlers'
+import { storageService } from './services/storage.service'
 
 function createWindow(): void {
+  // Get saved window state
+  const windowState = storageService.getWindowState()
+
   const mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: windowState.width,
+    height: windowState.height,
+    x: windowState.x,
+    y: windowState.y,
     minWidth: 800,
     minHeight: 600,
     show: false,
@@ -16,6 +23,23 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false
     }
+  })
+
+  // Restore maximized state
+  if (windowState.isMaximized) {
+    mainWindow.maximize()
+  }
+
+  // Save window state on close
+  mainWindow.on('close', () => {
+    const bounds = mainWindow.getBounds()
+    storageService.setWindowState({
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      isMaximized: mainWindow.isMaximized()
+    })
   })
 
   mainWindow.on('ready-to-show', () => {
@@ -38,6 +62,9 @@ function createWindow(): void {
 app.whenReady().then(() => {
   // Set app user model id for Windows
   electronApp.setAppUserModelId('com.teachinghelp')
+
+  // Register IPC handlers
+  registerIpcHandlers()
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.

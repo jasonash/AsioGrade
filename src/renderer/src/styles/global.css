@@ -1,34 +1,120 @@
-:root {
-  /* Dark theme colors (default) - warm/friendly palette */
+@import "tailwindcss";
+
+/* Custom theme configuration for Tailwind v4 */
+@theme {
+  /* Background colors */
   --color-bg-primary: #1a1a2e;
   --color-bg-secondary: #16213e;
-  --color-bg-tertiary: #0f3460;
-  --color-text-primary: #eaeaea;
-  --color-text-secondary: #a0a0a0;
-  --color-accent: #e94560;
-  --color-accent-hover: #ff6b6b;
-  --color-success: #4ade80;
-  --color-warning: #fbbf24;
-  --color-error: #f87171;
-  --color-border: #2d2d44;
+  --color-bg-tertiary: #0f0f23;
 
-  /* Typography */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
-    'Open Sans', 'Helvetica Neue', sans-serif;
-  font-size: 16px;
-  line-height: 1.5;
-  font-weight: 400;
+  /* Surface colors (cards, panels) */
+  --color-surface: #252540;
+  --color-surface-hover: #2d2d4a;
+  --color-surface-active: #353560;
 
-  color-scheme: dark;
-  color: var(--color-text-primary);
-  background-color: var(--color-bg-primary);
+  /* Text colors */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #b8b8d0;
+  --color-text-muted: #6b6b8a;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* Accent colors */
+  --color-accent: #7c3aed;
+  --color-accent-secondary: #a78bfa;
+  --color-accent-warm: #f59e0b;
+
+  /* Status colors */
+  --color-success: #10b981;
+  --color-error: #ef4444;
+  --color-warning: #f59e0b;
+  --color-info: #3b82f6;
+
+  /* Border color */
+  --color-border: #2d2d4a;
+
+  /* Ability level colors */
+  --color-ability-advanced: #10b981;
+  --color-ability-typical: #3b82f6;
+  --color-ability-remedial: #f59e0b;
+  --color-ability-iep: #a855f7;
+
+  /* Sidebar dimensions */
+  --sidebar-collapsed: 60px;
+  --sidebar-expanded: 200px;
+
+  /* Border radius */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease-out;
+  --transition-normal: 200ms ease-out;
+  --transition-slow: 300ms ease-out;
 }
 
+/* Dark theme colors (default) */
+:root {
+  /* Background */
+  --color-bg-primary: #1a1a2e;
+  --color-bg-secondary: #16213e;
+  --color-bg-tertiary: #0f0f23;
+
+  /* Surface (cards, panels) */
+  --color-surface: #252540;
+  --color-surface-hover: #2d2d4a;
+  --color-surface-active: #353560;
+
+  /* Text */
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #b8b8d0;
+  --color-text-muted: #6b6b8a;
+
+  /* Accent */
+  --color-accent: #7c3aed;
+  --color-accent-secondary: #a78bfa;
+  --color-accent-warm: #f59e0b;
+
+  /* Status */
+  --color-success: #10b981;
+  --color-error: #ef4444;
+  --color-warning: #f59e0b;
+  --color-info: #3b82f6;
+
+  /* Border */
+  --color-border: #2d2d4a;
+
+  color-scheme: dark;
+}
+
+/* Light theme colors */
+.light {
+  /* Background */
+  --color-bg-primary: #f8f9fc;
+  --color-bg-secondary: #ffffff;
+  --color-bg-tertiary: #eef1f6;
+
+  /* Surface (cards, panels) */
+  --color-surface: #ffffff;
+  --color-surface-hover: #f3f4f6;
+  --color-surface-active: #e5e7eb;
+
+  /* Text */
+  --color-text-primary: #1f2937;
+  --color-text-secondary: #4b5563;
+  --color-text-muted: #9ca3af;
+
+  /* Accent */
+  --color-accent: #7c3aed;
+  --color-accent-secondary: #6d28d9;
+  --color-accent-warm: #f59e0b;
+
+  /* Border */
+  --color-border: #e5e7eb;
+
+  color-scheme: light;
+}
+
+/* Base styles */
 * {
   margin: 0;
   padding: 0;
@@ -39,6 +125,14 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
+    'Open Sans', 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 #root {
@@ -47,74 +141,27 @@ body {
   flex-direction: column;
 }
 
-.app {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  padding: 2rem;
-}
-
-.app-header {
-  text-align: center;
-  margin-bottom: 2rem;
-}
-
-.app-header h1 {
-  font-size: 2.5rem;
-  font-weight: 700;
-  color: var(--color-accent);
-  margin-bottom: 0.5rem;
-}
-
-.app-header p {
-  color: var(--color-text-secondary);
-}
-
-.app-main {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.card {
-  background: var(--color-bg-secondary);
-  border: 1px solid var(--color-border);
-  border-radius: 12px;
-  padding: 2rem;
-  text-align: center;
-  max-width: 400px;
-}
-
-.card p {
-  margin: 1rem 0;
-  color: var(--color-text-secondary);
-}
-
-button {
-  background: var(--color-accent);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.2s ease;
-}
-
-button:hover {
-  background: var(--color-accent-hover);
-}
-
-button:focus {
+/* Focus styles for accessibility */
+*:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
 
-.app-footer {
-  text-align: center;
-  padding: 1rem;
-  color: var(--color-text-secondary);
-  font-size: 0.875rem;
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-tertiary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-surface-hover);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-surface-active);
 }

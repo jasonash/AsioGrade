@@ -33,23 +33,30 @@
   "homepage": "https://github.com/jasonash/TeachingHelp#readme",
   "devDependencies": {
     "@electron-toolkit/utils": "^4.0.0",
+    "@tailwindcss/postcss": "^4.1.18",
     "@types/node": "^25.0.3",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
+    "autoprefixer": "^10.4.23",
     "electron": "^39.2.7",
     "electron-builder": "^26.0.12",
     "electron-vite": "^5.0.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.18",
     "typescript": "^5.9.3",
     "vite": "^7.3.0"
   },
   "dependencies": {
+    "electron-store": "^11.0.2",
     "jsqr": "^1.4.0",
+    "lucide-react": "^0.562.0",
     "opencv-wasm": "^4.3.0-10",
     "pdf-lib": "^1.17.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "sharp": "^0.34.5"
+    "sharp": "^0.34.5",
+    "zustand": "^5.0.9"
   },
   "build": {
     "appId": "com.teachinghelp.app",

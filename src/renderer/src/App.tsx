@@ -1,30 +1,44 @@
 import type { ReactElement } from 'react'
-import { useState } from 'react'
+import { Layout, type NavItem } from './components/layout'
+import { DashboardPage, PlaceholderPage } from './pages'
+import { useUIStore } from './stores'
+
+const pageConfig: Record<NavItem, { title: string; description: string }> = {
+  dashboard: { title: 'Dashboard', description: 'Your teaching dashboard' },
+  roster: { title: 'Roster', description: 'Manage your class rosters and student ability levels' },
+  tests: { title: 'Tests', description: 'Create and manage tests with AI-generated questions' },
+  scantrons: {
+    title: 'Scantrons',
+    description: 'Generate personalized scantron sheets for printing'
+  },
+  grading: { title: 'Grading', description: 'Import scanned tests and grade them automatically' },
+  analytics: { title: 'Analytics', description: 'View class and student performance analytics' },
+  standards: { title: 'Standards', description: 'Import and manage teaching standards' },
+  settings: { title: 'Settings', description: 'Configure application settings and preferences' }
+}
 
 function App(): ReactElement {
-  const [count, setCount] = useState(0)
+  const { activeNav, setActiveNav } = useUIStore()
+
+  const renderPage = (): ReactElement => {
+    if (activeNav === 'dashboard') {
+      return <DashboardPage />
+    }
+
+    const config = pageConfig[activeNav]
+    return (
+      <PlaceholderPage
+        title={config.title}
+        icon={activeNav as Exclude<NavItem, 'dashboard'>}
+        description={config.description}
+      />
+    )
+  }
 
   return (
-    <div className="app">
-      <header className="app-header">
-        <h1>TeachingHelp</h1>
-        <p>Your AI-powered teaching assistant</p>
-      </header>
-
-      <main className="app-main">
-        <div className="card">
-          <p>Platform: {window.electronAPI?.platform ?? 'unknown'}</p>
-          <button onClick={() => setCount((c) => c + 1)}>
-            Count is {count}
-          </button>
-          <p>Click the button to verify React is working</p>
-        </div>
-      </main>
-
-      <footer className="app-footer">
-        <p>Ready for development</p>
-      </footer>
-    </div>
+    <Layout activeItem={activeNav} onNavigate={setActiveNav}>
+      {renderPage()}
+    </Layout>
   )
 }
 

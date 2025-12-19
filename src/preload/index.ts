@@ -1,37 +1,90 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+// Whitelist of allowed IPC channels
+const validInvokeChannels = [
+  // Auth
+  'auth:login',
+  'auth:logout',
+  'auth:getStatus',
+  'auth:getCurrentUser',
+  'auth:isAuthenticated',
+
+  // Google Drive
+  'drive:listClasses',
+  'drive:getClass',
+  'drive:createClass',
+  'drive:deleteClass',
+  'drive:getRoster',
+  'drive:saveRoster',
+  'drive:getStandards',
+  'drive:saveStandards',
+  'drive:getTest',
+  'drive:saveTest',
+
+  // Storage
+  'storage:get',
+  'storage:set',
+  'storage:setLLMApiKey',
+  'storage:setDefaultLLMProvider',
+  'storage:saveDraft',
+  'storage:getDraft',
+  'storage:deleteDraft',
+  'storage:addRecentClass',
+  'storage:clear',
+
+  // LLM
+  'llm:complete',
+  'llm:stream',
+  'llm:testConnection',
+  'llm:getProviders',
+
+  // PDF
+  'pdf:parseScantron',
+  'pdf:generateScantron',
+  'pdf:exportTest',
+
+  // Grading
+  'grade:process',
+  'grade:exportToSheets',
+  'grade:analyzeTest',
+
+  // Window
+  'window:openTestEditor',
+  'window:openRoster',
+  'window:minimize',
+  'window:maximize',
+  'window:close'
+] as const
+
+const validEventChannels = [
+  'auth:statusChanged',
+  'sync:progress',
+  'sync:error',
+  'sync:complete',
+  'llm:streamChunk',
+  'grade:progress'
+] as const
+
+type InvokeChannel = (typeof validInvokeChannels)[number]
+type EventChannel = (typeof validEventChannels)[number]
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
   // Platform info
   platform: process.platform,
 
-  // IPC methods for service calls
-  invoke: (channel: string, ...args: unknown[]): Promise<unknown> => {
-    // Whitelist of allowed channels
-    const validChannels = [
-      'auth:login',
-      'auth:logout',
-      'auth:getStatus',
-      'drive:listFiles',
-      'drive:uploadFile',
-      'drive:downloadFile',
-      'storage:get',
-      'storage:set',
-      'llm:generate',
-      'pdf:parse',
-      'grade:process'
-    ]
-    if (validChannels.includes(channel)) {
-      return ipcRenderer.invoke(channel, ...args)
+  // IPC invoke for request/response calls
+  invoke: <T = unknown>(channel: InvokeChannel, ...args: unknown[]): Promise<T> => {
+    if (validInvokeChannels.includes(channel)) {
+      return ipcRenderer.invoke(channel, ...args) as Promise<T>
     }
     return Promise.reject(new Error(`Invalid channel: ${channel}`))
   },
 
-  // Event listeners
-  on: (channel: string, callback: (...args: unknown[]) => void): (() => void) => {
-    const validChannels = ['auth:statusChanged', 'sync:progress', 'sync:error']
-    if (validChannels.includes(channel)) {
+  // Event listeners for one-way messages from main process
+  on: (channel: EventChannel, callback: (...args: unknown[]) => void): (() => void) => {
+    if (validEventChannels.includes(channel)) {
       const subscription = (_event: Electron.IpcRendererEvent, ...args: unknown[]): void => {
         callback(...args)
       }
@@ -40,15 +93,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.removeListener(channel, subscription)
       }
     }
+    console.warn(`Invalid event channel: ${channel}`)
     return () => {}
+  },
+
+  // One-time event listener
+  once: (channel: EventChannel, callback: (...args: unknown[]) => void): void => {
+    if (validEventChannels.includes(channel)) {
+      ipcRenderer.once(channel, (_event, ...args) => callback(...args))
+    } else {
+      console.warn(`Invalid event channel: ${channel}`)
+    }
   }
 })
 
 // Type declarations for the exposed API
 export interface ElectronAPI {
   platform: NodeJS.Platform
-  invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
-  on: (channel: string, callback: (...args: unknown[]) => void) => () => void
+  invoke: <T = unknown>(channel: InvokeChannel, ...args: unknown[]) => Promise<T>
+  on: (channel: EventChannel, callback: (...args: unknown[]) => void) => () => void
+  once: (channel: EventChannel, callback: (...args: unknown[]) => void) => void
 }
 
 declare global {
