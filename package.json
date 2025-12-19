@@ -44,8 +44,12 @@
     "vite": "^7.3.0"
   },
   "dependencies": {
+    "jsqr": "^1.4.0",
+    "opencv-wasm": "^4.3.0-10",
+    "pdf-lib": "^1.17.1",
     "react": "^19.2.3",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "sharp": "^0.34.5"
   },
   "build": {
     "appId": "com.teachinghelp.app",
@@ -58,13 +62,22 @@
     ],
     "mac": {
       "category": "public.app-category.education",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Education"
     }
   }

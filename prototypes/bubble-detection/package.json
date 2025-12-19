@@ -1,0 +1,21 @@
+{
+  "name": "bubble-detection-prototype",
+  "version": "1.0.0",
+  "description": "Prototype to validate bubble detection for scantron grading",
+  "main": "dist/detect-bubbles.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc && node dist/detect-bubbles.js",
+    "dev": "npx ts-node detect-bubbles.ts"
+  },
+  "dependencies": {
+    "opencv-wasm": "^4.3.0-10",
+    "sharp": "^0.33.5",
+    "jsqr": "^1.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "ts-node": "^10.9.0"
+  }
+}
