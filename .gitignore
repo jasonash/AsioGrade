@@ -1,6 +1,7 @@
 # Private files - never commit
 CLAUDE.md
 docs/PROJECT_STATUS.md
+config/oauth.json
 
 # Dependencies
 node_modules/

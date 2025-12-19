@@ -1,18 +1,67 @@
 import { google } from 'googleapis'
 import { OAuth2Client, Credentials } from 'google-auth-library'
-import { shell, BrowserWindow } from 'electron'
+import { shell, BrowserWindow, app } from 'electron'
 import * as http from 'http'
+import * as fs from 'fs'
+import * as path from 'path'
 import { URL } from 'url'
 import { storageService, UserInfo, OAuthTokens } from './storage.service'
 
-// OAuth configuration
-// These should be set via environment variables or a config file
-// For development, we'll use placeholder values that need to be configured
-const OAUTH_CONFIG = {
-  clientId: process.env['GOOGLE_CLIENT_ID'] ?? '',
-  clientSecret: process.env['GOOGLE_CLIENT_SECRET'] ?? '',
-  redirectUri: 'http://localhost:8089/oauth/callback'
+// OAuth configuration interface
+interface OAuthConfig {
+  clientId: string
+  clientSecret: string
+  redirectUri: string
 }
+
+/**
+ * Load OAuth credentials from config file or environment variables
+ * Priority: config/oauth.json > environment variables
+ */
+function loadOAuthConfig(): OAuthConfig {
+  const redirectUri = 'http://localhost:8089/oauth/callback'
+
+  // Try to load from config file first
+  const configPaths = [
+    // Development: project root
+    path.join(process.cwd(), 'config', 'oauth.json'),
+    // Production: next to the app executable
+    path.join(app.getAppPath(), 'config', 'oauth.json'),
+    // Production: in resources folder
+    path.join(app.getAppPath(), '..', 'config', 'oauth.json')
+  ]
+
+  for (const configPath of configPaths) {
+    try {
+      if (fs.existsSync(configPath)) {
+        const configData = fs.readFileSync(configPath, 'utf-8')
+        const config = JSON.parse(configData) as { clientId?: string; clientSecret?: string }
+
+        if (config.clientId && config.clientSecret) {
+          console.log(`Loaded OAuth config from: ${configPath}`)
+          return {
+            clientId: config.clientId,
+            clientSecret: config.clientSecret,
+            redirectUri
+          }
+        }
+      }
+    } catch {
+      // Continue to next path or fallback
+    }
+  }
+
+  // Fallback to environment variables
+  console.log('OAuth config file not found, using environment variables')
+  return {
+    clientId: process.env['GOOGLE_CLIENT_ID'] ?? '',
+    clientSecret: process.env['GOOGLE_CLIENT_SECRET'] ?? '',
+    redirectUri
+  }
+}
+
+// Load OAuth configuration
+const OAUTH_CONFIG = loadOAuthConfig()
 
 // Required OAuth scopes for TeachingHelp
 const OAUTH_SCOPES = [
