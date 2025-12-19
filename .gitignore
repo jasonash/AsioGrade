@@ -7,8 +7,10 @@ node_modules/
 
 # Build outputs
 dist/
+dist-ts/
 out/
 build/
+release/
 
 # Environment files
 .env
