@@ -9,7 +9,8 @@ import {
   CreateSectionInput,
   UpdateSectionInput,
   Roster,
-  CreateStudentInput
+  CreateStudentInput,
+  UpdateStudentInput
 } from '../../shared/types'
 import { LLMRequest, LLMProviderType } from '../../shared/types/llm.types'
 
@@ -340,6 +341,22 @@ function registerDriveHandlers(): void {
     'drive:addStudent',
     async (_event, sectionId: string, input: CreateStudentInput) => {
       return driveService.addStudent(sectionId, input)
+    }
+  )
+
+  // Update student in a section
+  ipcMain.handle(
+    'drive:updateStudent',
+    async (_event, sectionId: string, input: UpdateStudentInput) => {
+      return driveService.updateStudent(sectionId, input)
+    }
+  )
+
+  // Delete student from a section
+  ipcMain.handle(
+    'drive:deleteStudent',
+    async (_event, sectionId: string, studentId: string) => {
+      return driveService.deleteStudent(sectionId, studentId)
     }
   )
 }

@@ -4,7 +4,11 @@ import { useCourseStore, useSectionStore } from '../stores'
 import { SectionCreationModal } from '../components/sections'
 import type { SectionSummary } from '../../../shared/types'
 
-export function CourseViewPage(): ReactElement {
+interface CourseViewPageProps {
+  onSectionSelect?: (section: SectionSummary) => void
+}
+
+export function CourseViewPage({ onSectionSelect }: CourseViewPageProps): ReactElement {
   const { currentCourse, setCurrentCourse } = useCourseStore()
   const { sections, loading, error, fetchSections, clearSections } = useSectionStore()
 
@@ -132,7 +136,11 @@ export function CourseViewPage(): ReactElement {
         {sections.length > 0 && (
           <div className="space-y-2">
             {sections.map((section) => (
-              <SectionCard key={section.id} section={section} />
+              <SectionCard
+                key={section.id}
+                section={section}
+                onView={() => onSectionSelect?.(section)}
+              />
             ))}
           </div>
         )}
@@ -154,11 +162,12 @@ export function CourseViewPage(): ReactElement {
 
 interface SectionCardProps {
   section: SectionSummary
+  onView: () => void
 }
 
-function SectionCard({ section }: SectionCardProps): ReactElement {
+function SectionCard({ section, onView }: SectionCardProps): ReactElement {
   return (
-    <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/50 transition-colors cursor-pointer">
+    <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/50 transition-colors">
       <div className="flex items-center justify-between">
         <div>
           <h3 className="font-medium text-[var(--color-text-primary)]">{section.name}</h3>
@@ -181,7 +190,10 @@ function SectionCard({ section }: SectionCardProps): ReactElement {
             )}
           </div>
         </div>
-        <button className="px-3 py-1.5 rounded-lg text-sm text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors">
+        <button
+          onClick={onView}
+          className="px-3 py-1.5 rounded-lg text-sm text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
+        >
           View
         </button>
       </div>

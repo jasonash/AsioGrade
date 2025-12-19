@@ -13,6 +13,7 @@ import {
   Roster,
   Student,
   CreateStudentInput,
+  UpdateStudentInput,
   ServiceResult
 } from '../../shared/types'
 
@@ -246,6 +247,9 @@ class DriveService {
         // Read course metadata
         const course = await this.readCourseMetadata(folder.id!)
         if (course) {
+          // Populate folder cache so getCourse can find this course later
+          this.folderCache.courseFolderIds[course.id] = folder.id!
+
           // Count sections
           const sectionCount = await this.countSections(folder.id!)
 
@@ -369,8 +373,8 @@ class DriveService {
       const drive = await this.getDrive()
       const user = storageService.getUser()
 
-      // Generate course ID (slug from name)
-      const courseId = this.generateSlug(input.name)
+      // Generate unique course ID (slug + random suffix)
+      const courseId = this.generateUniqueId(input.name)
       const now = new Date().toISOString()
 
       // Create course folder
@@ -564,6 +568,9 @@ class DriveService {
       for (const folder of response.data.files ?? []) {
         const section = await this.readSectionMetadata(folder.id!)
         if (section) {
+          // Populate folder cache so getSection can find this section later
+          this.folderCache.sectionFolderIds[section.id] = folder.id!
+
           const studentCount = await this.countStudents(folder.id!)
 
           sections.push({
@@ -669,8 +676,8 @@ class DriveService {
       // Get sections folder
       const sectionsFolderId = await this.ensureSubfolder(courseFolderId, 'sections')
 
-      // Generate section ID (slug from name)
-      const sectionId = this.generateSlug(input.name)
+      // Generate unique section ID (slug + random suffix)
+      const sectionId = this.generateUniqueId(input.name)
       const now = new Date().toISOString()
 
       // Create section folder
@@ -1021,22 +1028,110 @@ class DriveService {
     }
   }
 
+  /**
+   * Update a student in a section's roster
+   */
+  async updateStudent(
+    sectionId: string,
+    input: UpdateStudentInput
+  ): Promise<ServiceResult<Student>> {
+    try {
+      // Get current roster
+      const rosterResult = await this.getRoster(sectionId)
+      if (!rosterResult.success) {
+        return { success: false, error: rosterResult.error }
+      }
+
+      const roster = rosterResult.data
+      const studentIndex = roster.students.findIndex((s) => s.id === input.id)
+
+      if (studentIndex === -1) {
+        return { success: false, error: 'Student not found' }
+      }
+
+      const existing = roster.students[studentIndex]
+      const now = new Date().toISOString()
+
+      // Merge updates
+      const updated: Student = {
+        ...existing,
+        firstName: input.firstName ?? existing.firstName,
+        lastName: input.lastName ?? existing.lastName,
+        email: input.email ?? existing.email,
+        studentNumber: input.studentNumber ?? existing.studentNumber,
+        notes: input.notes ?? existing.notes,
+        active: input.active ?? existing.active,
+        updatedAt: now
+      }
+
+      roster.students[studentIndex] = updated
+
+      // Save roster
+      const saveResult = await this.saveRoster(sectionId, roster)
+      if (!saveResult.success) {
+        return { success: false, error: saveResult.error }
+      }
+
+      return { success: true, data: updated }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update student'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Delete a student from a section's roster
+   */
+  async deleteStudent(sectionId: string, studentId: string): Promise<ServiceResult<void>> {
+    try {
+      // Get current roster
+      const rosterResult = await this.getRoster(sectionId)
+      if (!rosterResult.success) {
+        return { success: false, error: rosterResult.error }
+      }
+
+      const roster = rosterResult.data
+      const studentIndex = roster.students.findIndex((s) => s.id === studentId)
+
+      if (studentIndex === -1) {
+        return { success: false, error: 'Student not found' }
+      }
+
+      // Hard delete - remove from array
+      roster.students.splice(studentIndex, 1)
+
+      // Save roster
+      const saveResult = await this.saveRoster(sectionId, roster)
+      if (!saveResult.success) {
+        return { success: false, error: saveResult.error }
+      }
+
+      return { success: true, data: undefined }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete student'
+      return { success: false, error: message }
+    }
+  }
+
   // ============================================================
   // Helper Methods
   // ============================================================
 
   /**
-   * Generate a URL-safe slug from a string
+   * Generate a unique ID with a readable slug prefix and random suffix
+   * Example: "ap-chemistry-k3m9x2"
    */
-  private generateSlug(text: string): string {
-    return text
+  private generateUniqueId(text: string): string {
+    const slug = text
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
+    const suffix = Math.random().toString(36).substring(2, 8) // 6 random chars
+    return `${slug}-${suffix}`
   }
 
   /**
-   * Generate a unique ID
+   * Generate a unique ID (for entities without a name, like students)
    */
   private generateId(): string {
     return `${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 9)}`

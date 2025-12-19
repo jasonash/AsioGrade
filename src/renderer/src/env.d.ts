@@ -27,6 +27,8 @@ type InvokeChannel =
   | 'drive:getRoster'
   | 'drive:saveRoster'
   | 'drive:addStudent'
+  | 'drive:updateStudent'
+  | 'drive:deleteStudent'
   // Storage
   | 'storage:get'
   | 'storage:set'

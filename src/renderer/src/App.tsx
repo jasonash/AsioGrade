@@ -1,7 +1,9 @@
-import type { ReactElement } from 'react'
+import { useState, type ReactElement } from 'react'
 import { Layout, type NavItem } from './components/layout'
-import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage } from './pages'
-import { useUIStore, useCourseStore } from './stores'
+import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage } from './pages'
+import { CourseCreationModal } from './components/courses'
+import { useUIStore, useCourseStore, useSectionStore } from './stores'
+import type { CourseSummary, SectionSummary } from '../../shared/types'
 
 const pageConfig: Record<NavItem, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Your teaching dashboard' },
@@ -20,23 +22,66 @@ const pageConfig: Record<NavItem, { title: string; description: string }> = {
 function App(): ReactElement {
   const { activeNav, setActiveNav } = useUIStore()
   const { currentCourse, setCurrentCourse } = useCourseStore()
+  const { fetchSections } = useSectionStore()
+
+  // State for current section view
+  const [currentSection, setCurrentSection] = useState<SectionSummary | null>(null)
+
+  // State for course creation modal (can be triggered from sidebar)
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   const handleNavigate = (nav: NavItem): void => {
-    // Clear current course when navigating away
+    // Clear current course and section when navigating away
     if (currentCourse) {
       setCurrentCourse(null)
+    }
+    if (currentSection) {
+      setCurrentSection(null)
     }
     setActiveNav(nav)
   }
 
+  const handleCourseSelect = (course: CourseSummary): void => {
+    setCurrentCourse(course)
+    setCurrentSection(null)
+    setActiveNav('dashboard')
+    // Fetch sections for this course
+    fetchSections(course.id)
+  }
+
+  const handleSectionSelect = (section: SectionSummary, course: CourseSummary): void => {
+    setCurrentCourse(course)
+    setCurrentSection(section)
+    setActiveNav('dashboard')
+  }
+
+  const handleNewCourse = (): void => {
+    setIsCreateModalOpen(true)
+  }
+
   const renderPage = (): ReactElement => {
-    // Show course view if a course is selected
+    // Show section view if a section is selected
+    if (activeNav === 'dashboard' && currentSection && currentCourse) {
+      return (
+        <SectionViewPage
+          course={currentCourse}
+          section={currentSection}
+          onBack={() => setCurrentSection(null)}
+        />
+      )
+    }
+
+    // Show course view if a course is selected (but no section)
     if (activeNav === 'dashboard' && currentCourse) {
-      return <CourseViewPage />
+      return (
+        <CourseViewPage
+          onSectionSelect={(section) => setCurrentSection(section)}
+        />
+      )
     }
 
     if (activeNav === 'dashboard') {
-      return <DashboardPage />
+      return <DashboardPage onOpenCreateModal={() => setIsCreateModalOpen(true)} />
     }
 
     if (activeNav === 'settings') {
@@ -54,9 +99,37 @@ function App(): ReactElement {
   }
 
   return (
-    <Layout activeItem={activeNav} onNavigate={handleNavigate}>
-      {renderPage()}
-    </Layout>
+    <>
+      <Layout
+        activeItem={activeNav}
+        onNavigate={handleNavigate}
+        onCourseSelect={handleCourseSelect}
+        onSectionSelect={handleSectionSelect}
+        onNewCourse={handleNewCourse}
+      >
+        {renderPage()}
+      </Layout>
+
+      {/* Course Creation Modal - at app level so sidebar can trigger it */}
+      <CourseCreationModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={(course) => {
+          // Convert Course to CourseSummary for navigation
+          const courseSummary: CourseSummary = {
+            id: course.id,
+            name: course.name,
+            subject: course.subject,
+            gradeLevel: course.gradeLevel,
+            academicYear: course.academicYear,
+            sectionCount: 0, // New course has no sections
+            lastModified: new Date(course.updatedAt).getTime(),
+            driveFolderId: course.driveFolderId ?? ''
+          }
+          handleCourseSelect(courseSummary)
+        }}
+      />
+    </>
   )
 }
 
