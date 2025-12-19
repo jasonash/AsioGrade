@@ -208,14 +208,14 @@ class AuthService {
         prompt: 'consent' // Force consent to get refresh token
       })
 
-      // Start local server to receive callback
-      const authCode = await this.startCallbackServer()
+      // Start local server to receive callback (don't await yet)
+      const authCodePromise = this.startCallbackServer()
 
       // Open browser for authentication
       await shell.openExternal(authUrl)
 
-      // Wait for the auth code from callback
-      const code = await authCode
+      // Now wait for the auth code from callback
+      const code = await authCodePromise
 
       // Exchange code for tokens
       const { tokens } = await this.oauth2Client.getToken(code)
