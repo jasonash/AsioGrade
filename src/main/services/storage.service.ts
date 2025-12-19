@@ -204,6 +204,18 @@ class StorageService {
     this.store.set('llmProviders', providers)
   }
 
+  setLLMModel(provider: 'openai' | 'anthropic' | 'google', model: string): void {
+    const providers = this.getLLMProviders()
+    providers[provider].model = model
+    this.store.set('llmProviders', providers)
+  }
+
+  setLLMTemperature(temperature: number): void {
+    const providers = this.getLLMProviders()
+    providers.temperature = Math.max(0, Math.min(2, temperature))
+    this.store.set('llmProviders', providers)
+  }
+
   // Draft management
   saveDraft(draftId: string, classId: string, name: string, content: unknown): void {
     const drafts = this.store.get('drafts')

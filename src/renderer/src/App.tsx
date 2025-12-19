@@ -1,11 +1,11 @@
 import type { ReactElement } from 'react'
 import { Layout, type NavItem } from './components/layout'
-import { DashboardPage, PlaceholderPage } from './pages'
+import { DashboardPage, PlaceholderPage, SettingsPage } from './pages'
 import { useUIStore } from './stores'
 
 const pageConfig: Record<NavItem, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Your teaching dashboard' },
-  roster: { title: 'Roster', description: 'Manage your class rosters and student ability levels' },
+  roster: { title: 'Roster', description: 'Manage your class rosters and student information' },
   tests: { title: 'Tests', description: 'Create and manage tests with AI-generated questions' },
   scantrons: {
     title: 'Scantrons',
@@ -25,11 +25,15 @@ function App(): ReactElement {
       return <DashboardPage />
     }
 
+    if (activeNav === 'settings') {
+      return <SettingsPage />
+    }
+
     const config = pageConfig[activeNav]
     return (
       <PlaceholderPage
         title={config.title}
-        icon={activeNav as Exclude<NavItem, 'dashboard'>}
+        icon={activeNav as Exclude<NavItem, 'dashboard' | 'settings'>}
         description={config.description}
       />
     )

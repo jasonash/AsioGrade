@@ -37,6 +37,8 @@ const validInvokeChannels = [
   'storage:set',
   'storage:setLLMApiKey',
   'storage:setDefaultLLMProvider',
+  'storage:setLLMModel',
+  'storage:setLLMTemperature',
   'storage:saveDraft',
   'storage:getDraft',
   'storage:deleteDraft',

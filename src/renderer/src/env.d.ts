@@ -2,40 +2,57 @@
 
 // Valid IPC channels (must match preload/index.ts)
 type InvokeChannel =
+  // Auth
   | 'auth:login'
   | 'auth:logout'
   | 'auth:getStatus'
   | 'auth:getCurrentUser'
   | 'auth:isAuthenticated'
-  | 'drive:listClasses'
-  | 'drive:getClass'
-  | 'drive:createClass'
-  | 'drive:deleteClass'
+  // Google Drive - Folder Structure
+  | 'drive:ensureAppFolder'
+  | 'drive:ensureYearFolder'
+  // Google Drive - Courses
+  | 'drive:listCourses'
+  | 'drive:getCourse'
+  | 'drive:createCourse'
+  | 'drive:updateCourse'
+  | 'drive:deleteCourse'
+  // Google Drive - Sections
+  | 'drive:listSections'
+  | 'drive:getSection'
+  | 'drive:createSection'
+  | 'drive:updateSection'
+  | 'drive:deleteSection'
+  // Google Drive - Rosters
   | 'drive:getRoster'
   | 'drive:saveRoster'
-  | 'drive:getStandards'
-  | 'drive:saveStandards'
-  | 'drive:getTest'
-  | 'drive:saveTest'
+  | 'drive:addStudent'
+  // Storage
   | 'storage:get'
   | 'storage:set'
   | 'storage:setLLMApiKey'
   | 'storage:setDefaultLLMProvider'
+  | 'storage:setLLMModel'
+  | 'storage:setLLMTemperature'
   | 'storage:saveDraft'
   | 'storage:getDraft'
   | 'storage:deleteDraft'
   | 'storage:addRecentClass'
   | 'storage:clear'
+  // LLM
   | 'llm:complete'
   | 'llm:stream'
   | 'llm:testConnection'
   | 'llm:getProviders'
+  // PDF
   | 'pdf:parseScantron'
   | 'pdf:generateScantron'
   | 'pdf:exportTest'
+  // Grading
   | 'grade:process'
   | 'grade:exportToSheets'
   | 'grade:analyzeTest'
+  // Window
   | 'window:openTestEditor'
   | 'window:openRoster'
   | 'window:minimize'

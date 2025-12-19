@@ -168,6 +168,29 @@ function registerStorageHandlers(): void {
     }
   )
 
+  ipcMain.handle(
+    'storage:setLLMModel',
+    (_event, provider: 'openai' | 'anthropic' | 'google', model: string) => {
+      try {
+        storageService.setLLMModel(provider, model)
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unknown error'
+        return { success: false, error: message }
+      }
+    }
+  )
+
+  ipcMain.handle('storage:setLLMTemperature', (_event, temperature: number) => {
+    try {
+      storageService.setLLMTemperature(temperature)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      return { success: false, error: message }
+    }
+  })
+
   // Draft management
   ipcMain.handle(
     'storage:saveDraft',
