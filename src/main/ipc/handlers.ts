@@ -1,20 +1,85 @@
-import { ipcMain } from 'electron'
+import { ipcMain, BrowserWindow } from 'electron'
 import { storageService } from '../services/storage.service'
+import { authService } from '../services/auth.service'
 
 /**
  * Register all IPC handlers for the main process
  * These handlers are called from the renderer via the preload script
  */
 export function registerIpcHandlers(): void {
+  // Auth handlers
+  registerAuthHandlers()
+
   // Storage handlers
   registerStorageHandlers()
 
   // Future handlers will be registered here:
-  // registerAuthHandlers()
   // registerDriveHandlers()
   // registerLLMHandlers()
   // registerPDFHandlers()
   // registerGradeHandlers()
+}
+
+function registerAuthHandlers(): void {
+  // Login - initiates OAuth flow
+  ipcMain.handle('auth:login', async () => {
+    try {
+      const result = await authService.login()
+
+      // Broadcast status change to all windows
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      authService.broadcastAuthStatus(mainWindow ?? null)
+
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Login failed'
+      return { success: false, error: message }
+    }
+  })
+
+  // Logout - clears credentials
+  ipcMain.handle('auth:logout', async () => {
+    try {
+      await authService.logout()
+
+      // Broadcast status change to all windows
+      const mainWindow = BrowserWindow.getAllWindows()[0]
+      authService.broadcastAuthStatus(mainWindow ?? null)
+
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Logout failed'
+      return { success: false, error: message }
+    }
+  })
+
+  // Get current auth status
+  ipcMain.handle('auth:getStatus', () => {
+    return {
+      success: true,
+      data: {
+        isAuthenticated: authService.isAuthenticated(),
+        isConfigured: authService.isConfigured(),
+        user: authService.getCurrentUser()
+      }
+    }
+  })
+
+  // Get current user
+  ipcMain.handle('auth:getCurrentUser', () => {
+    return {
+      success: true,
+      data: authService.getCurrentUser()
+    }
+  })
+
+  // Check if authenticated
+  ipcMain.handle('auth:isAuthenticated', () => {
+    return {
+      success: true,
+      data: authService.isAuthenticated()
+    }
+  })
 }
 
 function registerStorageHandlers(): void {

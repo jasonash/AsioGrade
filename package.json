@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:typecheck": "npm run typecheck && electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
@@ -49,6 +50,7 @@
   },
   "dependencies": {
     "electron-store": "^11.0.2",
+    "googleapis": "^169.0.0",
     "jsqr": "^1.4.0",
     "lucide-react": "^0.562.0",
     "opencv-wasm": "^4.3.0-10",

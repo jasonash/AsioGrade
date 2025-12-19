@@ -1,5 +1,21 @@
 import Store from 'electron-store'
 
+// User info from Google OAuth
+export interface UserInfo {
+  id: string
+  email: string
+  name: string
+  picture?: string
+}
+
+// OAuth tokens
+export interface OAuthTokens {
+  accessToken: string
+  refreshToken: string
+  expiresAt: number // Unix timestamp in milliseconds
+  scope: string[]
+}
+
 // Schema for type-safe storage
 interface StoreSchema {
   // Settings
@@ -8,6 +24,12 @@ interface StoreSchema {
     sidebarExpanded: boolean
     autoSyncOnStart: boolean
     showSyncStatus: boolean
+  }
+
+  // OAuth authentication (encrypted storage)
+  auth: {
+    tokens: OAuthTokens | null
+    user: UserInfo | null
   }
 
   // LLM provider configuration
@@ -71,6 +93,10 @@ const defaults: StoreSchema = {
     autoSyncOnStart: true,
     showSyncStatus: true
   },
+  auth: {
+    tokens: null,
+    user: null
+  },
   llmProviders: {
     default: null,
     openai: {
@@ -125,6 +151,40 @@ class StorageService {
   updateSettings(updates: Partial<StoreSchema['settings']>): void {
     const current = this.getSettings()
     this.store.set('settings', { ...current, ...updates })
+  }
+
+  // Auth helpers
+  getAuth(): StoreSchema['auth'] {
+    return this.store.get('auth')
+  }
+
+  getTokens(): OAuthTokens | null {
+    return this.store.get('auth').tokens
+  }
+
+  setTokens(tokens: OAuthTokens | null): void {
+    const auth = this.getAuth()
+    this.store.set('auth', { ...auth, tokens })
+  }
+
+  getUser(): UserInfo | null {
+    return this.store.get('auth').user
+  }
+
+  setUser(user: UserInfo | null): void {
+    const auth = this.getAuth()
+    this.store.set('auth', { ...auth, user })
+  }
+
+  clearAuth(): void {
+    this.store.set('auth', { tokens: null, user: null })
+  }
+
+  isTokenExpired(): boolean {
+    const tokens = this.getTokens()
+    if (!tokens) return true
+    // Consider expired if less than 5 minutes remaining
+    return tokens.expiresAt < Date.now() + 5 * 60 * 1000
   }
 
   // LLM provider helpers

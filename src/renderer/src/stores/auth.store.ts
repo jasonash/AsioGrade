@@ -7,17 +7,36 @@ interface UserInfo {
   picture?: string
 }
 
-type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated' | 'error'
+interface AuthStatus {
+  isAuthenticated: boolean
+  isConfigured: boolean
+  user: UserInfo | null
+}
+
+interface AuthResult {
+  success: boolean
+  user?: UserInfo
+  error?: string
+}
+
+interface IPCResponse<T> {
+  success: boolean
+  data?: T
+  error?: string
+}
+
+type AuthStateStatus = 'idle' | 'loading' | 'authenticated' | 'unauthenticated' | 'error' | 'not_configured'
 
 interface AuthState {
   // State
-  status: AuthStatus
+  status: AuthStateStatus
   user: UserInfo | null
   error: string | null
+  isConfigured: boolean
 
   // Actions
   setUser: (user: UserInfo | null) => void
-  setStatus: (status: AuthStatus) => void
+  setStatus: (status: AuthStateStatus) => void
   setError: (error: string | null) => void
   login: () => Promise<void>
   logout: () => Promise<void>
@@ -29,6 +48,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   status: 'idle',
   user: null,
   error: null,
+  isConfigured: false,
 
   // Actions
   setUser: (user) => set({ user, status: user ? 'authenticated' : 'unauthenticated' }),
@@ -40,16 +60,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async () => {
     set({ status: 'loading', error: null })
     try {
-      // This will be implemented when we add Google OAuth
-      // const result = await window.electronAPI.auth.login()
-      // if (result.success && result.user) {
-      //   set({ user: result.user, status: 'authenticated' })
-      // } else {
-      //   set({ error: result.error ?? 'Login failed', status: 'error' })
-      // }
-
-      // For now, simulate unauthenticated state
-      set({ status: 'unauthenticated' })
+      const result = await window.electronAPI.invoke<AuthResult>('auth:login')
+      if (result.success && result.user) {
+        set({ user: result.user, status: 'authenticated' })
+      } else {
+        set({ error: result.error ?? 'Login failed', status: 'error' })
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Login failed'
       set({ error: message, status: 'error' })
@@ -59,9 +75,12 @@ export const useAuthStore = create<AuthState>((set) => ({
   logout: async () => {
     set({ status: 'loading', error: null })
     try {
-      // This will be implemented when we add Google OAuth
-      // await window.electronAPI.auth.logout()
-      set({ user: null, status: 'unauthenticated' })
+      const result = await window.electronAPI.invoke<{ success: boolean; error?: string }>('auth:logout')
+      if (result.success) {
+        set({ user: null, status: 'unauthenticated' })
+      } else {
+        set({ error: result.error ?? 'Logout failed', status: 'error' })
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Logout failed'
       set({ error: message, status: 'error' })
@@ -71,20 +90,33 @@ export const useAuthStore = create<AuthState>((set) => ({
   checkAuth: async () => {
     set({ status: 'loading', error: null })
     try {
-      // This will be implemented when we add Google OAuth
-      // const isAuthenticated = await window.electronAPI.auth.isAuthenticated()
-      // if (isAuthenticated) {
-      //   const user = await window.electronAPI.auth.getCurrentUser()
-      //   set({ user, status: 'authenticated' })
-      // } else {
-      //   set({ status: 'unauthenticated' })
-      // }
-
-      // For now, simulate unauthenticated state
-      set({ status: 'unauthenticated' })
+      const result = await window.electronAPI.invoke<IPCResponse<AuthStatus>>('auth:getStatus')
+      if (result.success && result.data) {
+        const { isAuthenticated, isConfigured, user } = result.data
+        set({
+          isConfigured,
+          user,
+          status: !isConfigured
+            ? 'not_configured'
+            : isAuthenticated
+              ? 'authenticated'
+              : 'unauthenticated'
+        })
+      } else {
+        set({ status: 'unauthenticated' })
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Auth check failed'
       set({ error: message, status: 'error' })
     }
   }
 }))
+
+// Subscribe to auth status changes from main process
+if (typeof window !== 'undefined' && window.electronAPI) {
+  window.electronAPI.on('auth:statusChanged', (data) => {
+    const authData = data as { isAuthenticated: boolean; user: UserInfo | null }
+    const store = useAuthStore.getState()
+    store.setUser(authData.user)
+  })
+}
