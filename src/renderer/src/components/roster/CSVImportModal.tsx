@@ -1,5 +1,5 @@
 import { type ReactElement, useState, useCallback, useRef } from 'react'
-import { Upload, FileText, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
+import { Upload, FileText, AlertCircle, CheckCircle, Loader2, Download } from 'lucide-react'
 import { Modal } from '../ui'
 import { useRosterStore } from '../../stores'
 import type { CreateStudentInput } from '../../../../shared/types'
@@ -40,6 +40,22 @@ export function CSVImportModal({
     setParseError(null)
     clearError()
   }, [clearError])
+
+  const downloadTemplate = useCallback(() => {
+    const templateContent = `firstName,lastName,email,studentNumber
+John,Smith,john.smith@school.edu,12345
+Jane,Doe,jane.doe@school.edu,12346
+`
+    const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'student_roster_template.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }, [])
 
   const parseCSV = useCallback((content: string): ParsedStudent[] => {
     const lines = content.trim().split('\n')
@@ -158,22 +174,32 @@ export function CSVImportModal({
     <Modal isOpen={isOpen} onClose={handleClose} title="Import Students from CSV" size="lg">
       <div className="space-y-4">
         {/* Instructions */}
-        <div className="text-sm text-[var(--color-text-muted)]">
-          <p>Upload a CSV file with student information. Required columns:</p>
-          <ul className="mt-1 ml-4 list-disc">
-            <li>
-              <code className="text-[var(--color-text-secondary)]">firstName</code> (required)
-            </li>
-            <li>
-              <code className="text-[var(--color-text-secondary)]">lastName</code> (required)
-            </li>
-            <li>
-              <code className="text-[var(--color-text-secondary)]">email</code> (optional)
-            </li>
-            <li>
-              <code className="text-[var(--color-text-secondary)]">studentNumber</code> (optional)
-            </li>
-          </ul>
+        <div className="flex items-start justify-between gap-4">
+          <div className="text-sm text-[var(--color-text-muted)]">
+            <p>Upload a CSV file with student information. Required columns:</p>
+            <ul className="mt-1 ml-4 list-disc">
+              <li>
+                <code className="text-[var(--color-text-secondary)]">firstName</code> (required)
+              </li>
+              <li>
+                <code className="text-[var(--color-text-secondary)]">lastName</code> (required)
+              </li>
+              <li>
+                <code className="text-[var(--color-text-secondary)]">email</code> (optional)
+              </li>
+              <li>
+                <code className="text-[var(--color-text-secondary)]">studentNumber</code> (optional)
+              </li>
+            </ul>
+          </div>
+          <button
+            type="button"
+            onClick={downloadTemplate}
+            className="shrink-0 px-3 py-1.5 rounded-lg text-sm text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors flex items-center gap-1.5"
+          >
+            <Download size={14} />
+            Template
+          </button>
         </div>
 
         {/* Error display */}
