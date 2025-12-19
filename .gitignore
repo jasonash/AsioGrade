@@ -1,0 +1,33 @@
+# Private files - never commit
+CLAUDE.md
+docs/PROJECT_STATUS.md
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+build/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
