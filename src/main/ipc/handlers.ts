@@ -1,6 +1,15 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { storageService } from '../services/storage.service'
 import { authService } from '../services/auth.service'
+import { driveService } from '../services/drive.service'
+import {
+  CreateCourseInput,
+  UpdateCourseInput,
+  CreateSectionInput,
+  UpdateSectionInput,
+  Roster,
+  CreateStudentInput
+} from '../../shared/types'
 
 /**
  * Register all IPC handlers for the main process
@@ -13,8 +22,10 @@ export function registerIpcHandlers(): void {
   // Storage handlers
   registerStorageHandlers()
 
+  // Drive handlers
+  registerDriveHandlers()
+
   // Future handlers will be registered here:
-  // registerDriveHandlers()
   // registerLLMHandlers()
   // registerPDFHandlers()
   // registerGradeHandlers()
@@ -208,4 +219,100 @@ function registerStorageHandlers(): void {
       return { success: false, error: message }
     }
   })
+}
+
+function registerDriveHandlers(): void {
+  // ============================================================
+  // Folder Structure
+  // ============================================================
+
+  // Initialize app folder structure
+  ipcMain.handle('drive:ensureAppFolder', async () => {
+    return driveService.ensureAppFolder()
+  })
+
+  // Initialize year folder structure
+  ipcMain.handle('drive:ensureYearFolder', async (_event, year: string) => {
+    return driveService.ensureYearFolder(year)
+  })
+
+  // ============================================================
+  // Course Operations
+  // ============================================================
+
+  // List courses for a year
+  ipcMain.handle('drive:listCourses', async (_event, year: string) => {
+    return driveService.listCourses(year)
+  })
+
+  // Get a specific course
+  ipcMain.handle('drive:getCourse', async (_event, courseId: string) => {
+    return driveService.getCourse(courseId)
+  })
+
+  // Create a new course
+  ipcMain.handle('drive:createCourse', async (_event, input: CreateCourseInput) => {
+    return driveService.createCourse(input)
+  })
+
+  // Update a course
+  ipcMain.handle('drive:updateCourse', async (_event, input: UpdateCourseInput) => {
+    return driveService.updateCourse(input)
+  })
+
+  // Delete a course
+  ipcMain.handle('drive:deleteCourse', async (_event, courseId: string) => {
+    return driveService.deleteCourse(courseId)
+  })
+
+  // ============================================================
+  // Section Operations
+  // ============================================================
+
+  // List sections for a course
+  ipcMain.handle('drive:listSections', async (_event, courseId: string) => {
+    return driveService.listSections(courseId)
+  })
+
+  // Get a specific section
+  ipcMain.handle('drive:getSection', async (_event, sectionId: string) => {
+    return driveService.getSection(sectionId)
+  })
+
+  // Create a new section
+  ipcMain.handle('drive:createSection', async (_event, input: CreateSectionInput) => {
+    return driveService.createSection(input)
+  })
+
+  // Update a section
+  ipcMain.handle('drive:updateSection', async (_event, input: UpdateSectionInput) => {
+    return driveService.updateSection(input)
+  })
+
+  // Delete a section
+  ipcMain.handle('drive:deleteSection', async (_event, sectionId: string) => {
+    return driveService.deleteSection(sectionId)
+  })
+
+  // ============================================================
+  // Roster Operations
+  // ============================================================
+
+  // Get roster for a section
+  ipcMain.handle('drive:getRoster', async (_event, sectionId: string) => {
+    return driveService.getRoster(sectionId)
+  })
+
+  // Save roster for a section
+  ipcMain.handle('drive:saveRoster', async (_event, sectionId: string, roster: Roster) => {
+    return driveService.saveRoster(sectionId, roster)
+  })
+
+  // Add student to a section
+  ipcMain.handle(
+    'drive:addStudent',
+    async (_event, sectionId: string, input: CreateStudentInput) => {
+      return driveService.addStudent(sectionId, input)
+    }
+  )
 }

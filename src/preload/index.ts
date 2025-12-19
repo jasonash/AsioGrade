@@ -9,17 +9,28 @@ const validInvokeChannels = [
   'auth:getCurrentUser',
   'auth:isAuthenticated',
 
-  // Google Drive
-  'drive:listClasses',
-  'drive:getClass',
-  'drive:createClass',
-  'drive:deleteClass',
+  // Google Drive - Folder Structure
+  'drive:ensureAppFolder',
+  'drive:ensureYearFolder',
+
+  // Google Drive - Courses
+  'drive:listCourses',
+  'drive:getCourse',
+  'drive:createCourse',
+  'drive:updateCourse',
+  'drive:deleteCourse',
+
+  // Google Drive - Sections
+  'drive:listSections',
+  'drive:getSection',
+  'drive:createSection',
+  'drive:updateSection',
+  'drive:deleteSection',
+
+  // Google Drive - Rosters
   'drive:getRoster',
   'drive:saveRoster',
-  'drive:getStandards',
-  'drive:saveStandards',
-  'drive:getTest',
-  'drive:saveTest',
+  'drive:addStudent',
 
   // Storage
   'storage:get',
