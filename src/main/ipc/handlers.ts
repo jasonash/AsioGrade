@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { storageService } from '../services/storage.service'
 import { authService } from '../services/auth.service'
 import { driveService } from '../services/drive.service'
+import { llmService } from '../services/llm'
 import {
   CreateCourseInput,
   UpdateCourseInput,
@@ -10,6 +11,7 @@ import {
   Roster,
   CreateStudentInput
 } from '../../shared/types'
+import { LLMRequest, LLMProviderType } from '../../shared/types/llm.types'
 
 /**
  * Register all IPC handlers for the main process
@@ -25,8 +27,10 @@ export function registerIpcHandlers(): void {
   // Drive handlers
   registerDriveHandlers()
 
+  // LLM handlers
+  registerLLMHandlers()
+
   // Future handlers will be registered here:
-  // registerLLMHandlers()
   // registerPDFHandlers()
   // registerGradeHandlers()
 }
@@ -315,4 +319,59 @@ function registerDriveHandlers(): void {
       return driveService.addStudent(sectionId, input)
     }
   )
+}
+
+function registerLLMHandlers(): void {
+  // ============================================================
+  // LLM Operations
+  // ============================================================
+
+  // Complete - send a prompt and get a full response
+  ipcMain.handle('llm:complete', async (_event, request: LLMRequest) => {
+    return llmService.complete(request)
+  })
+
+  // Stream - send a prompt and stream the response
+  // Note: Streaming requires special handling with event emitters
+  ipcMain.handle('llm:stream', async (event, request: LLMRequest) => {
+    try {
+      const chunks: string[] = []
+      let totalUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+
+      for await (const chunk of llmService.stream(request)) {
+        // Send each chunk to the renderer
+        event.sender.send('llm:streamChunk', {
+          content: chunk.content,
+          done: chunk.done
+        })
+
+        chunks.push(chunk.content)
+
+        if (chunk.usage) {
+          totalUsage = chunk.usage
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          content: chunks.join(''),
+          usage: totalUsage
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Streaming failed'
+      return { success: false, error: message }
+    }
+  })
+
+  // Test connection to a specific provider
+  ipcMain.handle('llm:testConnection', async (_event, provider: LLMProviderType) => {
+    return llmService.testConnection(provider)
+  })
+
+  // Get status of all providers
+  ipcMain.handle('llm:getProviders', () => {
+    return llmService.getProviders()
+  })
 }
