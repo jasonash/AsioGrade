@@ -1,11 +1,7 @@
 import { type ReactElement, useState, useEffect, useCallback } from 'react'
 import { Settings, Cpu, User, Info, Eye, EyeOff, Check, X, Loader2 } from 'lucide-react'
-import {
-  LLMProviderType,
-  LLMProvidersConfig,
-  getProviderName,
-  getModelsForProvider
-} from '../../../shared/types/llm.types'
+import type { LLMProviderType, LLMProvidersConfig } from '../../../shared/types/llm.types'
+import { getProviderName, getModelsForProvider } from '../../../shared/types/llm.types'
 import { useAuthStore } from '../stores'
 
 type SettingsSection = 'general' | 'ai-providers' | 'google-account' | 'about'

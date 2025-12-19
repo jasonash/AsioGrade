@@ -1,13 +1,25 @@
-import { type ReactElement, useEffect } from 'react'
-import { useAuthStore } from '../stores'
+import { type ReactElement, useEffect, useState } from 'react'
+import { Plus, Loader2 } from 'lucide-react'
+import { useAuthStore, useCourseStore } from '../stores'
+import { CourseCard, CourseCreationModal } from '../components/courses'
 
 export function DashboardPage(): ReactElement {
   const { status, user, error, isConfigured, login, checkAuth } = useAuthStore()
+  const { courses, loading: coursesLoading, error: coursesError, fetchCourses } = useCourseStore()
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   // Check auth status on mount
   useEffect(() => {
     checkAuth()
   }, [checkAuth])
+
+  // Fetch courses when authenticated
+  useEffect(() => {
+    if (status === 'authenticated') {
+      fetchCourses()
+    }
+  }, [status, fetchCourses])
 
   const isLoading = status === 'loading' || status === 'idle'
   const isAuthenticated = status === 'authenticated'
@@ -107,19 +119,83 @@ export function DashboardPage(): ReactElement {
         )}
       </header>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div className="p-6 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
-          <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
-            Your Classes
+      {/* Courses Section */}
+      <section>
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+            Your Courses
           </h2>
-          <p className="text-[var(--color-text-muted)] text-sm">
-            No classes yet. Create your first class to get started.
-          </p>
-          <button className="mt-4 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity">
-            + New Class
+          <button
+            onClick={() => setIsCreateModalOpen(true)}
+            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
+          >
+            <Plus size={16} />
+            New Course
           </button>
         </div>
 
+        {/* Loading state */}
+        {coursesLoading && courses.length === 0 && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 text-[var(--color-accent)] animate-spin" />
+          </div>
+        )}
+
+        {/* Error state */}
+        {coursesError && (
+          <div className="p-4 rounded-lg bg-[var(--color-error)]/10 border border-[var(--color-error)]/20 mb-4">
+            <p className="text-sm text-[var(--color-error)]">{coursesError}</p>
+            <button
+              onClick={() => fetchCourses()}
+              className="mt-2 text-sm text-[var(--color-accent)] hover:underline"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {/* Empty state */}
+        {!coursesLoading && !coursesError && courses.length === 0 && (
+          <div className="p-8 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-center">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center">
+              <svg className="w-6 h-6 text-[var(--color-accent)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+              </svg>
+            </div>
+            <h3 className="text-[var(--color-text-primary)] font-medium mb-1">
+              No courses yet
+            </h3>
+            <p className="text-[var(--color-text-muted)] text-sm mb-4">
+              Create your first course to get started.
+            </p>
+            <button
+              onClick={() => setIsCreateModalOpen(true)}
+              className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              Create Your First Course
+            </button>
+          </div>
+        )}
+
+        {/* Course grid */}
+        {courses.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {courses.map((course) => (
+              <CourseCard
+                key={course.id}
+                course={course}
+                onClick={() => {
+                  // TODO: Navigate to course view
+                  console.log('Open course:', course.id)
+                }}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Quick Actions */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="p-6 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
           <h2 className="text-lg font-semibold text-[var(--color-text-primary)] mb-2">
             Recent Activity
@@ -146,6 +222,15 @@ export function DashboardPage(): ReactElement {
           </div>
         </div>
       </section>
+
+      {/* Course Creation Modal */}
+      <CourseCreationModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={(course) => {
+          console.log('Course created:', course.name)
+        }}
+      />
     </div>
   )
 }

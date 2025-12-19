@@ -5,7 +5,7 @@
  * OpenAI, Anthropic, and Google providers.
  */
 
-import { ServiceResult } from './common.types'
+import type { ServiceResult } from './common.types'
 
 // Supported LLM providers
 export type LLMProviderType = 'openai' | 'anthropic' | 'google'
