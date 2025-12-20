@@ -164,8 +164,9 @@ class DriveService {
   /**
    * Invalidate caches related to a unit (call after mutations)
    */
-  private invalidateUnitCache(unitId: string, courseFolderId?: string): void {
-    delete this.metadataCache.units[unitId]
+  private invalidateUnitCache(unitFolderId: string, courseFolderId?: string): void {
+    // Cache is keyed by unitFolderId, not unitId
+    delete this.metadataCache.units[unitFolderId]
     if (courseFolderId) {
       delete this.metadataCache.unitCounts[courseFolderId]
     }
@@ -2089,8 +2090,8 @@ class DriveService {
       const courseResult = await this.getCourse(input.courseId)
       const courseFolderId = courseResult.success ? courseResult.data.driveFolderId : undefined
 
-      // Invalidate cache
-      this.invalidateUnitCache(input.id, courseFolderId)
+      // Invalidate cache (use unitFolderId since cache is keyed by folder ID)
+      this.invalidateUnitCache(unitFolderId, courseFolderId)
 
       return { success: true, data: updated }
     } catch (error) {
@@ -2131,7 +2132,7 @@ class DriveService {
 
       // Clear from caches
       delete this.folderCache.unitFolderIds[unitId]
-      this.invalidateUnitCache(unitId, courseFolderId)
+      this.invalidateUnitCache(unitFolderId, courseFolderId)
 
       return { success: true, data: undefined }
     } catch (error) {
