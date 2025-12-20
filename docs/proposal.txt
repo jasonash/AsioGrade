@@ -1,0 +1,78 @@
+Proposed Software for Helping Teachers Make and Grade Tests and Lesson Plans
+
+I am a teacher, and I would like to build a piece of software that will help me generate
+lessons plans as well as tests for my various classes.
+
+I would like for this software to use Electron for cross-platform compatibility with Mac, Windows, and Linux.
+
+Sections:
+
+Lesson plans:
+	What I propose is that this software use Google Drive as its source of most relevant information.
+I imagine that I will have a special folder in my Google Drive dedicated to this software. Within this folder,
+I would have a folder for each of my classes. For example, I would have one folder for freshman science, one folder
+for sophomore physics, one folder for junior chemistry, etc... Inside of each of these "class" folders, I would have
+a special folder that has detailed information on my State's teaching standards. These standards would be followed
+and information would be gathered from other resources and "lesson plans" could be created. I imagine that the lesson
+planning would allow for some "agentic" usage of AI to build lesson plans based on prompted responses to questions or
+free-form prompts. The agentic AI would provide a detailed step-by-step process for creating lesson plans and would
+use multiple agentic AI's to produce presentations, classroom activities, quizzes, etc. This step would be a sort of 
+"hand holding" exercise that would allow the software to produce quality classroom content.
+
+All of the lesson plans, activites, quizzes, etc. created for a class would go into a special sub-folder within the
+class folder such as "class-materials".
+
+The information built up to this point would would serve as a basis for teaching the class. The information created
+would not be a comprehensive account of all materials used in the classroom, but would help alleviated much of the 
+stress of being a teacher. Any additional materials (handouts, powerpoint presentations, quizzes, etc.) not produced
+by the software (created elsewhere or legacy material) would also be stored in the Google Drive "class-materials"
+folder.
+
+Test:
+	All of the information stored in the "class-materials" folder for each class could now be used to automate the
+creation of multiple choice tests. This again would be an agentic workflow which would allow a teacher to tell the
+software to create the test with a certain number of questions, a certain number of "distractors", and certain criteria
+for special areas to cover or ignore. This again would necessitate the use of "agentic" AI in some form. The tests would
+be generated in a form that would allow the teacher to revise manually as needed and re-load into the app to maintain
+changes. The teacher would also be able to "guide" the process to add figures and illustrations to the test as appropriate.
+Perhaps the "distractor" answer creation could be optional, giving the teacher more fine-grained control over
+the testing experience. The important point is that the teacher have final control over every aspect of the test. The 
+software would just provide a quick way to generate a test that would be easy to build upon. Once the test 
+has been finalized, the app would take all of the questions and answers, and would "randomize" the test into three or
+four random forms, randomizing both the order of questions as well as the "correct" answer (A,B,C,D,etc...).
+
+Grading:
+	The app would allow for the creation of a "scantron" like sheet with answer bubbles that the students would fill out
+when taking the test. This method of test-taking avoids common pain-points like online distraction and willingness to cheat.
+I imagine that these scantron sheets would have a bar-code or QR or similar that would contain details about which test they
+were taking. The test would also need to have a title of some sort, such as "Mrs. Smith Chemistry 2025/12/19 ver.A" or similar.
+Each test from above would also have this same title so that it would ensure that all tests and answer sheets match.
+We would also have to find some way of obtaining student information for grading purposes. The old scantron sheets used
+either student name or student number that the student would fill out before taking the test. We would have
+to think about how that might work.
+
+Once the tests are taken, my school has a large scanner that I could feed hundreds of tests into and generate one
+large PDF. The software would allow me to open this pdf and scan the tests to test them. Scores would be recorded
+in the same "class" Google Drive folder in a spreadsheet for later consideration.
+
+Tools:
+	Since we now have a combination of questions/answers and test scores, we can take a closer look at which topics
+the students are doing well in, and which topics need further attention. I imagine a "reports" section that would
+allow teachers to take a closer look at specific areas that need more attention in class. The "Lesson Plans" section
+of the app could even take advantage of this data and make changes/suggestions that would augment/change the lesson
+plan materials to focus more on areas that need it.
+
+
+Concerns:
+	I've never built an app that has an "agentic" AI component, meaning one that takes advantage of an LLM in its
+processes. I'm not sure this is even possible or whether it is conceivable. If it is, I suppose we should give
+users the option of which LLM to use, which would necessitate navigating the API structure of each possible
+candidate.
+
+I'm also weighing the benefits of having a local app (Electron) vs having this project be a web-based project.
+Given the lifting of PDF reading, etc. I think the local option might be best, but I'm open to conversation
+about this.
+
+
+
+

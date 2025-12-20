@@ -1,0 +1,46 @@
+Notes regarding Test Generation - Not sure what to do with this information.
+
+In Test Generation / Variants sections
+
+    Teachers may optionally create assessment variants that differ in representation, scaffolding, item count, or cognitive demand while remaining aligned to the same standards and learning targets.
+
+When describing cognitive rigor
+
+    Assessment items may be designed across varying Depth of Knowledge (DOK) levels to support intentional assessment of conceptual understanding, reasoning, and application.
+
+When describing versions
+
+    TeachingHelp supports multiple test versions for assessment integrity (A/B/C/D) and optional assessment variants defined by the teacher. Variants are assessment-specific and do not represent permanent student classifications.
+
+In Analytics language
+
+    Performance may be viewed by standard, unit, or assessment configuration to support instructional reflection. Analytics are descriptive and do not label students by ability.
+
+If you want to explicitly name Bloom’s without binding the system
+
+    Teachers may use Bloom’s Taxonomy as a planning lens when authoring assessment items; internally, item complexity is represented using Depth of Knowledge (DOK) levels.
+
+
+    Depth of Knowledge, often abbreviated as DOK, is a framework used in education to describe the kind of thinking a task requires, rather than how hard the task feels or how “smart” a student must be to complete it. That distinction is important, because difficulty and cognitive complexity are not the same thing. A question can be difficult because it involves obscure facts, yet still require very little thinking. Another question might be accessible to many students but require deep reasoning, planning, or explanation.
+
+    DOK was developed in the late 1990s by Dr. Norman Webb as part of his work on standards alignment. At the time, states were writing academic standards and creating large-scale assessments that claimed to measure those standards. Webb needed a way to determine whether the thinking required by a test actually matched the thinking implied by the standard itself. Depth of Knowledge emerged as a quality-control framework—a way to check whether assessments were truly aligned to what students were expected to know and be able to do.
+
+    Because of that origin, DOK is not a teaching fad or a theory about student ability. It is a practical tool for evaluating tasks. It asks a simple but powerful question: What does a student actually have to do with the knowledge in order to complete this task?
+
+    The framework describes four broad levels of cognitive demand. At the lowest level, DOK 1, tasks require recall or reproduction. A student might identify a fact, name a term, label a diagram, or perform a memorized procedure. If the student knows the information already, the task is largely mechanical.
+
+    DOK 2 moves beyond recall and into the use of skills and concepts. Here, students might classify information, compare ideas, summarize data, or apply a procedure in a familiar context. The thinking is still structured, but the student must do something with the knowledge rather than simply state it.
+
+    DOK 3 involves strategic thinking. Tasks at this level require reasoning, justification, planning, or decision-making. Students might be asked to explain why something occurs, justify an answer using evidence, analyze data when the path is not obvious, or choose among multiple strategies to solve a problem. The key feature of DOK 3 is that the student must determine how to approach the task, not just execute a known routine.
+
+    DOK 4 represents extended thinking. These tasks require sustained reasoning over time and often involve multiple steps, sources, or representations. Designing an investigation, modeling a complex system, or completing a project that requires revisiting and refining ideas all fall into this category. DOK 4 is less about a single question and more about an extended intellectual process.
+
+    One of the most important things to understand about DOK is what it is not. DOK levels do not correspond to student ability, and higher DOK does not mean “harder” in a traditional sense. A DOK 1 question can be very difficult if it relies on obscure knowledge, and a DOK 3 question can be made accessible through scaffolding and clear supports. DOK describes task design, not student capacity.
+
+    In practice, educators use DOK to ensure that assessments reflect the intent of standards, to balance tests so they measure more than simple recall, and to design multiple versions of assessments that still target the same learning goals. A standard that requires explanation or reasoning cannot be accurately assessed with recall-only questions, and DOK provides a shared language for identifying that mismatch.
+
+    This is also why DOK works particularly well in systems like TeachingHelp. It allows assessments to vary in cognitive demand without labeling students or embedding assumptions about ability. Instead of saying a test is “advanced” or “remedial,” the system can describe how questions differ in terms of reasoning, representation, or scaffolding while remaining aligned to the same standards. That makes differentiation more intentional, more ethical, and easier to justify.
+
+    DOK is often compared to Bloom’s Taxonomy, which categorizes types of thinking such as remembering, applying, or creating. Bloom’s is a useful planning tool, but it can be vague and inconsistently applied, especially in automated systems. DOK, by contrast, is more tightly focused on task complexity and is easier to apply consistently when tagging questions, generating variants, or analyzing assessment data. For that reason, many modern assessment systems allow teachers to think in terms of Bloom’s, but store and track cognitive demand using DOK.
+
+    In short, Depth of Knowledge provides a way to talk about rigor without talking about students. It shifts the focus from who the learner is to what the task demands. For a tool designed to support standards-aligned assessment, paper-based testing, and ethical differentiation, that makes DOK not just a pedagogical choice, but a sound design decision.
