@@ -34,6 +34,20 @@ const validInvokeChannels = [
   'drive:updateStudent',
   'drive:deleteStudent',
 
+  // Google Drive - Standards
+  'drive:getStandards',
+  'drive:getStandardsSummary',
+  'drive:saveStandards',
+  'drive:deleteStandards',
+
+  // Google Drive - Units
+  'drive:listUnits',
+  'drive:getUnit',
+  'drive:createUnit',
+  'drive:updateUnit',
+  'drive:deleteUnit',
+  'drive:reorderUnits',
+
   // Storage
   'storage:get',
   'storage:set',

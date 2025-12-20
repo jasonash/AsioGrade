@@ -10,7 +10,11 @@ import {
   UpdateSectionInput,
   Roster,
   CreateStudentInput,
-  UpdateStudentInput
+  UpdateStudentInput,
+  CreateStandardsInput,
+  CreateUnitInput,
+  UpdateUnitInput,
+  ReorderUnitsInput
 } from '../../shared/types'
 import { LLMRequest, LLMProviderType } from '../../shared/types/llm.types'
 
@@ -373,6 +377,64 @@ function registerDriveHandlers(): void {
       return driveService.deleteStudent(sectionId, studentId)
     }
   )
+
+  // ============================================================
+  // Standards Operations
+  // ============================================================
+
+  // Get standards for a course
+  ipcMain.handle('drive:getStandards', async (_event, courseId: string) => {
+    return driveService.getStandards(courseId)
+  })
+
+  // Get standards summary for a course
+  ipcMain.handle('drive:getStandardsSummary', async (_event, courseId: string) => {
+    return driveService.getStandardsSummary(courseId)
+  })
+
+  // Save standards for a course
+  ipcMain.handle('drive:saveStandards', async (_event, input: CreateStandardsInput) => {
+    return driveService.saveStandards(input)
+  })
+
+  // Delete standards for a course
+  ipcMain.handle('drive:deleteStandards', async (_event, courseId: string) => {
+    return driveService.deleteStandards(courseId)
+  })
+
+  // ============================================================
+  // Unit Operations
+  // ============================================================
+
+  // List units for a course
+  ipcMain.handle('drive:listUnits', async (_event, courseId: string) => {
+    return driveService.listUnits(courseId)
+  })
+
+  // Get a specific unit
+  ipcMain.handle('drive:getUnit', async (_event, unitId: string) => {
+    return driveService.getUnit(unitId)
+  })
+
+  // Create a new unit
+  ipcMain.handle('drive:createUnit', async (_event, input: CreateUnitInput) => {
+    return driveService.createUnit(input)
+  })
+
+  // Update a unit
+  ipcMain.handle('drive:updateUnit', async (_event, input: UpdateUnitInput) => {
+    return driveService.updateUnit(input)
+  })
+
+  // Delete a unit
+  ipcMain.handle('drive:deleteUnit', async (_event, unitId: string, courseId: string) => {
+    return driveService.deleteUnit(unitId, courseId)
+  })
+
+  // Reorder units
+  ipcMain.handle('drive:reorderUnits', async (_event, input: ReorderUnitsInput) => {
+    return driveService.reorderUnits(input)
+  })
 }
 
 function registerLLMHandlers(): void {

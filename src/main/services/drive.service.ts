@@ -14,6 +14,14 @@ import {
   Student,
   CreateStudentInput,
   UpdateStudentInput,
+  Standards,
+  StandardsSummary,
+  CreateStandardsInput,
+  Unit,
+  UnitSummary,
+  CreateUnitInput,
+  UpdateUnitInput,
+  ReorderUnitsInput,
   ServiceResult
 } from '../../shared/types'
 
@@ -34,6 +42,7 @@ interface FolderCache {
   yearFolderIds: Record<string, string> // year -> folderId
   courseFolderIds: Record<string, string> // courseId -> folderId
   sectionFolderIds: Record<string, string> // sectionId -> folderId
+  unitFolderIds: Record<string, string> // unitId -> folderId
 }
 
 // Metadata cache with TTL for performance
@@ -45,8 +54,11 @@ interface CacheEntry<T> {
 interface MetadataCache {
   courses: Record<string, CacheEntry<Course>>
   sections: Record<string, CacheEntry<Section>>
+  units: Record<string, CacheEntry<Unit>>
+  standards: Record<string, CacheEntry<Standards>> // courseFolderId -> standards
   sectionCounts: Record<string, CacheEntry<number>> // courseFolderId -> section count
   studentCounts: Record<string, CacheEntry<number>> // sectionFolderId -> student count
+  unitCounts: Record<string, CacheEntry<number>> // courseFolderId -> unit count
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -56,13 +68,17 @@ class DriveService {
   private folderCache: FolderCache = {
     yearFolderIds: {},
     courseFolderIds: {},
-    sectionFolderIds: {}
+    sectionFolderIds: {},
+    unitFolderIds: {}
   }
   private metadataCache: MetadataCache = {
     courses: {},
     sections: {},
+    units: {},
+    standards: {},
     sectionCounts: {},
-    studentCounts: {}
+    studentCounts: {},
+    unitCounts: {}
   }
 
   /**
@@ -86,13 +102,17 @@ class DriveService {
     this.folderCache = {
       yearFolderIds: {},
       courseFolderIds: {},
-      sectionFolderIds: {}
+      sectionFolderIds: {},
+      unitFolderIds: {}
     }
     this.metadataCache = {
       courses: {},
       sections: {},
+      units: {},
+      standards: {},
       sectionCounts: {},
-      studentCounts: {}
+      studentCounts: {},
+      unitCounts: {}
     }
   }
 
@@ -122,6 +142,23 @@ class DriveService {
     if (sectionFolderId) {
       delete this.metadataCache.studentCounts[sectionFolderId]
     }
+  }
+
+  /**
+   * Invalidate caches related to a unit (call after mutations)
+   */
+  private invalidateUnitCache(unitId: string, courseFolderId?: string): void {
+    delete this.metadataCache.units[unitId]
+    if (courseFolderId) {
+      delete this.metadataCache.unitCounts[courseFolderId]
+    }
+  }
+
+  /**
+   * Invalidate standards cache for a course (call after mutations)
+   */
+  private invalidateStandardsCache(courseFolderId: string): void {
+    delete this.metadataCache.standards[courseFolderId]
   }
 
   // ============================================================
@@ -1268,6 +1305,661 @@ class DriveService {
       return { success: true, data: undefined }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to delete student'
+      return { success: false, error: message }
+    }
+  }
+
+  // ============================================================
+  // Standards Operations
+  // ============================================================
+
+  /**
+   * Get standards for a course
+   */
+  async getStandards(courseId: string): Promise<ServiceResult<Standards | null>> {
+    try {
+      // Get course to find folder ID
+      const courseResult = await this.getCourse(courseId)
+      if (!courseResult.success) {
+        return { success: false, error: courseResult.error }
+      }
+
+      const courseFolderId = courseResult.data.driveFolderId
+      if (!courseFolderId) {
+        return { success: false, error: 'Course folder not found' }
+      }
+
+      // Check cache first
+      const cached = this.metadataCache.standards[courseFolderId]
+      if (this.isCacheValid(cached)) {
+        return { success: true, data: cached.data }
+      }
+
+      const drive = await this.getDrive()
+
+      // Find standards folder
+      const standardsFolderResponse = await drive.files.list({
+        q: `name='standards' and mimeType='application/vnd.google-apps.folder' and '${courseFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (!standardsFolderResponse.data.files || standardsFolderResponse.data.files.length === 0) {
+        return { success: true, data: null }
+      }
+
+      const standardsFolderId = standardsFolderResponse.data.files[0].id!
+
+      // Find standards.json
+      const response = await drive.files.list({
+        q: `name='standards.json' and '${standardsFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (!response.data.files || response.data.files.length === 0) {
+        return { success: true, data: null }
+      }
+
+      const fileId = response.data.files[0].id!
+
+      // Read the file content
+      const fileResponse = await drive.files.get({
+        fileId,
+        alt: 'media'
+      })
+
+      const standards = fileResponse.data as unknown as Standards
+
+      // Cache the result
+      if (standards) {
+        this.metadataCache.standards[courseFolderId] = {
+          data: standards,
+          timestamp: Date.now()
+        }
+      }
+
+      return { success: true, data: standards }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get standards'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Get standards summary for a course
+   */
+  async getStandardsSummary(courseId: string): Promise<ServiceResult<StandardsSummary | null>> {
+    try {
+      const result = await this.getStandards(courseId)
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      if (!result.data) {
+        return { success: true, data: null }
+      }
+
+      const standards = result.data
+
+      // Count total standards across all domains
+      const standardCount = standards.domains.reduce(
+        (count, domain) => count + domain.standards.length,
+        0
+      )
+
+      const summary: StandardsSummary = {
+        courseId: standards.courseId,
+        state: standards.state,
+        subject: standards.subject,
+        gradeLevel: standards.gradeLevel,
+        framework: standards.framework,
+        standardCount,
+        domainCount: standards.domains.length,
+        updatedAt: standards.updatedAt
+      }
+
+      return { success: true, data: summary }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get standards summary'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Save/update standards for a course
+   */
+  async saveStandards(input: CreateStandardsInput): Promise<ServiceResult<Standards>> {
+    try {
+      // Get course to find folder ID
+      const courseResult = await this.getCourse(input.courseId)
+      if (!courseResult.success) {
+        return { success: false, error: courseResult.error }
+      }
+
+      const courseFolderId = courseResult.data.driveFolderId
+      if (!courseFolderId) {
+        return { success: false, error: 'Course folder not found' }
+      }
+
+      const drive = await this.getDrive()
+      const now = new Date().toISOString()
+
+      // Ensure standards folder exists
+      const standardsFolderId = await this.ensureSubfolder(courseFolderId, 'standards')
+
+      // Check if standards.json already exists
+      const existingResponse = await drive.files.list({
+        q: `name='standards.json' and '${standardsFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      // Get existing version or start at 1
+      let version = 1
+      const existingResult = await this.getStandards(input.courseId)
+      if (existingResult.success && existingResult.data) {
+        version = existingResult.data.version + 1
+      }
+
+      const standards: Standards = {
+        courseId: input.courseId,
+        version,
+        updatedAt: now,
+        source: input.source,
+        state: input.state,
+        subject: input.subject,
+        gradeLevel: input.gradeLevel,
+        framework: input.framework,
+        domains: input.domains
+      }
+
+      if (existingResponse.data.files && existingResponse.data.files.length > 0) {
+        // Update existing file
+        const fileId = existingResponse.data.files[0].id!
+        await drive.files.update({
+          fileId,
+          media: {
+            mimeType: 'application/json',
+            body: JSON.stringify(standards, null, 2)
+          }
+        })
+      } else {
+        // Create new file
+        await drive.files.create({
+          requestBody: {
+            name: 'standards.json',
+            mimeType: 'application/json',
+            parents: [standardsFolderId]
+          },
+          media: {
+            mimeType: 'application/json',
+            body: JSON.stringify(standards, null, 2)
+          }
+        })
+      }
+
+      // Invalidate cache
+      this.invalidateStandardsCache(courseFolderId)
+
+      return { success: true, data: standards }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save standards'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Delete standards for a course
+   */
+  async deleteStandards(courseId: string): Promise<ServiceResult<void>> {
+    try {
+      // Get course to find folder ID
+      const courseResult = await this.getCourse(courseId)
+      if (!courseResult.success) {
+        return { success: false, error: courseResult.error }
+      }
+
+      const courseFolderId = courseResult.data.driveFolderId
+      if (!courseFolderId) {
+        return { success: false, error: 'Course folder not found' }
+      }
+
+      const drive = await this.getDrive()
+
+      // Find standards folder
+      const standardsFolderResponse = await drive.files.list({
+        q: `name='standards' and mimeType='application/vnd.google-apps.folder' and '${courseFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (!standardsFolderResponse.data.files || standardsFolderResponse.data.files.length === 0) {
+        return { success: true, data: undefined }
+      }
+
+      const standardsFolderId = standardsFolderResponse.data.files[0].id!
+
+      // Find and delete standards.json
+      const response = await drive.files.list({
+        q: `name='standards.json' and '${standardsFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (response.data.files && response.data.files.length > 0) {
+        await drive.files.update({
+          fileId: response.data.files[0].id!,
+          requestBody: { trashed: true }
+        })
+      }
+
+      // Invalidate cache
+      this.invalidateStandardsCache(courseFolderId)
+
+      return { success: true, data: undefined }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete standards'
+      return { success: false, error: message }
+    }
+  }
+
+  // ============================================================
+  // Unit Operations
+  // ============================================================
+
+  /**
+   * List all units for a course
+   */
+  async listUnits(courseId: string): Promise<ServiceResult<UnitSummary[]>> {
+    try {
+      // Get course to find folder ID
+      const courseResult = await this.getCourse(courseId)
+      if (!courseResult.success) {
+        return { success: false, error: courseResult.error }
+      }
+
+      const courseFolderId = courseResult.data.driveFolderId
+      if (!courseFolderId) {
+        return { success: false, error: 'Course folder not found' }
+      }
+
+      const drive = await this.getDrive()
+
+      // Find units folder
+      const unitsFolderId = await this.ensureSubfolder(courseFolderId, 'units')
+
+      // List all unit folders
+      const response = await drive.files.list({
+        q: `'${unitsFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+        fields: 'files(id, name)',
+        spaces: 'drive'
+      })
+
+      const folders = response.data.files ?? []
+
+      // Fetch all unit metadata in parallel
+      const unitDataPromises = folders.map(async (folder) => {
+        const folderId = folder.id!
+
+        const unit = await this.readUnitMetadata(folderId)
+        if (!unit) return null
+
+        // Populate folder cache
+        this.folderCache.unitFolderIds[unit.id] = folderId
+
+        // Count assessments in this unit
+        const assessmentCount = await this.countAssessments(folderId)
+
+        return {
+          id: unit.id,
+          name: unit.name,
+          order: unit.order,
+          assessmentCount,
+          standardCount: unit.standardRefs.length,
+          driveFolderId: folderId
+        } as UnitSummary
+      })
+
+      const unitResults = await Promise.all(unitDataPromises)
+      const units = unitResults
+        .filter((u): u is UnitSummary => u !== null)
+        .sort((a, b) => a.order - b.order) // Sort by order
+
+      return { success: true, data: units }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to list units'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Read unit metadata from a unit folder (with caching)
+   */
+  private async readUnitMetadata(unitFolderId: string): Promise<Unit | null> {
+    try {
+      // Check cache first
+      const cached = this.metadataCache.units[unitFolderId]
+      if (this.isCacheValid(cached)) {
+        return cached.data
+      }
+
+      const drive = await this.getDrive()
+
+      // Find meta.json
+      const response = await drive.files.list({
+        q: `name='meta.json' and '${unitFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (!response.data.files || response.data.files.length === 0) {
+        return null
+      }
+
+      const fileId = response.data.files[0].id!
+
+      // Read the file content
+      const fileResponse = await drive.files.get({
+        fileId,
+        alt: 'media'
+      })
+
+      const unit = fileResponse.data as unknown as Unit
+
+      // Cache the result
+      if (unit) {
+        this.metadataCache.units[unitFolderId] = {
+          data: unit,
+          timestamp: Date.now()
+        }
+      }
+
+      return unit
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Count assessments in a unit folder
+   */
+  private async countAssessments(unitFolderId: string): Promise<number> {
+    try {
+      const drive = await this.getDrive()
+
+      // Find assessments folder
+      const assessmentsFolderResponse = await drive.files.list({
+        q: `name='assessments' and mimeType='application/vnd.google-apps.folder' and '${unitFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (
+        !assessmentsFolderResponse.data.files ||
+        assessmentsFolderResponse.data.files.length === 0
+      ) {
+        return 0
+      }
+
+      const assessmentsFolderId = assessmentsFolderResponse.data.files[0].id!
+
+      // Count JSON files in assessments folder
+      const response = await drive.files.list({
+        q: `'${assessmentsFolderId}' in parents and mimeType='application/json' and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      return response.data.files?.length ?? 0
+    } catch {
+      return 0
+    }
+  }
+
+  /**
+   * Get a specific unit by ID
+   */
+  async getUnit(unitId: string): Promise<ServiceResult<Unit>> {
+    try {
+      const unitFolderId = this.folderCache.unitFolderIds[unitId] ?? unitId
+
+      const unit = await this.readUnitMetadata(unitFolderId)
+      if (!unit) {
+        return { success: false, error: 'Unit not found' }
+      }
+
+      return { success: true, data: unit }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get unit'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Create a new unit within a course
+   */
+  async createUnit(input: CreateUnitInput): Promise<ServiceResult<Unit>> {
+    try {
+      // Get course to find folder ID
+      const courseResult = await this.getCourse(input.courseId)
+      if (!courseResult.success) {
+        return { success: false, error: courseResult.error }
+      }
+
+      const courseFolderId = courseResult.data.driveFolderId
+      if (!courseFolderId) {
+        return { success: false, error: 'Course folder not found' }
+      }
+
+      const drive = await this.getDrive()
+
+      // Get units folder
+      const unitsFolderId = await this.ensureSubfolder(courseFolderId, 'units')
+
+      // Determine order if not provided
+      let order = input.order
+      if (order === undefined) {
+        const unitsResult = await this.listUnits(input.courseId)
+        if (unitsResult.success) {
+          const maxOrder = unitsResult.data.reduce((max, u) => Math.max(max, u.order), 0)
+          order = maxOrder + 1
+        } else {
+          order = 1
+        }
+      }
+
+      // Generate unique unit ID
+      const unitId = this.generateUniqueId(input.name)
+      const now = new Date().toISOString()
+
+      // Create unit folder
+      const folderResponse = await drive.files.create({
+        requestBody: {
+          name: unitId,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: [unitsFolderId]
+        },
+        fields: 'id'
+      })
+
+      const unitFolderId = folderResponse.data.id!
+      this.folderCache.unitFolderIds[unitId] = unitFolderId
+
+      // Create assessments subfolder
+      await this.ensureSubfolder(unitFolderId, 'assessments')
+
+      // Create unit metadata
+      const unit: Unit = {
+        id: unitId,
+        courseId: input.courseId,
+        name: input.name,
+        description: input.description,
+        order,
+        standardRefs: input.standardRefs ?? [],
+        estimatedDays: input.estimatedDays,
+        driveFolderId: unitFolderId,
+        createdAt: now,
+        updatedAt: now,
+        version: 1
+      }
+
+      // Save meta.json
+      await drive.files.create({
+        requestBody: {
+          name: 'meta.json',
+          mimeType: 'application/json',
+          parents: [unitFolderId]
+        },
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(unit, null, 2)
+        }
+      })
+
+      // Invalidate unit count cache for the course
+      delete this.metadataCache.unitCounts[courseFolderId]
+
+      return { success: true, data: unit }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create unit'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Update unit metadata
+   */
+  async updateUnit(input: UpdateUnitInput): Promise<ServiceResult<Unit>> {
+    try {
+      // Get existing unit
+      const existingResult = await this.getUnit(input.id)
+      if (!existingResult.success) {
+        return existingResult
+      }
+      const existing = existingResult.data
+
+      const drive = await this.getDrive()
+      const unitFolderId = existing.driveFolderId ?? this.folderCache.unitFolderIds[input.id]
+
+      if (!unitFolderId) {
+        return { success: false, error: 'Unit folder not found' }
+      }
+
+      // Find meta.json file ID
+      const metaResponse = await drive.files.list({
+        q: `name='meta.json' and '${unitFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (!metaResponse.data.files || metaResponse.data.files.length === 0) {
+        return { success: false, error: 'Unit metadata not found' }
+      }
+
+      const metaFileId = metaResponse.data.files[0].id!
+
+      // Update unit
+      const updated: Unit = {
+        ...existing,
+        name: input.name ?? existing.name,
+        description: input.description ?? existing.description,
+        order: input.order ?? existing.order,
+        standardRefs: input.standardRefs ?? existing.standardRefs,
+        estimatedDays: input.estimatedDays ?? existing.estimatedDays,
+        updatedAt: new Date().toISOString(),
+        version: existing.version + 1
+      }
+
+      // Update the file
+      await drive.files.update({
+        fileId: metaFileId,
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(updated, null, 2)
+        }
+      })
+
+      // Get course folder ID for cache invalidation
+      const courseResult = await this.getCourse(input.courseId)
+      const courseFolderId = courseResult.success ? courseResult.data.driveFolderId : undefined
+
+      // Invalidate cache
+      this.invalidateUnitCache(input.id, courseFolderId)
+
+      return { success: true, data: updated }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update unit'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Delete a unit and all its contents
+   */
+  async deleteUnit(unitId: string, courseId: string): Promise<ServiceResult<void>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get unit folder ID
+      const existingResult = await this.getUnit(unitId)
+      if (!existingResult.success) {
+        return { success: false, error: existingResult.error }
+      }
+
+      const unitFolderId =
+        existingResult.data.driveFolderId ?? this.folderCache.unitFolderIds[unitId]
+
+      if (!unitFolderId) {
+        return { success: false, error: 'Unit folder not found' }
+      }
+
+      // Move to trash
+      await drive.files.update({
+        fileId: unitFolderId,
+        requestBody: { trashed: true }
+      })
+
+      // Get course folder ID for cache invalidation
+      const courseResult = await this.getCourse(courseId)
+      const courseFolderId = courseResult.success ? courseResult.data.driveFolderId : undefined
+
+      // Clear from caches
+      delete this.folderCache.unitFolderIds[unitId]
+      this.invalidateUnitCache(unitId, courseFolderId)
+
+      return { success: true, data: undefined }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete unit'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Reorder units within a course
+   */
+  async reorderUnits(input: ReorderUnitsInput): Promise<ServiceResult<void>> {
+    try {
+      // Update each unit's order
+      const updatePromises = input.unitIds.map((unitId, index) =>
+        this.updateUnit({
+          id: unitId,
+          courseId: input.courseId,
+          order: index + 1
+        })
+      )
+
+      const results = await Promise.all(updatePromises)
+
+      // Check if any failed
+      const failed = results.find((r) => !r.success)
+      if (failed && !failed.success) {
+        return { success: false, error: failed.error }
+      }
+
+      return { success: true, data: undefined }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to reorder units'
       return { success: false, error: message }
     }
   }
