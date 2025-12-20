@@ -138,6 +138,14 @@ class AuthService {
   }
 
   /**
+   * Check if we have a refresh token stored (for token refresh attempts)
+   */
+  hasRefreshToken(): boolean {
+    const tokens = storageService.getTokens()
+    return Boolean(tokens?.refreshToken)
+  }
+
+  /**
    * Get current user info
    */
   getCurrentUser(): UserInfo | null {
