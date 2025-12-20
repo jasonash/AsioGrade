@@ -23,9 +23,10 @@ import type { SectionSummary, UnitSummary } from '../../../shared/types'
 
 interface CourseViewPageProps {
   onSectionSelect?: (section: SectionSummary) => void
+  onUnitSelect?: (unit: UnitSummary) => void
 }
 
-export function CourseViewPage({ onSectionSelect }: CourseViewPageProps): ReactElement {
+export function CourseViewPage({ onSectionSelect, onUnitSelect }: CourseViewPageProps): ReactElement {
   const { currentCourse, setCurrentCourse } = useCourseStore()
   const { sections, loading, error, fetchSections, clearSections } = useSectionStore()
   const { summary: standardsSummary, fetchSummary: fetchStandardsSummary, clearStandards } = useStandardsStore()
@@ -286,7 +287,11 @@ export function CourseViewPage({ onSectionSelect }: CourseViewPageProps): ReactE
         {units.length > 0 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {units.map((unit) => (
-              <UnitCard key={unit.id} unit={unit} />
+              <UnitCard
+                key={unit.id}
+                unit={unit}
+                onView={() => onUnitSelect?.(unit)}
+              />
             ))}
           </Box>
         )}
@@ -376,9 +381,10 @@ function SectionCard({ section, onView }: SectionCardProps): ReactElement {
 
 interface UnitCardProps {
   unit: UnitSummary
+  onView: () => void
 }
 
-function UnitCard({ unit }: UnitCardProps): ReactElement {
+function UnitCard({ unit, onView }: UnitCardProps): ReactElement {
   return (
     <Paper
       variant="outlined"
@@ -415,7 +421,7 @@ function UnitCard({ unit }: UnitCardProps): ReactElement {
             </Box>
           </Box>
         </Box>
-        <Button size="small">View</Button>
+        <Button size="small" onClick={onView}>View</Button>
       </Box>
     </Paper>
   )

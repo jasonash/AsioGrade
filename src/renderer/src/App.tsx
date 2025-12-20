@@ -1,9 +1,9 @@
 import { useState, type ReactElement } from 'react'
 import { Layout, type NavItem } from './components/layout'
-import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage } from './pages'
+import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, UnitViewPage } from './pages'
 import { CourseCreationModal } from './components/courses'
-import { useUIStore, useCourseStore, useSectionStore } from './stores'
-import type { CourseSummary, SectionSummary } from '../../shared/types'
+import { useUIStore, useCourseStore, useSectionStore, useUnitStore } from './stores'
+import type { CourseSummary, SectionSummary, UnitSummary } from '../../shared/types'
 
 const pageConfig: Record<NavItem, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Your teaching dashboard' },
@@ -23,20 +23,27 @@ function App(): ReactElement {
   const { activeNav, setActiveNav } = useUIStore()
   const { currentCourse, setCurrentCourse } = useCourseStore()
   const { fetchSections } = useSectionStore()
+  const { fetchUnits } = useUnitStore()
 
   // State for current section view
   const [currentSection, setCurrentSection] = useState<SectionSummary | null>(null)
+
+  // State for current unit view
+  const [currentUnit, setCurrentUnit] = useState<UnitSummary | null>(null)
 
   // State for course creation modal (can be triggered from sidebar)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   const handleNavigate = (nav: NavItem): void => {
-    // Clear current course and section when navigating away
+    // Clear current course, section, and unit when navigating away
     if (currentCourse) {
       setCurrentCourse(null)
     }
     if (currentSection) {
       setCurrentSection(null)
+    }
+    if (currentUnit) {
+      setCurrentUnit(null)
     }
     setActiveNav(nav)
   }
@@ -44,9 +51,11 @@ function App(): ReactElement {
   const handleCourseSelect = (course: CourseSummary): void => {
     setCurrentCourse(course)
     setCurrentSection(null)
+    setCurrentUnit(null)
     setActiveNav('dashboard')
-    // Fetch sections for this course
+    // Fetch sections and units for this course
     fetchSections(course.id)
+    fetchUnits(course.id)
   }
 
   const handleSectionSelect = (section: SectionSummary, course: CourseSummary): void => {
@@ -61,6 +70,22 @@ function App(): ReactElement {
   }
 
   const renderPage = (): ReactElement => {
+    // Show unit view if a unit is selected
+    if (activeNav === 'dashboard' && currentUnit && currentCourse) {
+      return (
+        <UnitViewPage
+          course={currentCourse}
+          unitSummary={currentUnit}
+          onBack={() => setCurrentUnit(null)}
+          onDeleted={() => {
+            setCurrentUnit(null)
+            // Refresh units list
+            fetchUnits(currentCourse.id)
+          }}
+        />
+      )
+    }
+
     // Show section view if a section is selected
     if (activeNav === 'dashboard' && currentSection && currentCourse) {
       return (
@@ -72,11 +97,12 @@ function App(): ReactElement {
       )
     }
 
-    // Show course view if a course is selected (but no section)
+    // Show course view if a course is selected (but no section or unit)
     if (activeNav === 'dashboard' && currentCourse) {
       return (
         <CourseViewPage
           onSectionSelect={(section) => setCurrentSection(section)}
+          onUnitSelect={(unit) => setCurrentUnit(unit)}
         />
       )
     }
