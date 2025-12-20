@@ -13,12 +13,42 @@ import AccordionSummary from '@mui/material/AccordionSummary'
 import AccordionDetails from '@mui/material/AccordionDetails'
 import Chip from '@mui/material/Chip'
 import MenuItem from '@mui/material/MenuItem'
+import Link from '@mui/material/Link'
+import Tooltip from '@mui/material/Tooltip'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import WarningIcon from '@mui/icons-material/Warning'
+import CloudDownloadIcon from '@mui/icons-material/CloudDownload'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { Modal } from '../ui'
 import { useStandardsStore } from '../../stores'
 import type { StandardDomain, Standard, CreateStandardsInput, StandardsSource } from '../../../../shared/types'
+import type { ServiceResult } from '../../../../shared/types/common.types'
+import type { LLMResponse } from '../../../../shared/types/llm.types'
+
+// System prompt for AI standards parsing
+const STANDARDS_PARSING_PROMPT = `You are a teaching standards parser. Extract teaching standards from the provided text and return valid JSON.
+
+Output format:
+{
+  "domains": [
+    {
+      "code": "DOMAIN-CODE",
+      "name": "Domain Name",
+      "standards": [
+        { "code": "STANDARD-CODE", "description": "Full standard description..." }
+      ]
+    }
+  ]
+}
+
+Rules:
+1. Extract domain codes and names from headers or groupings
+2. Each standard needs a unique code and its full description
+3. Group standards under appropriate domains
+4. If no clear domain structure, create logical groupings based on topic
+5. Preserve original wording of standards
+6. Return ONLY valid JSON, no additional text or markdown code blocks`
 
 interface StandardsImportModalProps {
   isOpen: boolean
@@ -108,6 +138,42 @@ export function StandardsImportModal({
   const [parseError, setParseError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // AI configuration state
+  const [aiConfigured, setAiConfigured] = useState<boolean>(false)
+  const [checkingAi, setCheckingAi] = useState<boolean>(true)
+
+  // URL import state
+  const [urlInput, setUrlInput] = useState('')
+  const [isFetchingUrl, setIsFetchingUrl] = useState(false)
+
+  // File import state
+  const [selectedFile, setSelectedFile] = useState<string | null>(null)
+  const [selectedFileName, setSelectedFileName] = useState<string>('')
+  const [isReadingFile, setIsReadingFile] = useState(false)
+
+  // AI parsing state
+  const [isParsingWithAI, setIsParsingWithAI] = useState(false)
+
+  // Check AI configuration when modal opens
+  useEffect(() => {
+    const checkAiConfig = async (): Promise<void> => {
+      setCheckingAi(true)
+      try {
+        const result = await window.electronAPI.invoke<ServiceResult<boolean>>(
+          'llm:hasConfiguredProvider'
+        )
+        setAiConfigured(result.success && result.data === true)
+      } catch {
+        setAiConfigured(false)
+      }
+      setCheckingAi(false)
+    }
+
+    if (isOpen) {
+      checkAiConfig()
+    }
+  }, [isOpen])
+
   // Reset form when modal opens
   useEffect(() => {
     if (isOpen) {
@@ -121,6 +187,9 @@ export function StandardsImportModal({
       setParsedDomains([])
       setParseError(null)
       setActiveTab(0)
+      setUrlInput('')
+      setSelectedFile(null)
+      setSelectedFileName('')
       clearError()
     }
   }, [isOpen, courseSubject, courseGradeLevel, clearError])
@@ -219,6 +288,199 @@ export function StandardsImportModal({
     }))
   }, [])
 
+  // Parse content with AI
+  const parseWithAI = useCallback(async (content: string): Promise<void> => {
+    if (!content.trim()) {
+      setParseError('No content to parse')
+      return
+    }
+
+    setIsParsingWithAI(true)
+    setParseError(null)
+    setParsedDomains([])
+
+    try {
+      const result = await window.electronAPI.invoke<ServiceResult<LLMResponse>>(
+        'llm:complete',
+        {
+          prompt: `Parse these teaching standards:\n\n${content}`,
+          systemPrompt: STANDARDS_PARSING_PROMPT,
+          temperature: 0.1,
+          maxTokens: 4000
+        }
+      )
+
+      if (!result.success) {
+        setParseError(result.error || 'AI parsing failed')
+        setIsParsingWithAI(false)
+        return
+      }
+
+      // Extract JSON from response (handle potential markdown code blocks)
+      let jsonStr = result.data.content.trim()
+      const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+      if (jsonMatch) {
+        jsonStr = jsonMatch[1].trim()
+      }
+
+      // Parse the JSON
+      let parsed: { domains?: Array<{ code: string; name: string; standards: Array<{ code: string; description: string }> }> }
+      try {
+        parsed = JSON.parse(jsonStr)
+      } catch {
+        setParseError('AI returned invalid JSON. Try again or use manual entry.')
+        setIsParsingWithAI(false)
+        return
+      }
+
+      if (!parsed.domains || !Array.isArray(parsed.domains) || parsed.domains.length === 0) {
+        setParseError('AI could not identify any standards. Try manual entry instead.')
+        setIsParsingWithAI(false)
+        return
+      }
+
+      // Convert to ParsedDomain format
+      const domains: ParsedDomain[] = parsed.domains.map((d) => ({
+        code: d.code,
+        name: d.name,
+        standards: d.standards.map((s) => ({
+          code: s.code,
+          description: s.description,
+          valid: s.description.length > 10
+        }))
+      }))
+
+      setParsedDomains(domains)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'AI parsing failed'
+      setParseError(message)
+    }
+
+    setIsParsingWithAI(false)
+  }, [])
+
+  // Handle URL fetch and parse
+  const handleFetchUrl = useCallback(async () => {
+    if (!urlInput.trim()) {
+      setParseError('Please enter a URL')
+      return
+    }
+
+    // Basic URL validation
+    try {
+      new URL(urlInput)
+    } catch {
+      setParseError('Please enter a valid URL')
+      return
+    }
+
+    setIsFetchingUrl(true)
+    setParseError(null)
+    setParsedDomains([])
+
+    try {
+      const result = await window.electronAPI.invoke<ServiceResult<string>>(
+        'import:fetchUrl',
+        urlInput
+      )
+
+      if (!result.success) {
+        setParseError(result.error || 'Failed to fetch URL')
+        setIsFetchingUrl(false)
+        return
+      }
+
+      setIsFetchingUrl(false)
+
+      // Parse with AI
+      await parseWithAI(result.data)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch URL'
+      setParseError(message)
+      setIsFetchingUrl(false)
+    }
+  }, [urlInput, parseWithAI])
+
+  // Handle file selection
+  const handleSelectFile = useCallback(async () => {
+    setParseError(null)
+    setParsedDomains([])
+
+    try {
+      const result = await window.electronAPI.invoke<ServiceResult<string | null>>(
+        'import:openFileDialog'
+      )
+
+      if (!result.success) {
+        setParseError(result.error || 'Failed to open file dialog')
+        return
+      }
+
+      if (!result.data) {
+        // User cancelled
+        return
+      }
+
+      const filePath = result.data
+      const fileName = filePath.split(/[/\\]/).pop() || filePath
+
+      setSelectedFile(filePath)
+      setSelectedFileName(fileName)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to select file'
+      setParseError(message)
+    }
+  }, [])
+
+  // Handle file read and parse
+  const handleParseFile = useCallback(async () => {
+    if (!selectedFile) {
+      setParseError('Please select a file first')
+      return
+    }
+
+    setIsReadingFile(true)
+    setParseError(null)
+    setParsedDomains([])
+
+    try {
+      let content: string
+
+      if (selectedFile.toLowerCase().endsWith('.pdf')) {
+        const result = await window.electronAPI.invoke<ServiceResult<string>>(
+          'import:readPdfText',
+          selectedFile
+        )
+        if (!result.success) {
+          setParseError(result.error || 'Failed to read PDF')
+          setIsReadingFile(false)
+          return
+        }
+        content = result.data
+      } else {
+        const result = await window.electronAPI.invoke<ServiceResult<string>>(
+          'import:readTextFile',
+          selectedFile
+        )
+        if (!result.success) {
+          setParseError(result.error || 'Failed to read file')
+          setIsReadingFile(false)
+          return
+        }
+        content = result.data
+      }
+
+      setIsReadingFile(false)
+
+      // Parse with AI
+      await parseWithAI(content)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to read file'
+      setParseError(message)
+      setIsReadingFile(false)
+    }
+  }, [selectedFile, parseWithAI])
+
   const handleSubmit = useCallback(async () => {
     if (parsedDomains.length === 0) {
       setParseError('Please parse standards before importing')
@@ -243,9 +505,25 @@ export function StandardsImportModal({
       }))
     }))
 
-    const source: StandardsSource = {
-      type: 'manual' as const,
-      fetchedAt: new Date().toISOString()
+    // Set source based on active tab
+    let source: StandardsSource
+    if (activeTab === 1) {
+      source = {
+        type: 'url' as const,
+        url: urlInput,
+        fetchedAt: new Date().toISOString()
+      }
+    } else if (activeTab === 2) {
+      source = {
+        type: 'pdf' as const,
+        filename: selectedFileName,
+        fetchedAt: new Date().toISOString()
+      }
+    } else {
+      source = {
+        type: 'manual' as const,
+        fetchedAt: new Date().toISOString()
+      }
     }
 
     const input: CreateStandardsInput = {
@@ -266,7 +544,7 @@ export function StandardsImportModal({
       onSuccess?.()
       onClose()
     }
-  }, [parsedDomains, formData, courseId, saveStandards, onSuccess, onClose])
+  }, [parsedDomains, formData, courseId, saveStandards, onSuccess, onClose, activeTab, urlInput, selectedFileName])
 
   const totalStandards = parsedDomains.reduce((sum, d) => sum + d.standards.length, 0)
   const validStandards = parsedDomains.reduce(
@@ -292,9 +570,35 @@ export function StandardsImportModal({
           sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
           <Tab label="Manual Entry" />
-          <Tab label="From URL" disabled />
-          <Tab label="From File" disabled />
+          <Tooltip
+            title={!aiConfigured && !checkingAi ? 'Requires AI provider. Configure in Settings.' : ''}
+            placement="top"
+          >
+            <span>
+              <Tab label="From URL" disabled={checkingAi || !aiConfigured} />
+            </span>
+          </Tooltip>
+          <Tooltip
+            title={!aiConfigured && !checkingAi ? 'Requires AI provider. Configure in Settings.' : ''}
+            placement="top"
+          >
+            <span>
+              <Tab label="From File" disabled={checkingAi || !aiConfigured} />
+            </span>
+          </Tooltip>
         </Tabs>
+
+        {/* AI not configured warning */}
+        {!checkingAi && !aiConfigured && activeTab === 0 && (
+          <Alert severity="info" sx={{ '& .MuiAlert-message': { width: '100%' } }}>
+            <Typography variant="body2">
+              URL and File import require an AI provider.{' '}
+              <Link href="#" onClick={(e) => { e.preventDefault(); /* TODO: navigate to settings */ }}>
+                Configure in Settings
+              </Link>
+            </Typography>
+          </Alert>
+        )}
 
         {/* Error display */}
         {(parseError || storeError) && (
@@ -482,21 +786,372 @@ ANOTHER-CODE-1: Standard description...`}
           </Box>
         )}
 
-        {/* Placeholder for URL tab */}
+        {/* URL Import Tab */}
         {activeTab === 1 && (
-          <Box sx={{ py: 4, textAlign: 'center' }}>
-            <Typography color="text.secondary">
-              URL import coming soon. Use manual entry for now.
-            </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* Metadata row - same as manual entry */}
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <TextField
+                select
+                label="State"
+                value={formData.state}
+                onChange={(e) => handleChange('state', e.target.value)}
+                size="small"
+                required
+                sx={{ minWidth: 150, flex: 1 }}
+              >
+                {US_STATES.map((state) => (
+                  <MenuItem key={state} value={state}>
+                    {state}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField
+                label="Subject"
+                value={formData.subject}
+                onChange={(e) => handleChange('subject', e.target.value)}
+                size="small"
+                sx={{ flex: 1 }}
+              />
+
+              <TextField
+                label="Grade Level"
+                value={formData.gradeLevel}
+                onChange={(e) => handleChange('gradeLevel', e.target.value)}
+                size="small"
+                sx={{ flex: 1 }}
+              />
+
+              <TextField
+                select
+                label="Framework"
+                value={formData.framework}
+                onChange={(e) => handleChange('framework', e.target.value)}
+                size="small"
+                sx={{ minWidth: 150, flex: 1 }}
+              >
+                {FRAMEWORKS.map((fw) => (
+                  <MenuItem key={fw} value={fw}>
+                    {fw}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Box>
+
+            {/* URL input */}
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Standards URL
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <TextField
+                  value={urlInput}
+                  onChange={(e) => {
+                    setUrlInput(e.target.value)
+                    setParseError(null)
+                    setParsedDomains([])
+                  }}
+                  placeholder="https://example.com/standards"
+                  fullWidth
+                  size="small"
+                  disabled={isFetchingUrl || isParsingWithAI}
+                />
+                <Button
+                  variant="contained"
+                  onClick={handleFetchUrl}
+                  disabled={!urlInput.trim() || isFetchingUrl || isParsingWithAI}
+                  startIcon={
+                    isFetchingUrl || isParsingWithAI ? (
+                      <CircularProgress size={16} color="inherit" />
+                    ) : (
+                      <CloudDownloadIcon />
+                    )
+                  }
+                  sx={{ minWidth: 140 }}
+                >
+                  {isFetchingUrl
+                    ? 'Fetching...'
+                    : isParsingWithAI
+                      ? 'Parsing...'
+                      : 'Fetch & Parse'}
+                </Button>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                Enter the URL of a page containing teaching standards. AI will extract and parse them.
+              </Typography>
+            </Box>
+
+            {/* Preview - reuse the same component */}
+            {parsedDomains.length > 0 && (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="subtitle2">
+                    Preview ({parsedDomains.length} domains, {totalStandards} standards)
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {validStandards === totalStandards ? (
+                      <Chip
+                        icon={<CheckCircleIcon />}
+                        label="All valid"
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                      />
+                    ) : (
+                      <Chip
+                        icon={<WarningIcon />}
+                        label={`${totalStandards - validStandards} need review`}
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                      />
+                    )}
+                  </Box>
+                </Box>
+
+                <Paper variant="outlined" sx={{ maxHeight: 250, overflow: 'auto' }}>
+                  {parsedDomains.map((domain, domainIdx) => (
+                    <Accordion
+                      key={domainIdx}
+                      defaultExpanded={domainIdx === 0}
+                      disableGutters
+                      sx={{
+                        '&:before': { display: 'none' },
+                        boxShadow: 'none'
+                      }}
+                    >
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Chip label={domain.code} size="small" color="primary" />
+                          <Typography variant="body2" fontWeight={500}>
+                            {domain.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            ({domain.standards.length} standards)
+                          </Typography>
+                        </Box>
+                      </AccordionSummary>
+                      <AccordionDetails sx={{ pt: 0 }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {domain.standards.map((standard, stdIdx) => (
+                            <Box
+                              key={stdIdx}
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 1,
+                                py: 0.5,
+                                borderBottom: stdIdx < domain.standards.length - 1 ? 1 : 0,
+                                borderColor: 'divider'
+                              }}
+                            >
+                              <Chip
+                                label={standard.code}
+                                size="small"
+                                variant="outlined"
+                                sx={{ flexShrink: 0 }}
+                              />
+                              <Typography variant="body2" color="text.secondary">
+                                {standard.description}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Box>
+                      </AccordionDetails>
+                    </Accordion>
+                  ))}
+                </Paper>
+              </Box>
+            )}
           </Box>
         )}
 
-        {/* Placeholder for File tab */}
+        {/* File Import Tab */}
         {activeTab === 2 && (
-          <Box sx={{ py: 4, textAlign: 'center' }}>
-            <Typography color="text.secondary">
-              File import coming soon. Use manual entry for now.
-            </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* Metadata row - same as manual entry */}
+            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+              <TextField
+                select
+                label="State"
+                value={formData.state}
+                onChange={(e) => handleChange('state', e.target.value)}
+                size="small"
+                required
+                sx={{ minWidth: 150, flex: 1 }}
+              >
+                {US_STATES.map((state) => (
+                  <MenuItem key={state} value={state}>
+                    {state}
+                  </MenuItem>
+                ))}
+              </TextField>
+
+              <TextField
+                label="Subject"
+                value={formData.subject}
+                onChange={(e) => handleChange('subject', e.target.value)}
+                size="small"
+                sx={{ flex: 1 }}
+              />
+
+              <TextField
+                label="Grade Level"
+                value={formData.gradeLevel}
+                onChange={(e) => handleChange('gradeLevel', e.target.value)}
+                size="small"
+                sx={{ flex: 1 }}
+              />
+
+              <TextField
+                select
+                label="Framework"
+                value={formData.framework}
+                onChange={(e) => handleChange('framework', e.target.value)}
+                size="small"
+                sx={{ minWidth: 150, flex: 1 }}
+              >
+                {FRAMEWORKS.map((fw) => (
+                  <MenuItem key={fw} value={fw}>
+                    {fw}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Box>
+
+            {/* File selection */}
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Standards File
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                <Button
+                  variant="outlined"
+                  onClick={handleSelectFile}
+                  disabled={isReadingFile || isParsingWithAI}
+                  startIcon={<UploadFileIcon />}
+                >
+                  Choose File
+                </Button>
+                {selectedFileName && (
+                  <Chip
+                    label={selectedFileName}
+                    onDelete={() => {
+                      setSelectedFile(null)
+                      setSelectedFileName('')
+                      setParsedDomains([])
+                    }}
+                    size="small"
+                  />
+                )}
+                {selectedFile && (
+                  <Button
+                    variant="contained"
+                    onClick={handleParseFile}
+                    disabled={isReadingFile || isParsingWithAI}
+                    startIcon={
+                      isReadingFile || isParsingWithAI ? (
+                        <CircularProgress size={16} color="inherit" />
+                      ) : undefined
+                    }
+                    sx={{ ml: 'auto' }}
+                  >
+                    {isReadingFile
+                      ? 'Reading...'
+                      : isParsingWithAI
+                        ? 'Parsing...'
+                        : 'Parse with AI'}
+                  </Button>
+                )}
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                Select a text file (.txt) or PDF (.pdf) containing teaching standards.
+              </Typography>
+            </Box>
+
+            {/* Preview - reuse the same component */}
+            {parsedDomains.length > 0 && (
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                  <Typography variant="subtitle2">
+                    Preview ({parsedDomains.length} domains, {totalStandards} standards)
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {validStandards === totalStandards ? (
+                      <Chip
+                        icon={<CheckCircleIcon />}
+                        label="All valid"
+                        size="small"
+                        color="success"
+                        variant="outlined"
+                      />
+                    ) : (
+                      <Chip
+                        icon={<WarningIcon />}
+                        label={`${totalStandards - validStandards} need review`}
+                        size="small"
+                        color="warning"
+                        variant="outlined"
+                      />
+                    )}
+                  </Box>
+                </Box>
+
+                <Paper variant="outlined" sx={{ maxHeight: 250, overflow: 'auto' }}>
+                  {parsedDomains.map((domain, domainIdx) => (
+                    <Accordion
+                      key={domainIdx}
+                      defaultExpanded={domainIdx === 0}
+                      disableGutters
+                      sx={{
+                        '&:before': { display: 'none' },
+                        boxShadow: 'none'
+                      }}
+                    >
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Chip label={domain.code} size="small" color="primary" />
+                          <Typography variant="body2" fontWeight={500}>
+                            {domain.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            ({domain.standards.length} standards)
+                          </Typography>
+                        </Box>
+                      </AccordionSummary>
+                      <AccordionDetails sx={{ pt: 0 }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          {domain.standards.map((standard, stdIdx) => (
+                            <Box
+                              key={stdIdx}
+                              sx={{
+                                display: 'flex',
+                                alignItems: 'flex-start',
+                                gap: 1,
+                                py: 0.5,
+                                borderBottom: stdIdx < domain.standards.length - 1 ? 1 : 0,
+                                borderColor: 'divider'
+                              }}
+                            >
+                              <Chip
+                                label={standard.code}
+                                size="small"
+                                variant="outlined"
+                                sx={{ flexShrink: 0 }}
+                              />
+                              <Typography variant="body2" color="text.secondary">
+                                {standard.description}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Box>
+                      </AccordionDetails>
+                    </Accordion>
+                  ))}
+                </Paper>
+              </Box>
+            )}
           </Box>
         )}
 

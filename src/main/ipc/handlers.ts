@@ -3,6 +3,7 @@ import { storageService } from '../services/storage.service'
 import { authService } from '../services/auth.service'
 import { driveService } from '../services/drive.service'
 import { llmService } from '../services/llm'
+import { importService } from '../services/import.service'
 import {
   CreateCourseInput,
   UpdateCourseInput,
@@ -34,6 +35,9 @@ export function registerIpcHandlers(): void {
 
   // LLM handlers
   registerLLMHandlers()
+
+  // Import handlers
+  registerImportHandlers()
 
   // Future handlers will be registered here:
   // registerPDFHandlers()
@@ -489,5 +493,36 @@ function registerLLMHandlers(): void {
   // Get status of all providers
   ipcMain.handle('llm:getProviders', () => {
     return llmService.getProviders()
+  })
+
+  // Check if any provider is configured
+  ipcMain.handle('llm:hasConfiguredProvider', () => {
+    return { success: true, data: llmService.hasConfiguredProvider() }
+  })
+}
+
+function registerImportHandlers(): void {
+  // ============================================================
+  // Import Operations (for Standards import from URL/File)
+  // ============================================================
+
+  // Fetch content from URL
+  ipcMain.handle('import:fetchUrl', async (_event, url: string) => {
+    return importService.fetchUrl(url)
+  })
+
+  // Open file dialog
+  ipcMain.handle('import:openFileDialog', async () => {
+    return importService.openFileDialog()
+  })
+
+  // Read text file
+  ipcMain.handle('import:readTextFile', async (_event, filePath: string) => {
+    return importService.readTextFile(filePath)
+  })
+
+  // Read PDF text
+  ipcMain.handle('import:readPdfText', async (_event, filePath: string) => {
+    return importService.readPdfText(filePath)
   })
 }

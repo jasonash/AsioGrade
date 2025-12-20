@@ -66,6 +66,13 @@ const validInvokeChannels = [
   'llm:stream',
   'llm:testConnection',
   'llm:getProviders',
+  'llm:hasConfiguredProvider',
+
+  // Import utilities
+  'import:fetchUrl',
+  'import:openFileDialog',
+  'import:readTextFile',
+  'import:readPdfText',
 
   // PDF
   'pdf:parseScantron',
