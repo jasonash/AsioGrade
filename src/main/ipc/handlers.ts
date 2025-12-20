@@ -456,7 +456,7 @@ function registerDriveHandlers(): void {
   })
 
   // Delete a unit
-  ipcMain.handle('drive:deleteUnit', async (_event, unitId: string, courseId: string) => {
+  ipcMain.handle('drive:deleteUnit', async (_event, courseId: string, unitId: string) => {
     return driveService.deleteUnit(unitId, courseId)
   })
 
