@@ -60,6 +60,7 @@ interface StandardsImportModalProps {
 }
 
 interface FormData {
+  name: string // Collection name
   state: string
   subject: string
   gradeLevel: string
@@ -123,10 +124,11 @@ export function StandardsImportModal({
   courseGradeLevel,
   onSuccess
 }: StandardsImportModalProps): ReactElement {
-  const { saveStandards, error: storeError, clearError } = useStandardsStore()
+  const { createCollection, error: storeError, clearError } = useStandardsStore()
 
   const [activeTab, setActiveTab] = useState(0)
   const [formData, setFormData] = useState<FormData>({
+    name: '',
     state: '',
     subject: courseSubject,
     gradeLevel: courseGradeLevel,
@@ -177,6 +179,7 @@ export function StandardsImportModal({
   useEffect(() => {
     if (isOpen) {
       setFormData({
+        name: '',
         state: '',
         subject: courseSubject,
         gradeLevel: courseGradeLevel,
@@ -583,6 +586,11 @@ export function StandardsImportModal({
       return
     }
 
+    if (!formData.name.trim()) {
+      setParseError('Please enter a collection name')
+      return
+    }
+
     setIsSubmitting(true)
 
     // Convert parsed domains to the proper format
@@ -619,6 +627,7 @@ export function StandardsImportModal({
 
     const input: CreateStandardsInput = {
       courseId,
+      name: formData.name.trim(),
       source,
       state: formData.state,
       subject: formData.subject,
@@ -627,7 +636,7 @@ export function StandardsImportModal({
       domains
     }
 
-    const result = await saveStandards(input)
+    const result = await createCollection(input)
 
     setIsSubmitting(false)
 
@@ -635,7 +644,7 @@ export function StandardsImportModal({
       onSuccess?.()
       onClose()
     }
-  }, [parsedDomains, formData, courseId, saveStandards, onSuccess, onClose, activeTab, urlInput, selectedFileName])
+  }, [parsedDomains, formData, courseId, createCollection, onSuccess, onClose, activeTab, urlInput, selectedFileName])
 
   const totalStandards = parsedDomains.reduce((sum, d) => sum + d.standards.length, 0)
   const validStandards = parsedDomains.reduce(
@@ -707,6 +716,18 @@ export function StandardsImportModal({
         {/* Manual Entry Tab */}
         {activeTab === 0 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* Collection name */}
+            <TextField
+              label="Collection Name"
+              value={formData.name}
+              onChange={(e) => handleChange('name', e.target.value)}
+              placeholder="e.g., NGSS Earth Science, Kansas State Standards"
+              helperText="A descriptive name for this standards collection"
+              size="small"
+              required
+              fullWidth
+            />
+
             {/* Metadata row */}
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <TextField
@@ -888,6 +909,18 @@ ANOTHER-CODE-1: Standard description...`}
         {/* URL Import Tab */}
         {activeTab === 1 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* Collection name */}
+            <TextField
+              label="Collection Name"
+              value={formData.name}
+              onChange={(e) => handleChange('name', e.target.value)}
+              placeholder="e.g., NGSS Earth Science, Kansas State Standards"
+              helperText="A descriptive name for this standards collection"
+              size="small"
+              required
+              fullWidth
+            />
+
             {/* Metadata row - same as manual entry */}
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <TextField
@@ -1069,6 +1102,18 @@ ANOTHER-CODE-1: Standard description...`}
         {/* File Import Tab */}
         {activeTab === 2 && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* Collection name */}
+            <TextField
+              label="Collection Name"
+              value={formData.name}
+              onChange={(e) => handleChange('name', e.target.value)}
+              placeholder="e.g., NGSS Earth Science, Kansas State Standards"
+              helperText="A descriptive name for this standards collection"
+              size="small"
+              required
+              fullWidth
+            />
+
             {/* Metadata row - same as manual entry */}
             <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
               <TextField
@@ -1269,7 +1314,7 @@ ANOTHER-CODE-1: Standard description...`}
           <Button
             variant="contained"
             onClick={handleSubmit}
-            disabled={isSubmitting || parsedDomains.length === 0 || !formData.state}
+            disabled={isSubmitting || parsedDomains.length === 0 || !formData.state || !formData.name.trim()}
             startIcon={isSubmitting ? <CircularProgress size={16} color="inherit" /> : undefined}
           >
             {isSubmitting ? 'Importing...' : `Import ${totalStandards} Standards`}

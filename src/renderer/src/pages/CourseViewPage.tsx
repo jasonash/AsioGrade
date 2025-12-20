@@ -30,7 +30,7 @@ interface CourseViewPageProps {
 export function CourseViewPage({ onSectionSelect, onUnitSelect, onStandardsSelect }: CourseViewPageProps): ReactElement {
   const { currentCourse, setCurrentCourse } = useCourseStore()
   const { sections, loading, error, fetchSections, clearSections } = useSectionStore()
-  const { summary: standardsSummary, fetchSummary: fetchStandardsSummary, clearStandards } = useStandardsStore()
+  const { summaries: standardsSummaries, fetchCollections: fetchStandardsCollections, clearStandards } = useStandardsStore()
   const {
     units,
     loading: unitsLoading,
@@ -38,6 +38,9 @@ export function CourseViewPage({ onSectionSelect, onUnitSelect, onStandardsSelec
     fetchUnits,
     clearUnits
   } = useUnitStore()
+
+  // Aggregate standards count from all collections
+  const totalStandardsCount = standardsSummaries.reduce((sum, s) => sum + s.standardCount, 0)
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isStandardsModalOpen, setIsStandardsModalOpen] = useState(false)
@@ -47,7 +50,7 @@ export function CourseViewPage({ onSectionSelect, onUnitSelect, onStandardsSelec
   useEffect(() => {
     if (currentCourse?.id) {
       fetchSections(currentCourse.id)
-      fetchStandardsSummary(currentCourse.id)
+      fetchStandardsCollections(currentCourse.id)
       fetchUnits(currentCourse.id)
     }
     return () => {
@@ -55,7 +58,7 @@ export function CourseViewPage({ onSectionSelect, onUnitSelect, onStandardsSelec
       clearStandards()
       clearUnits()
     }
-  }, [currentCourse?.id, fetchSections, clearSections, fetchStandardsSummary, clearStandards, fetchUnits, clearUnits])
+  }, [currentCourse?.id, fetchSections, clearSections, fetchStandardsCollections, clearStandards, fetchUnits, clearUnits])
 
   const handleBackClick = (): void => {
     setCurrentCourse(null)
@@ -112,7 +115,7 @@ export function CourseViewPage({ onSectionSelect, onUnitSelect, onStandardsSelec
         <Grid size={{ xs: 12, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="h4" fontWeight={700}>
-              {standardsSummary?.standardCount ?? 0}
+              {totalStandardsCount}
             </Typography>
             <Typography variant="body2" color="text.secondary">Standards</Typography>
           </Paper>
@@ -187,19 +190,19 @@ export function CourseViewPage({ onSectionSelect, onUnitSelect, onStandardsSelec
       {/* Standards Section */}
       <Box component="section">
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-          <Typography variant="h6" fontWeight={600}>Standards</Typography>
+          <Typography variant="h6" fontWeight={600}>Standards Collections</Typography>
           <Button
-            variant={standardsSummary ? 'outlined' : 'contained'}
+            variant="contained"
             size="small"
             startIcon={<AddIcon />}
             onClick={() => setIsStandardsModalOpen(true)}
           >
-            {standardsSummary ? 'Update Standards' : 'Import Standards'}
+            Add Collection
           </Button>
         </Box>
 
         {/* Empty state */}
-        {!standardsSummary && (
+        {standardsSummaries.length === 0 && (
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
             <Box sx={{ width: 48, height: 48, mx: 'auto', mb: 2, borderRadius: '50%', bgcolor: 'primary.light', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <MenuBookIcon sx={{ fontSize: 24, color: 'primary.main' }} />
@@ -214,36 +217,34 @@ export function CourseViewPage({ onSectionSelect, onUnitSelect, onStandardsSelec
           </Paper>
         )}
 
-        {/* Standards summary */}
-        {standardsSummary && (
-          <Paper
-            variant="outlined"
-            sx={{
-              p: 2,
-              cursor: 'pointer',
-              '&:hover': { borderColor: 'primary.main' }
-            }}
-            onClick={onStandardsSelect}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Box>
-                <Typography fontWeight={500}>
-                  {standardsSummary.framework} - {standardsSummary.state}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {standardsSummary.standardCount} standards across {standardsSummary.domainCount} domains
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', gap: 1 }} onClick={(e) => e.stopPropagation()}>
-                <Button size="small" onClick={() => setIsStandardsModalOpen(true)}>
-                  Re-import
-                </Button>
-                <Button size="small" variant="contained" onClick={onStandardsSelect}>
-                  View
-                </Button>
-              </Box>
-            </Box>
-          </Paper>
+        {/* Standards collections list */}
+        {standardsSummaries.length > 0 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {standardsSummaries.map((summary) => (
+              <Paper
+                key={summary.id}
+                variant="outlined"
+                sx={{
+                  p: 2,
+                  cursor: 'pointer',
+                  '&:hover': { borderColor: 'primary.main' }
+                }}
+                onClick={onStandardsSelect}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <Box>
+                    <Typography fontWeight={500}>{summary.name}</Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {summary.framework} - {summary.state} | {summary.standardCount} standards across {summary.domainCount} domains
+                    </Typography>
+                  </Box>
+                  <Button size="small" variant="contained" onClick={(e) => { e.stopPropagation(); onStandardsSelect?.(); }}>
+                    View
+                  </Button>
+                </Box>
+              </Paper>
+            ))}
+          </Box>
         )}
       </Box>
 
@@ -331,7 +332,7 @@ export function CourseViewPage({ onSectionSelect, onUnitSelect, onStandardsSelec
         courseSubject={currentCourse.subject}
         courseGradeLevel={currentCourse.gradeLevel}
         onSuccess={() => {
-          fetchStandardsSummary(currentCourse.id)
+          fetchStandardsCollections(currentCourse.id)
         }}
       />
 

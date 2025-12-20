@@ -3,6 +3,7 @@ import type {
   Standards,
   StandardsSummary,
   CreateStandardsInput,
+  UpdateStandardsInput,
   StandardDomain,
   Standard
 } from '../../../shared/types'
@@ -36,41 +37,44 @@ interface StandardUpdate {
 
 interface StandardsState {
   // State
-  standards: Standards | null
-  summary: StandardsSummary | null
+  summaries: StandardsSummary[] // List of all collections for current course
+  currentCollection: Standards | null // Currently selected/viewed collection
+  allCollections: Standards[] // All collections loaded (for unit creation)
   currentCourseId: string | null
   loading: boolean
   error: string | null
 
   // Actions
   setCurrentCourseId: (courseId: string | null) => void
-  fetchStandards: (courseId: string) => Promise<void>
-  fetchSummary: (courseId: string) => Promise<void>
-  saveStandards: (input: CreateStandardsInput) => Promise<Standards | null>
-  deleteStandards: (courseId: string) => Promise<boolean>
+  fetchCollections: (courseId: string) => Promise<void>
+  fetchCollection: (courseId: string, standardsId: string) => Promise<void>
+  fetchAllCollections: (courseId: string) => Promise<void>
+  createCollection: (input: CreateStandardsInput) => Promise<Standards | null>
+  updateCollection: (input: UpdateStandardsInput) => Promise<Standards | null>
+  deleteCollection: (courseId: string, standardsId: string) => Promise<boolean>
   clearError: () => void
   clearStandards: () => void
 
-  // Domain CRUD
-  addDomain: (courseId: string, domain: DomainInput) => Promise<boolean>
-  updateDomain: (courseId: string, domainCode: string, updates: DomainUpdate) => Promise<boolean>
-  deleteDomain: (courseId: string, domainCode: string) => Promise<boolean>
+  // Domain CRUD (operates on currentCollection)
+  addDomain: (domain: DomainInput) => Promise<boolean>
+  updateDomain: (domainCode: string, updates: DomainUpdate) => Promise<boolean>
+  deleteDomain: (domainCode: string) => Promise<boolean>
 
-  // Standard CRUD
-  addStandard: (courseId: string, domainCode: string, standard: StandardInput) => Promise<boolean>
+  // Standard CRUD (operates on currentCollection)
+  addStandard: (domainCode: string, standard: StandardInput) => Promise<boolean>
   updateStandard: (
-    courseId: string,
     domainCode: string,
     standardCode: string,
     updates: StandardUpdate
   ) => Promise<boolean>
-  deleteStandard: (courseId: string, domainCode: string, standardCode: string) => Promise<boolean>
+  deleteStandard: (domainCode: string, standardCode: string) => Promise<boolean>
 }
 
-export const useStandardsStore = create<StandardsState>((set) => ({
+export const useStandardsStore = create<StandardsState>((set, get) => ({
   // Initial state
-  standards: null,
-  summary: null,
+  summaries: [],
+  currentCollection: null,
+  allCollections: [],
   currentCourseId: null,
   loading: false,
   error: null,
@@ -80,164 +84,232 @@ export const useStandardsStore = create<StandardsState>((set) => ({
 
   clearError: () => set({ error: null }),
 
-  clearStandards: () => set({ standards: null, summary: null, currentCourseId: null }),
+  clearStandards: () =>
+    set({
+      summaries: [],
+      currentCollection: null,
+      allCollections: [],
+      currentCourseId: null
+    }),
 
-  fetchStandards: async (courseId: string) => {
+  fetchCollections: async (courseId: string) => {
+    set({ loading: true, error: null, currentCourseId: courseId })
+
+    try {
+      const result = await window.electronAPI.invoke<ServiceResult<StandardsSummary[]>>(
+        'drive:listStandardsCollections',
+        courseId
+      )
+
+      if (result.success) {
+        set({ summaries: result.data, loading: false })
+      } else {
+        set({ error: result.error, loading: false })
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to fetch standards collections'
+      set({ error: message, loading: false })
+    }
+  },
+
+  fetchCollection: async (courseId: string, standardsId: string) => {
     set({ loading: true, error: null, currentCourseId: courseId })
 
     try {
       const result = await window.electronAPI.invoke<ServiceResult<Standards | null>>(
-        'drive:getStandards',
-        courseId
+        'drive:getStandardsCollection',
+        courseId,
+        standardsId
       )
 
       if (result.success) {
-        set({ standards: result.data, loading: false })
+        set({ currentCollection: result.data, loading: false })
       } else {
         set({ error: result.error, loading: false })
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch standards'
+      const message = error instanceof Error ? error.message : 'Failed to fetch standards collection'
       set({ error: message, loading: false })
     }
   },
 
-  fetchSummary: async (courseId: string) => {
+  fetchAllCollections: async (courseId: string) => {
     set({ loading: true, error: null, currentCourseId: courseId })
 
     try {
-      const result = await window.electronAPI.invoke<ServiceResult<StandardsSummary | null>>(
-        'drive:getStandardsSummary',
+      const result = await window.electronAPI.invoke<ServiceResult<Standards[]>>(
+        'drive:getAllStandardsForCourse',
         courseId
       )
 
       if (result.success) {
-        set({ summary: result.data, loading: false })
+        set({ allCollections: result.data, loading: false })
       } else {
         set({ error: result.error, loading: false })
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to fetch standards summary'
+      const message = error instanceof Error ? error.message : 'Failed to fetch all standards'
       set({ error: message, loading: false })
     }
   },
 
-  saveStandards: async (input: CreateStandardsInput) => {
+  createCollection: async (input: CreateStandardsInput) => {
     set({ loading: true, error: null })
 
     try {
       const result = await window.electronAPI.invoke<ServiceResult<Standards>>(
-        'drive:saveStandards',
+        'drive:createStandardsCollection',
         input
       )
 
       if (result.success) {
-        set({ standards: result.data, loading: false })
+        // Add to summaries list
+        const newSummary: StandardsSummary = {
+          id: result.data.id,
+          courseId: result.data.courseId,
+          name: result.data.name,
+          state: result.data.state,
+          subject: result.data.subject,
+          gradeLevel: result.data.gradeLevel,
+          framework: result.data.framework,
+          standardCount: result.data.domains.reduce((c, d) => c + d.standards.length, 0),
+          domainCount: result.data.domains.length,
+          updatedAt: result.data.updatedAt
+        }
+        set((state) => ({
+          summaries: [...state.summaries, newSummary],
+          currentCollection: result.data,
+          loading: false
+        }))
         return result.data
       } else {
         set({ error: result.error, loading: false })
         return null
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to save standards'
+      const message = error instanceof Error ? error.message : 'Failed to create standards collection'
       set({ error: message, loading: false })
       return null
     }
   },
 
-  deleteStandards: async (courseId: string) => {
+  updateCollection: async (input: UpdateStandardsInput) => {
     set({ loading: true, error: null })
 
     try {
-      const result = await window.electronAPI.invoke<ServiceResult<void>>(
-        'drive:deleteStandards',
-        courseId
-      )
-
-      if (result.success) {
-        set({ standards: null, summary: null, loading: false })
-        return true
-      } else {
-        set({ error: result.error, loading: false })
-        return false
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete standards'
-      set({ error: message, loading: false })
-      return false
-    }
-  },
-
-  // Domain CRUD operations
-
-  addDomain: async (courseId: string, domain: DomainInput) => {
-    const state = useStandardsStore.getState()
-    const standards = state.standards
-
-    if (!standards || standards.courseId !== courseId) {
-      set({ error: 'Standards not loaded for this course' })
-      return false
-    }
-
-    // Check for duplicate domain code
-    if (standards.domains.some((d) => d.code === domain.code)) {
-      set({ error: `Domain with code "${domain.code}" already exists` })
-      return false
-    }
-
-    set({ loading: true, error: null })
-
-    try {
-      // Create new domain with empty standards array
-      const newDomain: StandardDomain = {
-        code: domain.code,
-        name: domain.name,
-        description: domain.description,
-        standards: []
-      }
-
-      // Create updated standards with new domain
-      const updatedDomains = [...standards.domains, newDomain]
-
-      const input: CreateStandardsInput = {
-        courseId: standards.courseId,
-        source: standards.source,
-        state: standards.state,
-        subject: standards.subject,
-        gradeLevel: standards.gradeLevel,
-        framework: standards.framework,
-        domains: updatedDomains
-      }
-
       const result = await window.electronAPI.invoke<ServiceResult<Standards>>(
-        'drive:saveStandards',
+        'drive:updateStandardsCollection',
         input
       )
 
       if (result.success) {
-        set({ standards: result.data, loading: false })
+        // Update summaries list
+        const updatedSummary: StandardsSummary = {
+          id: result.data.id,
+          courseId: result.data.courseId,
+          name: result.data.name,
+          state: result.data.state,
+          subject: result.data.subject,
+          gradeLevel: result.data.gradeLevel,
+          framework: result.data.framework,
+          standardCount: result.data.domains.reduce((c, d) => c + d.standards.length, 0),
+          domainCount: result.data.domains.length,
+          updatedAt: result.data.updatedAt
+        }
+        set((state) => ({
+          summaries: state.summaries.map((s) => (s.id === input.id ? updatedSummary : s)),
+          currentCollection: result.data,
+          loading: false
+        }))
+        return result.data
+      } else {
+        set({ error: result.error, loading: false })
+        return null
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update standards collection'
+      set({ error: message, loading: false })
+      return null
+    }
+  },
+
+  deleteCollection: async (courseId: string, standardsId: string) => {
+    set({ loading: true, error: null })
+
+    try {
+      const result = await window.electronAPI.invoke<ServiceResult<void>>(
+        'drive:deleteStandardsCollection',
+        courseId,
+        standardsId
+      )
+
+      if (result.success) {
+        set((state) => ({
+          summaries: state.summaries.filter((s) => s.id !== standardsId),
+          currentCollection:
+            state.currentCollection?.id === standardsId ? null : state.currentCollection,
+          loading: false
+        }))
         return true
       } else {
         set({ error: result.error, loading: false })
         return false
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to add domain'
+      const message = error instanceof Error ? error.message : 'Failed to delete standards collection'
       set({ error: message, loading: false })
       return false
     }
   },
 
-  updateDomain: async (courseId: string, domainCode: string, updates: DomainUpdate) => {
-    const state = useStandardsStore.getState()
-    const standards = state.standards
+  // Domain CRUD operations (operates on currentCollection)
 
-    if (!standards || standards.courseId !== courseId) {
-      set({ error: 'Standards not loaded for this course' })
+  addDomain: async (domain: DomainInput) => {
+    const state = get()
+    const collection = state.currentCollection
+
+    if (!collection) {
+      set({ error: 'No standards collection selected' })
       return false
     }
 
-    const domainIndex = standards.domains.findIndex((d) => d.code === domainCode)
+    // Check for duplicate domain code
+    if (collection.domains.some((d) => d.code === domain.code)) {
+      set({ error: `Domain with code "${domain.code}" already exists` })
+      return false
+    }
+
+    // Create new domain with empty standards array
+    const newDomain: StandardDomain = {
+      code: domain.code,
+      name: domain.name,
+      description: domain.description,
+      standards: []
+    }
+
+    // Create updated domains
+    const updatedDomains = [...collection.domains, newDomain]
+
+    const input: UpdateStandardsInput = {
+      id: collection.id,
+      courseId: collection.courseId,
+      domains: updatedDomains
+    }
+
+    const result = await state.updateCollection(input)
+    return result !== null
+  },
+
+  updateDomain: async (domainCode: string, updates: DomainUpdate) => {
+    const state = get()
+    const collection = state.currentCollection
+
+    if (!collection) {
+      set({ error: 'No standards collection selected' })
+      return false
+    }
+
+    const domainIndex = collection.domains.findIndex((d) => d.code === domainCode)
     if (domainIndex === -1) {
       set({ error: `Domain "${domainCode}" not found` })
       return false
@@ -245,201 +317,130 @@ export const useStandardsStore = create<StandardsState>((set) => ({
 
     // Check for duplicate code if code is being changed
     if (updates.code && updates.code !== domainCode) {
-      if (standards.domains.some((d) => d.code === updates.code)) {
+      if (collection.domains.some((d) => d.code === updates.code)) {
         set({ error: `Domain with code "${updates.code}" already exists` })
         return false
       }
     }
 
-    set({ loading: true, error: null })
-
-    try {
-      // Update domain
-      const updatedDomains = standards.domains.map((d, i) => {
-        if (i === domainIndex) {
-          return {
-            ...d,
-            code: updates.code ?? d.code,
-            name: updates.name ?? d.name,
-            description: updates.description ?? d.description
-          }
+    // Update domain
+    const updatedDomains = collection.domains.map((d, i) => {
+      if (i === domainIndex) {
+        return {
+          ...d,
+          code: updates.code ?? d.code,
+          name: updates.name ?? d.name,
+          description: updates.description ?? d.description
         }
-        return d
-      })
-
-      const input: CreateStandardsInput = {
-        courseId: standards.courseId,
-        source: standards.source,
-        state: standards.state,
-        subject: standards.subject,
-        gradeLevel: standards.gradeLevel,
-        framework: standards.framework,
-        domains: updatedDomains
       }
+      return d
+    })
 
-      const result = await window.electronAPI.invoke<ServiceResult<Standards>>(
-        'drive:saveStandards',
-        input
-      )
-
-      if (result.success) {
-        set({ standards: result.data, loading: false })
-        return true
-      } else {
-        set({ error: result.error, loading: false })
-        return false
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update domain'
-      set({ error: message, loading: false })
-      return false
+    const input: UpdateStandardsInput = {
+      id: collection.id,
+      courseId: collection.courseId,
+      domains: updatedDomains
     }
+
+    const result = await state.updateCollection(input)
+    return result !== null
   },
 
-  deleteDomain: async (courseId: string, domainCode: string) => {
-    const state = useStandardsStore.getState()
-    const standards = state.standards
+  deleteDomain: async (domainCode: string) => {
+    const state = get()
+    const collection = state.currentCollection
 
-    if (!standards || standards.courseId !== courseId) {
-      set({ error: 'Standards not loaded for this course' })
+    if (!collection) {
+      set({ error: 'No standards collection selected' })
       return false
     }
 
-    const domainIndex = standards.domains.findIndex((d) => d.code === domainCode)
+    const domainIndex = collection.domains.findIndex((d) => d.code === domainCode)
     if (domainIndex === -1) {
       set({ error: `Domain "${domainCode}" not found` })
       return false
     }
 
-    set({ loading: true, error: null })
+    // Remove domain
+    const updatedDomains = collection.domains.filter((d) => d.code !== domainCode)
 
-    try {
-      // Remove domain
-      const updatedDomains = standards.domains.filter((d) => d.code !== domainCode)
-
-      const input: CreateStandardsInput = {
-        courseId: standards.courseId,
-        source: standards.source,
-        state: standards.state,
-        subject: standards.subject,
-        gradeLevel: standards.gradeLevel,
-        framework: standards.framework,
-        domains: updatedDomains
-      }
-
-      const result = await window.electronAPI.invoke<ServiceResult<Standards>>(
-        'drive:saveStandards',
-        input
-      )
-
-      if (result.success) {
-        set({ standards: result.data, loading: false })
-        return true
-      } else {
-        set({ error: result.error, loading: false })
-        return false
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete domain'
-      set({ error: message, loading: false })
-      return false
+    const input: UpdateStandardsInput = {
+      id: collection.id,
+      courseId: collection.courseId,
+      domains: updatedDomains
     }
+
+    const result = await state.updateCollection(input)
+    return result !== null
   },
 
-  // Standard CRUD operations
+  // Standard CRUD operations (operates on currentCollection)
 
-  addStandard: async (courseId: string, domainCode: string, standard: StandardInput) => {
-    const state = useStandardsStore.getState()
-    const standards = state.standards
+  addStandard: async (domainCode: string, standard: StandardInput) => {
+    const state = get()
+    const collection = state.currentCollection
 
-    if (!standards || standards.courseId !== courseId) {
-      set({ error: 'Standards not loaded for this course' })
+    if (!collection) {
+      set({ error: 'No standards collection selected' })
       return false
     }
 
-    const domainIndex = standards.domains.findIndex((d) => d.code === domainCode)
+    const domainIndex = collection.domains.findIndex((d) => d.code === domainCode)
     if (domainIndex === -1) {
       set({ error: `Domain "${domainCode}" not found` })
       return false
     }
 
     // Check for duplicate standard code within the domain
-    if (standards.domains[domainIndex].standards.some((s) => s.code === standard.code)) {
+    if (collection.domains[domainIndex].standards.some((s) => s.code === standard.code)) {
       set({ error: `Standard with code "${standard.code}" already exists in this domain` })
       return false
     }
 
-    set({ loading: true, error: null })
-
-    try {
-      // Create new standard
-      const newStandard: Standard = {
-        code: standard.code,
-        description: standard.description,
-        keywords: standard.keywords || []
-      }
-
-      // Update domain's standards array
-      const updatedDomains = standards.domains.map((d, i) => {
-        if (i === domainIndex) {
-          return {
-            ...d,
-            standards: [...d.standards, newStandard]
-          }
-        }
-        return d
-      })
-
-      const input: CreateStandardsInput = {
-        courseId: standards.courseId,
-        source: standards.source,
-        state: standards.state,
-        subject: standards.subject,
-        gradeLevel: standards.gradeLevel,
-        framework: standards.framework,
-        domains: updatedDomains
-      }
-
-      const result = await window.electronAPI.invoke<ServiceResult<Standards>>(
-        'drive:saveStandards',
-        input
-      )
-
-      if (result.success) {
-        set({ standards: result.data, loading: false })
-        return true
-      } else {
-        set({ error: result.error, loading: false })
-        return false
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to add standard'
-      set({ error: message, loading: false })
-      return false
+    // Create new standard
+    const newStandard: Standard = {
+      code: standard.code,
+      description: standard.description,
+      keywords: standard.keywords || []
     }
+
+    // Update domain's standards array
+    const updatedDomains = collection.domains.map((d, i) => {
+      if (i === domainIndex) {
+        return {
+          ...d,
+          standards: [...d.standards, newStandard]
+        }
+      }
+      return d
+    })
+
+    const input: UpdateStandardsInput = {
+      id: collection.id,
+      courseId: collection.courseId,
+      domains: updatedDomains
+    }
+
+    const result = await state.updateCollection(input)
+    return result !== null
   },
 
-  updateStandard: async (
-    courseId: string,
-    domainCode: string,
-    standardCode: string,
-    updates: StandardUpdate
-  ) => {
-    const state = useStandardsStore.getState()
-    const standards = state.standards
+  updateStandard: async (domainCode: string, standardCode: string, updates: StandardUpdate) => {
+    const state = get()
+    const collection = state.currentCollection
 
-    if (!standards || standards.courseId !== courseId) {
-      set({ error: 'Standards not loaded for this course' })
+    if (!collection) {
+      set({ error: 'No standards collection selected' })
       return false
     }
 
-    const domainIndex = standards.domains.findIndex((d) => d.code === domainCode)
+    const domainIndex = collection.domains.findIndex((d) => d.code === domainCode)
     if (domainIndex === -1) {
       set({ error: `Domain "${domainCode}" not found` })
       return false
     }
 
-    const standardIndex = standards.domains[domainIndex].standards.findIndex(
+    const standardIndex = collection.domains[domainIndex].standards.findIndex(
       (s) => s.code === standardCode
     )
     if (standardIndex === -1) {
@@ -449,81 +450,59 @@ export const useStandardsStore = create<StandardsState>((set) => ({
 
     // Check for duplicate code if code is being changed
     if (updates.code && updates.code !== standardCode) {
-      if (standards.domains[domainIndex].standards.some((s) => s.code === updates.code)) {
+      if (collection.domains[domainIndex].standards.some((s) => s.code === updates.code)) {
         set({ error: `Standard with code "${updates.code}" already exists in this domain` })
         return false
       }
     }
 
-    set({ loading: true, error: null })
-
-    try {
-      // Update standard
-      const updatedDomains = standards.domains.map((d, di) => {
-        if (di === domainIndex) {
-          return {
-            ...d,
-            standards: d.standards.map((s, si) => {
-              if (si === standardIndex) {
-                return {
-                  ...s,
-                  code: updates.code ?? s.code,
-                  description: updates.description ?? s.description,
-                  keywords: updates.keywords ?? s.keywords
-                }
+    // Update standard
+    const updatedDomains = collection.domains.map((d, di) => {
+      if (di === domainIndex) {
+        return {
+          ...d,
+          standards: d.standards.map((s, si) => {
+            if (si === standardIndex) {
+              return {
+                ...s,
+                code: updates.code ?? s.code,
+                description: updates.description ?? s.description,
+                keywords: updates.keywords ?? s.keywords
               }
-              return s
-            })
-          }
+            }
+            return s
+          })
         }
-        return d
-      })
-
-      const input: CreateStandardsInput = {
-        courseId: standards.courseId,
-        source: standards.source,
-        state: standards.state,
-        subject: standards.subject,
-        gradeLevel: standards.gradeLevel,
-        framework: standards.framework,
-        domains: updatedDomains
       }
+      return d
+    })
 
-      const result = await window.electronAPI.invoke<ServiceResult<Standards>>(
-        'drive:saveStandards',
-        input
-      )
-
-      if (result.success) {
-        set({ standards: result.data, loading: false })
-        return true
-      } else {
-        set({ error: result.error, loading: false })
-        return false
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to update standard'
-      set({ error: message, loading: false })
-      return false
+    const input: UpdateStandardsInput = {
+      id: collection.id,
+      courseId: collection.courseId,
+      domains: updatedDomains
     }
+
+    const result = await state.updateCollection(input)
+    return result !== null
   },
 
-  deleteStandard: async (courseId: string, domainCode: string, standardCode: string) => {
-    const state = useStandardsStore.getState()
-    const standards = state.standards
+  deleteStandard: async (domainCode: string, standardCode: string) => {
+    const state = get()
+    const collection = state.currentCollection
 
-    if (!standards || standards.courseId !== courseId) {
-      set({ error: 'Standards not loaded for this course' })
+    if (!collection) {
+      set({ error: 'No standards collection selected' })
       return false
     }
 
-    const domainIndex = standards.domains.findIndex((d) => d.code === domainCode)
+    const domainIndex = collection.domains.findIndex((d) => d.code === domainCode)
     if (domainIndex === -1) {
       set({ error: `Domain "${domainCode}" not found` })
       return false
     }
 
-    const standardIndex = standards.domains[domainIndex].standards.findIndex(
+    const standardIndex = collection.domains[domainIndex].standards.findIndex(
       (s) => s.code === standardCode
     )
     if (standardIndex === -1) {
@@ -531,46 +510,24 @@ export const useStandardsStore = create<StandardsState>((set) => ({
       return false
     }
 
-    set({ loading: true, error: null })
-
-    try {
-      // Remove standard from domain
-      const updatedDomains = standards.domains.map((d, di) => {
-        if (di === domainIndex) {
-          return {
-            ...d,
-            standards: d.standards.filter((s) => s.code !== standardCode)
-          }
+    // Remove standard from domain
+    const updatedDomains = collection.domains.map((d, di) => {
+      if (di === domainIndex) {
+        return {
+          ...d,
+          standards: d.standards.filter((s) => s.code !== standardCode)
         }
-        return d
-      })
-
-      const input: CreateStandardsInput = {
-        courseId: standards.courseId,
-        source: standards.source,
-        state: standards.state,
-        subject: standards.subject,
-        gradeLevel: standards.gradeLevel,
-        framework: standards.framework,
-        domains: updatedDomains
       }
+      return d
+    })
 
-      const result = await window.electronAPI.invoke<ServiceResult<Standards>>(
-        'drive:saveStandards',
-        input
-      )
-
-      if (result.success) {
-        set({ standards: result.data, loading: false })
-        return true
-      } else {
-        set({ error: result.error, loading: false })
-        return false
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete standard'
-      set({ error: message, loading: false })
-      return false
+    const input: UpdateStandardsInput = {
+      id: collection.id,
+      courseId: collection.courseId,
+      domains: updatedDomains
     }
+
+    const result = await state.updateCollection(input)
+    return result !== null
   }
 }))

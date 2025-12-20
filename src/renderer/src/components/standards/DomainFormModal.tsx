@@ -11,7 +11,6 @@ import type { StandardDomain } from '../../../../shared/types'
 interface DomainFormModalProps {
   isOpen: boolean
   onClose: () => void
-  courseId: string
   domain?: StandardDomain // If provided, we're in edit mode
   onSuccess?: () => void
 }
@@ -30,7 +29,6 @@ interface FormErrors {
 export function DomainFormModal({
   isOpen,
   onClose,
-  courseId,
   domain,
   onSuccess
 }: DomainFormModalProps): ReactElement {
@@ -105,13 +103,13 @@ export function DomainFormModal({
       let success = false
 
       if (isEditMode && domain) {
-        success = await updateDomain(courseId, domain.code, {
+        success = await updateDomain(domain.code, {
           code: formData.code.trim(),
           name: formData.name.trim(),
           description: formData.description.trim() || undefined
         })
       } else {
-        success = await addDomain(courseId, {
+        success = await addDomain({
           code: formData.code.trim(),
           name: formData.name.trim(),
           description: formData.description.trim() || undefined
@@ -125,7 +123,7 @@ export function DomainFormModal({
         onClose()
       }
     },
-    [formData, validate, isEditMode, domain, courseId, addDomain, updateDomain, onSuccess, onClose]
+    [formData, validate, isEditMode, domain, addDomain, updateDomain, onSuccess, onClose]
   )
 
   return (

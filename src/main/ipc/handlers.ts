@@ -13,6 +13,7 @@ import {
   CreateStudentInput,
   UpdateStudentInput,
   CreateStandardsInput,
+  UpdateStandardsInput,
   CreateUnitInput,
   UpdateUnitInput,
   ReorderUnitsInput
@@ -383,27 +384,49 @@ function registerDriveHandlers(): void {
   )
 
   // ============================================================
-  // Standards Operations
+  // Standards Operations (Multiple Collections)
   // ============================================================
 
-  // Get standards for a course
-  ipcMain.handle('drive:getStandards', async (_event, courseId: string) => {
-    return driveService.getStandards(courseId)
+  // List all standards collections for a course
+  ipcMain.handle('drive:listStandardsCollections', async (_event, courseId: string) => {
+    return driveService.listStandardsCollections(courseId)
   })
 
-  // Get standards summary for a course
-  ipcMain.handle('drive:getStandardsSummary', async (_event, courseId: string) => {
-    return driveService.getStandardsSummary(courseId)
-  })
+  // Get a specific standards collection
+  ipcMain.handle(
+    'drive:getStandardsCollection',
+    async (_event, courseId: string, standardsId: string) => {
+      return driveService.getStandardsCollection(courseId, standardsId)
+    }
+  )
 
-  // Save standards for a course
-  ipcMain.handle('drive:saveStandards', async (_event, input: CreateStandardsInput) => {
-    return driveService.saveStandards(input)
-  })
+  // Create a new standards collection
+  ipcMain.handle(
+    'drive:createStandardsCollection',
+    async (_event, input: CreateStandardsInput) => {
+      return driveService.createStandardsCollection(input)
+    }
+  )
 
-  // Delete standards for a course
-  ipcMain.handle('drive:deleteStandards', async (_event, courseId: string) => {
-    return driveService.deleteStandards(courseId)
+  // Update a standards collection
+  ipcMain.handle(
+    'drive:updateStandardsCollection',
+    async (_event, input: UpdateStandardsInput) => {
+      return driveService.updateStandardsCollection(input)
+    }
+  )
+
+  // Delete a standards collection
+  ipcMain.handle(
+    'drive:deleteStandardsCollection',
+    async (_event, courseId: string, standardsId: string) => {
+      return driveService.deleteStandardsCollection(courseId, standardsId)
+    }
+  )
+
+  // Get all standards from all collections for a course
+  ipcMain.handle('drive:getAllStandardsForCourse', async (_event, courseId: string) => {
+    return driveService.getAllStandardsForCourse(courseId)
   })
 
   // ============================================================

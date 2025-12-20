@@ -18,7 +18,7 @@ import AssignmentIcon from '@mui/icons-material/Assignment'
 import { useUnitStore, useStandardsStore } from '../stores'
 import { ConfirmModal } from '../components/ui'
 import { UnitEditModal } from '../components/units'
-import type { CourseSummary, UnitSummary, Standard, StandardDomain } from '../../../shared/types'
+import type { CourseSummary, UnitSummary, Standard, StandardDomain, Standards } from '../../../shared/types'
 
 interface UnitViewPageProps {
   course: CourseSummary
@@ -29,7 +29,7 @@ interface UnitViewPageProps {
 
 export function UnitViewPage({ course, unitSummary, onBack, onDeleted }: UnitViewPageProps): ReactElement {
   const { currentUnit, loading, error, getUnit, deleteUnit, clearError } = useUnitStore()
-  const { standards, fetchStandards } = useStandardsStore()
+  const { allCollections, fetchAllCollections } = useStandardsStore()
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
@@ -38,8 +38,8 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted }: UnitVie
   // Fetch full unit details and standards when component mounts
   useEffect(() => {
     getUnit(course.id, unitSummary.id)
-    fetchStandards(course.id)
-  }, [course.id, unitSummary.id, getUnit, fetchStandards])
+    fetchAllCollections(course.id)
+  }, [course.id, unitSummary.id, getUnit, fetchAllCollections])
 
   const handleDelete = async (): Promise<void> => {
     setIsDeleting(true)
@@ -53,15 +53,17 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted }: UnitVie
   }
 
   // Get aligned standards with full details
-  const getAlignedStandards = (): Array<{ standard: Standard; domain: StandardDomain }> => {
-    if (!currentUnit || !standards) return []
+  const getAlignedStandards = (): Array<{ standard: Standard; domain: StandardDomain; collection: Standards }> => {
+    if (!currentUnit || allCollections.length === 0) return []
 
-    const aligned: Array<{ standard: Standard; domain: StandardDomain }> = []
+    const aligned: Array<{ standard: Standard; domain: StandardDomain; collection: Standards }> = []
 
-    for (const domain of standards.domains) {
-      for (const standard of domain.standards) {
-        if (currentUnit.standardRefs.includes(standard.code)) {
-          aligned.push({ standard, domain })
+    for (const collection of allCollections) {
+      for (const domain of collection.domains) {
+        for (const standard of domain.standards) {
+          if (currentUnit.standardRefs.includes(standard.code)) {
+            aligned.push({ standard, domain, collection })
+          }
         }
       }
     }

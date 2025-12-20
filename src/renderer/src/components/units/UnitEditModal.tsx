@@ -14,7 +14,7 @@ import Chip from '@mui/material/Chip'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { Modal } from '../ui'
 import { useUnitStore, useStandardsStore } from '../../stores'
-import type { Unit, UpdateUnitInput, StandardRef } from '../../../../shared/types'
+import type { Unit, UpdateUnitInput, StandardRef, Standards, StandardDomain, Standard } from '../../../../shared/types'
 
 interface UnitEditModalProps {
   isOpen: boolean
@@ -45,7 +45,7 @@ export function UnitEditModal({
   onSuccess
 }: UnitEditModalProps): ReactElement {
   const { updateUnit, error: unitError, clearError: clearUnitError } = useUnitStore()
-  const { standards, fetchStandards, loading: standardsLoading } = useStandardsStore()
+  const { allCollections, fetchAllCollections, loading: standardsLoading } = useStandardsStore()
 
   const [formData, setFormData] = useState<FormData>({
     name: unit.name,
@@ -67,10 +67,10 @@ export function UnitEditModal({
       })
       setErrors({})
       clearUnitError()
-      // Fetch standards for this course
-      fetchStandards(courseId)
+      // Fetch all standards collections for this course
+      fetchAllCollections(courseId)
     }
-  }, [isOpen, unit, courseId, clearUnitError, fetchStandards])
+  }, [isOpen, unit, courseId, clearUnitError, fetchAllCollections])
 
   const handleChange = useCallback((field: keyof FormData, value: string | StandardRef[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -221,7 +221,7 @@ export function UnitEditModal({
             </Box>
           )}
 
-          {!standardsLoading && !standards && (
+          {!standardsLoading && allCollections.length === 0 && (
             <Box
               sx={{
                 p: 2,
@@ -239,91 +239,101 @@ export function UnitEditModal({
             </Box>
           )}
 
-          {!standardsLoading && standards && standards.domains.length > 0 && (
+          {!standardsLoading && allCollections.length > 0 && (
             <Box sx={{ maxHeight: 300, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
-              {standards.domains.map((domain) => {
-                const domainStandardCodes = domain.standards.map((s) => s.code)
-                const selectedInDomain = domainStandardCodes.filter((code) =>
-                  formData.selectedStandards.includes(code)
-                )
-                const allSelected = selectedInDomain.length === domainStandardCodes.length
-                const someSelected = selectedInDomain.length > 0 && !allSelected
+              {allCollections.map((collection: Standards) => (
+                <Box key={collection.id}>
+                  {/* Collection header */}
+                  <Box sx={{ px: 2, py: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
+                    <Typography variant="subtitle2" fontWeight={600}>
+                      {collection.name}
+                    </Typography>
+                  </Box>
+                  {collection.domains.map((domain: StandardDomain) => {
+                    const domainStandardCodes = domain.standards.map((s: Standard) => s.code)
+                    const selectedInDomain = domainStandardCodes.filter((code: string) =>
+                      formData.selectedStandards.includes(code)
+                    )
+                    const allSelected = selectedInDomain.length === domainStandardCodes.length && domainStandardCodes.length > 0
+                    const someSelected = selectedInDomain.length > 0 && !allSelected
 
-                return (
-                  <Accordion
-                    key={domain.code}
-                    disableGutters
-                    defaultExpanded={selectedInDomain.length > 0}
-                    sx={{
-                      '&:before': { display: 'none' },
-                      boxShadow: 'none'
-                    }}
-                  >
-                    <AccordionSummary
-                      expandIcon={<ExpandMoreIcon />}
-                      sx={{ '&:hover': { bgcolor: 'action.hover' } }}
-                    >
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                        <Checkbox
-                          checked={allSelected}
-                          indeterminate={someSelected}
-                          onChange={() => handleSelectAllInDomain(domainStandardCodes, allSelected)}
-                          onClick={(e) => e.stopPropagation()}
-                          size="small"
-                        />
-                        <Chip label={domain.code} size="small" color="primary" variant="outlined" />
-                        <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
-                          {domain.name}
-                        </Typography>
-                        {selectedInDomain.length > 0 && (
-                          <Chip
-                            label={`${selectedInDomain.length}/${domain.standards.length}`}
-                            size="small"
-                            sx={{ mr: 1 }}
-                          />
-                        )}
-                      </Box>
-                    </AccordionSummary>
-                    <AccordionDetails sx={{ pt: 0, pl: 6 }}>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                        {domain.standards.map((standard) => (
-                          <FormControlLabel
-                            key={standard.code}
-                            control={
-                              <Checkbox
-                                checked={formData.selectedStandards.includes(standard.code)}
-                                onChange={() => handleStandardToggle(standard.code)}
+                    return (
+                      <Accordion
+                        key={`${collection.id}-${domain.code}`}
+                        disableGutters
+                        defaultExpanded={selectedInDomain.length > 0}
+                        sx={{
+                          '&:before': { display: 'none' },
+                          boxShadow: 'none'
+                        }}
+                      >
+                        <AccordionSummary
+                          expandIcon={<ExpandMoreIcon />}
+                          sx={{ '&:hover': { bgcolor: 'action.hover' } }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                            <Checkbox
+                              checked={allSelected}
+                              indeterminate={someSelected}
+                              onChange={() => handleSelectAllInDomain(domainStandardCodes, allSelected)}
+                              onClick={(e) => e.stopPropagation()}
+                              size="small"
+                            />
+                            <Chip label={domain.code} size="small" color="primary" variant="outlined" />
+                            <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
+                              {domain.name}
+                            </Typography>
+                            {selectedInDomain.length > 0 && (
+                              <Chip
+                                label={`${selectedInDomain.length}/${domain.standards.length}`}
                                 size="small"
+                                sx={{ mr: 1 }}
                               />
-                            }
-                            label={
-                              <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                                <Chip
-                                  label={standard.code}
-                                  size="small"
-                                  variant="outlined"
-                                  sx={{ flexShrink: 0, mt: 0.25 }}
-                                />
-                                <Typography variant="body2" color="text.secondary">
-                                  {standard.description}
-                                </Typography>
-                              </Box>
-                            }
-                            sx={{
-                              alignItems: 'flex-start',
-                              mx: 0,
-                              py: 0.5,
-                              borderBottom: 1,
-                              borderColor: 'divider',
-                              '&:last-child': { borderBottom: 0 }
-                            }}
-                          />
-                        ))}
-                      </Box>
-                    </AccordionDetails>
-                  </Accordion>
-                )
-              })}
+                            )}
+                          </Box>
+                        </AccordionSummary>
+                        <AccordionDetails sx={{ pt: 0, pl: 6 }}>
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                            {domain.standards.map((standard: Standard) => (
+                              <FormControlLabel
+                                key={standard.code}
+                                control={
+                                  <Checkbox
+                                    checked={formData.selectedStandards.includes(standard.code)}
+                                    onChange={() => handleStandardToggle(standard.code)}
+                                    size="small"
+                                  />
+                                }
+                                label={
+                                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                                    <Chip
+                                      label={standard.code}
+                                      size="small"
+                                      variant="outlined"
+                                      sx={{ flexShrink: 0, mt: 0.25 }}
+                                    />
+                                    <Typography variant="body2" color="text.secondary">
+                                      {standard.description}
+                                    </Typography>
+                                  </Box>
+                                }
+                                sx={{
+                                  alignItems: 'flex-start',
+                                  mx: 0,
+                                  py: 0.5,
+                                  borderBottom: 1,
+                                  borderColor: 'divider',
+                                  '&:last-child': { borderBottom: 0 }
+                                }}
+                              />
+                            ))}
+                          </Box>
+                        </AccordionDetails>
+                      </Accordion>
+                    )
+                  })}
+                </Box>
+              ))}
             </Box>
           )}
         </Box>

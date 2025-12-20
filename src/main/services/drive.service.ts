@@ -17,6 +17,7 @@ import {
   Standards,
   StandardsSummary,
   CreateStandardsInput,
+  UpdateStandardsInput,
   Unit,
   UnitSummary,
   CreateUnitInput,
@@ -55,7 +56,8 @@ interface MetadataCache {
   courses: Record<string, CacheEntry<Course>>
   sections: Record<string, CacheEntry<Section>>
   units: Record<string, CacheEntry<Unit>>
-  standards: Record<string, CacheEntry<Standards>> // courseFolderId -> standards
+  standardsCollections: Record<string, CacheEntry<Standards>> // standardsId -> standards collection
+  standardsSummaries: Record<string, CacheEntry<StandardsSummary[]>> // courseFolderId -> list of summaries
   sectionCounts: Record<string, CacheEntry<number>> // courseFolderId -> section count
   studentCounts: Record<string, CacheEntry<number>> // sectionFolderId -> student count
   unitCounts: Record<string, CacheEntry<number>> // courseFolderId -> unit count
@@ -75,7 +77,8 @@ class DriveService {
     courses: {},
     sections: {},
     units: {},
-    standards: {},
+    standardsCollections: {},
+    standardsSummaries: {},
     sectionCounts: {},
     studentCounts: {},
     unitCounts: {}
@@ -109,7 +112,8 @@ class DriveService {
       courses: {},
       sections: {},
       units: {},
-      standards: {},
+      standardsCollections: {},
+      standardsSummaries: {},
       sectionCounts: {},
       studentCounts: {},
       unitCounts: {}
@@ -157,8 +161,13 @@ class DriveService {
   /**
    * Invalidate standards cache for a course (call after mutations)
    */
-  private invalidateStandardsCache(courseFolderId: string): void {
-    delete this.metadataCache.standards[courseFolderId]
+  private invalidateStandardsCache(courseFolderId: string, standardsId?: string): void {
+    // Always invalidate the summaries list for the course
+    delete this.metadataCache.standardsSummaries[courseFolderId]
+    // If a specific collection was modified, invalidate it too
+    if (standardsId) {
+      delete this.metadataCache.standardsCollections[standardsId]
+    }
   }
 
   // ============================================================
@@ -1310,13 +1319,13 @@ class DriveService {
   }
 
   // ============================================================
-  // Standards Operations
+  // Standards Operations (Multiple Collections per Course)
   // ============================================================
 
   /**
-   * Get standards for a course
+   * List all standards collections for a course
    */
-  async getStandards(courseId: string): Promise<ServiceResult<Standards | null>> {
+  async listStandardsCollections(courseId: string): Promise<ServiceResult<StandardsSummary[]>> {
     try {
       // Get course to find folder ID
       const courseResult = await this.getCourse(courseId)
@@ -1330,9 +1339,117 @@ class DriveService {
       }
 
       // Check cache first
-      const cached = this.metadataCache.standards[courseFolderId]
+      const cached = this.metadataCache.standardsSummaries[courseFolderId]
       if (this.isCacheValid(cached)) {
         return { success: true, data: cached.data }
+      }
+
+      const drive = await this.getDrive()
+
+      // Find standards folder
+      const standardsFolderResponse = await drive.files.list({
+        q: `name='standards' and mimeType='application/vnd.google-apps.folder' and '${courseFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (!standardsFolderResponse.data.files || standardsFolderResponse.data.files.length === 0) {
+        return { success: true, data: [] }
+      }
+
+      const standardsFolderId = standardsFolderResponse.data.files[0].id!
+
+      // List all JSON files in standards folder
+      const response = await drive.files.list({
+        q: `'${standardsFolderId}' in parents and mimeType='application/json' and trashed=false`,
+        fields: 'files(id, name)',
+        spaces: 'drive'
+      })
+
+      if (!response.data.files || response.data.files.length === 0) {
+        return { success: true, data: [] }
+      }
+
+      // Read each standards file and create summaries
+      const summaryPromises = response.data.files.map(async (file) => {
+        const fileId = file.id!
+        try {
+          const fileResponse = await drive.files.get({
+            fileId,
+            alt: 'media'
+          })
+          const standards = fileResponse.data as unknown as Standards
+
+          if (!standards || !standards.id) return null
+
+          // Count total standards across all domains
+          const standardCount = standards.domains.reduce(
+            (count, domain) => count + domain.standards.length,
+            0
+          )
+
+          // Cache the full collection
+          this.metadataCache.standardsCollections[standards.id] = {
+            data: standards,
+            timestamp: Date.now()
+          }
+
+          return {
+            id: standards.id,
+            courseId: standards.courseId,
+            name: standards.name,
+            state: standards.state,
+            subject: standards.subject,
+            gradeLevel: standards.gradeLevel,
+            framework: standards.framework,
+            standardCount,
+            domainCount: standards.domains.length,
+            updatedAt: standards.updatedAt
+          } as StandardsSummary
+        } catch {
+          return null
+        }
+      })
+
+      const summaryResults = await Promise.all(summaryPromises)
+      const summaries = summaryResults.filter((s): s is StandardsSummary => s !== null)
+
+      // Cache the summaries list
+      this.metadataCache.standardsSummaries[courseFolderId] = {
+        data: summaries,
+        timestamp: Date.now()
+      }
+
+      return { success: true, data: summaries }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to list standards collections'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Get a specific standards collection
+   */
+  async getStandardsCollection(
+    courseId: string,
+    standardsId: string
+  ): Promise<ServiceResult<Standards | null>> {
+    try {
+      // Check cache first
+      const cached = this.metadataCache.standardsCollections[standardsId]
+      if (this.isCacheValid(cached)) {
+        return { success: true, data: cached.data }
+      }
+
+      // Get course to find folder ID
+      const courseResult = await this.getCourse(courseId)
+      if (!courseResult.success) {
+        return { success: false, error: courseResult.error }
+      }
+
+      const courseFolderId = courseResult.data.driveFolderId
+      if (!courseFolderId) {
+        return { success: false, error: 'Course folder not found' }
       }
 
       const drive = await this.getDrive()
@@ -1350,9 +1467,9 @@ class DriveService {
 
       const standardsFolderId = standardsFolderResponse.data.files[0].id!
 
-      // Find standards.json
+      // Find the specific standards file
       const response = await drive.files.list({
-        q: `name='standards.json' and '${standardsFolderId}' in parents and trashed=false`,
+        q: `name='${standardsId}.json' and '${standardsFolderId}' in parents and trashed=false`,
         fields: 'files(id)',
         spaces: 'drive'
       })
@@ -1373,7 +1490,7 @@ class DriveService {
 
       // Cache the result
       if (standards) {
-        this.metadataCache.standards[courseFolderId] = {
+        this.metadataCache.standardsCollections[standardsId] = {
           data: standards,
           timestamp: Date.now()
         }
@@ -1381,55 +1498,15 @@ class DriveService {
 
       return { success: true, data: standards }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to get standards'
+      const message = error instanceof Error ? error.message : 'Failed to get standards collection'
       return { success: false, error: message }
     }
   }
 
   /**
-   * Get standards summary for a course
+   * Create a new standards collection
    */
-  async getStandardsSummary(courseId: string): Promise<ServiceResult<StandardsSummary | null>> {
-    try {
-      const result = await this.getStandards(courseId)
-      if (!result.success) {
-        return { success: false, error: result.error }
-      }
-
-      if (!result.data) {
-        return { success: true, data: null }
-      }
-
-      const standards = result.data
-
-      // Count total standards across all domains
-      const standardCount = standards.domains.reduce(
-        (count, domain) => count + domain.standards.length,
-        0
-      )
-
-      const summary: StandardsSummary = {
-        courseId: standards.courseId,
-        state: standards.state,
-        subject: standards.subject,
-        gradeLevel: standards.gradeLevel,
-        framework: standards.framework,
-        standardCount,
-        domainCount: standards.domains.length,
-        updatedAt: standards.updatedAt
-      }
-
-      return { success: true, data: summary }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to get standards summary'
-      return { success: false, error: message }
-    }
-  }
-
-  /**
-   * Save/update standards for a course
-   */
-  async saveStandards(input: CreateStandardsInput): Promise<ServiceResult<Standards>> {
+  async createStandardsCollection(input: CreateStandardsInput): Promise<ServiceResult<Standards>> {
     try {
       // Get course to find folder ID
       const courseResult = await this.getCourse(input.courseId)
@@ -1448,25 +1525,16 @@ class DriveService {
       // Ensure standards folder exists
       const standardsFolderId = await this.ensureSubfolder(courseFolderId, 'standards')
 
-      // Check if standards.json already exists
-      const existingResponse = await drive.files.list({
-        q: `name='standards.json' and '${standardsFolderId}' in parents and trashed=false`,
-        fields: 'files(id)',
-        spaces: 'drive'
-      })
-
-      // Get existing version or start at 1
-      let version = 1
-      const existingResult = await this.getStandards(input.courseId)
-      if (existingResult.success && existingResult.data) {
-        version = existingResult.data.version + 1
-      }
+      // Generate unique ID for this collection
+      const standardsId = this.generateUniqueId(input.name)
 
       const standards: Standards = {
+        id: standardsId,
         courseId: input.courseId,
-        version,
+        version: 1,
         updatedAt: now,
         source: input.source,
+        name: input.name,
         state: input.state,
         subject: input.subject,
         gradeLevel: input.gradeLevel,
@@ -1474,45 +1542,125 @@ class DriveService {
         domains: input.domains
       }
 
-      if (existingResponse.data.files && existingResponse.data.files.length > 0) {
-        // Update existing file
-        const fileId = existingResponse.data.files[0].id!
-        await drive.files.update({
-          fileId,
-          media: {
-            mimeType: 'application/json',
-            body: JSON.stringify(standards, null, 2)
-          }
-        })
-      } else {
-        // Create new file
-        await drive.files.create({
-          requestBody: {
-            name: 'standards.json',
-            mimeType: 'application/json',
-            parents: [standardsFolderId]
-          },
-          media: {
-            mimeType: 'application/json',
-            body: JSON.stringify(standards, null, 2)
-          }
-        })
-      }
+      // Create new file with ID as filename
+      await drive.files.create({
+        requestBody: {
+          name: `${standardsId}.json`,
+          mimeType: 'application/json',
+          parents: [standardsFolderId]
+        },
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(standards, null, 2)
+        }
+      })
 
       // Invalidate cache
-      this.invalidateStandardsCache(courseFolderId)
+      this.invalidateStandardsCache(courseFolderId, standardsId)
 
       return { success: true, data: standards }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to save standards'
+      const message = error instanceof Error ? error.message : 'Failed to create standards collection'
       return { success: false, error: message }
     }
   }
 
   /**
-   * Delete standards for a course
+   * Update an existing standards collection
    */
-  async deleteStandards(courseId: string): Promise<ServiceResult<void>> {
+  async updateStandardsCollection(input: UpdateStandardsInput): Promise<ServiceResult<Standards>> {
+    try {
+      // Get existing collection
+      const existingResult = await this.getStandardsCollection(input.courseId, input.id)
+      if (!existingResult.success) {
+        return { success: false, error: existingResult.error }
+      }
+      if (!existingResult.data) {
+        return { success: false, error: 'Standards collection not found' }
+      }
+
+      const existing = existingResult.data
+
+      // Get course to find folder ID
+      const courseResult = await this.getCourse(input.courseId)
+      if (!courseResult.success) {
+        return { success: false, error: courseResult.error }
+      }
+
+      const courseFolderId = courseResult.data.driveFolderId
+      if (!courseFolderId) {
+        return { success: false, error: 'Course folder not found' }
+      }
+
+      const drive = await this.getDrive()
+      const now = new Date().toISOString()
+
+      // Find standards folder
+      const standardsFolderResponse = await drive.files.list({
+        q: `name='standards' and mimeType='application/vnd.google-apps.folder' and '${courseFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (!standardsFolderResponse.data.files || standardsFolderResponse.data.files.length === 0) {
+        return { success: false, error: 'Standards folder not found' }
+      }
+
+      const standardsFolderId = standardsFolderResponse.data.files[0].id!
+
+      // Find the specific standards file
+      const response = await drive.files.list({
+        q: `name='${input.id}.json' and '${standardsFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (!response.data.files || response.data.files.length === 0) {
+        return { success: false, error: 'Standards file not found' }
+      }
+
+      const fileId = response.data.files[0].id!
+
+      // Merge updates
+      const updated: Standards = {
+        ...existing,
+        name: input.name ?? existing.name,
+        source: input.source ?? existing.source,
+        state: input.state ?? existing.state,
+        subject: input.subject ?? existing.subject,
+        gradeLevel: input.gradeLevel ?? existing.gradeLevel,
+        framework: input.framework ?? existing.framework,
+        domains: input.domains ?? existing.domains,
+        updatedAt: now,
+        version: existing.version + 1
+      }
+
+      // Update the file
+      await drive.files.update({
+        fileId,
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(updated, null, 2)
+        }
+      })
+
+      // Invalidate cache
+      this.invalidateStandardsCache(courseFolderId, input.id)
+
+      return { success: true, data: updated }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update standards collection'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Delete a specific standards collection
+   */
+  async deleteStandardsCollection(
+    courseId: string,
+    standardsId: string
+  ): Promise<ServiceResult<void>> {
     try {
       // Get course to find folder ID
       const courseResult = await this.getCourse(courseId)
@@ -1540,9 +1688,9 @@ class DriveService {
 
       const standardsFolderId = standardsFolderResponse.data.files[0].id!
 
-      // Find and delete standards.json
+      // Find and delete the specific standards file
       const response = await drive.files.list({
-        q: `name='standards.json' and '${standardsFolderId}' in parents and trashed=false`,
+        q: `name='${standardsId}.json' and '${standardsFolderId}' in parents and trashed=false`,
         fields: 'files(id)',
         spaces: 'drive'
       })
@@ -1555,11 +1703,45 @@ class DriveService {
       }
 
       // Invalidate cache
-      this.invalidateStandardsCache(courseFolderId)
+      this.invalidateStandardsCache(courseFolderId, standardsId)
 
       return { success: true, data: undefined }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to delete standards'
+      const message = error instanceof Error ? error.message : 'Failed to delete standards collection'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Get all standards from all collections for a course (for unit creation)
+   * Returns a flat list of all standards with their collection info
+   */
+  async getAllStandardsForCourse(courseId: string): Promise<ServiceResult<Standards[]>> {
+    try {
+      const summariesResult = await this.listStandardsCollections(courseId)
+      if (!summariesResult.success) {
+        return { success: false, error: summariesResult.error }
+      }
+
+      const summaries = summariesResult.data
+
+      // Fetch all collections in parallel
+      const collectionPromises = summaries.map((summary) =>
+        this.getStandardsCollection(courseId, summary.id)
+      )
+
+      const results = await Promise.all(collectionPromises)
+      const collections: Standards[] = []
+
+      for (const result of results) {
+        if (result.success && result.data) {
+          collections.push(result.data)
+        }
+      }
+
+      return { success: true, data: collections }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get all standards'
       return { success: false, error: message }
     }
   }

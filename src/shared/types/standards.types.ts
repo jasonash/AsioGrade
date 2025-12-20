@@ -51,15 +51,18 @@ export interface StandardDomain {
 
 /**
  * Complete standards collection for a course
- * Stored at: /standards/standards.json within course folder
+ * Stored at: /standards/{id}.json within course folder
+ * A course can have multiple standards collections (e.g., NGSS + state standards)
  */
 export interface Standards extends Versioned {
+  id: string // Unique identifier for this collection
   courseId: string
   updatedAt: string // ISO datetime
 
   source: StandardsSource
 
   // Metadata about the standards
+  name: string // Display name for this collection (e.g., "NGSS Earth Science")
   state: string // "Kansas"
   subject: string // "Science"
   gradeLevel: string // "6-8"
@@ -70,10 +73,12 @@ export interface Standards extends Versioned {
 }
 
 /**
- * Lightweight summary for listing standards
+ * Lightweight summary for listing standards collections
  */
 export interface StandardsSummary {
+  id: string
   courseId: string
+  name: string
   state: string
   subject: string
   gradeLevel: string
@@ -84,10 +89,11 @@ export interface StandardsSummary {
 }
 
 /**
- * Input for creating/importing standards
+ * Input for creating/importing a standards collection
  */
 export interface CreateStandardsInput {
   courseId: string
+  name: string // Display name for this collection
   source: StandardsSource
   state: string
   subject: string
@@ -97,18 +103,35 @@ export interface CreateStandardsInput {
 }
 
 /**
- * Input for adding a single standard to existing standards
+ * Input for updating an existing standards collection
+ */
+export interface UpdateStandardsInput {
+  id: string
+  courseId: string
+  name?: string
+  source?: StandardsSource
+  state?: string
+  subject?: string
+  gradeLevel?: string
+  framework?: string
+  domains?: StandardDomain[]
+}
+
+/**
+ * Input for adding a single standard to existing standards collection
  */
 export interface AddStandardInput {
+  standardsId: string // Which standards collection
   courseId: string
   domainCode: string // Which domain to add to
   standard: Omit<Standard, 'code'> & { code?: string } // Code can be auto-generated
 }
 
 /**
- * Input for updating a standard
+ * Input for updating a standard within a collection
  */
 export interface UpdateStandardInput {
+  standardsId: string // Which standards collection
   courseId: string
   domainCode: string
   standardCode: string

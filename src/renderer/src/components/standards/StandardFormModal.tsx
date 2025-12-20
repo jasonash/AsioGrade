@@ -13,7 +13,6 @@ import type { Standard } from '../../../../shared/types'
 interface StandardFormModalProps {
   isOpen: boolean
   onClose: () => void
-  courseId: string
   domainCode: string
   domainName: string
   standard?: Standard // If provided, we're in edit mode
@@ -34,7 +33,6 @@ interface FormErrors {
 export function StandardFormModal({
   isOpen,
   onClose,
-  courseId,
   domainCode,
   domainName,
   standard,
@@ -122,13 +120,13 @@ export function StandardFormModal({
       let success = false
 
       if (isEditMode && standard) {
-        success = await updateStandard(courseId, domainCode, standard.code, {
+        success = await updateStandard(domainCode, standard.code, {
           code: formData.code.trim(),
           description: formData.description.trim(),
           keywords: keywords.length > 0 ? keywords : undefined
         })
       } else {
-        success = await addStandard(courseId, domainCode, {
+        success = await addStandard(domainCode, {
           code: formData.code.trim(),
           description: formData.description.trim(),
           keywords: keywords.length > 0 ? keywords : undefined
@@ -142,7 +140,7 @@ export function StandardFormModal({
         onClose()
       }
     },
-    [formData, validate, isEditMode, standard, courseId, domainCode, addStandard, updateStandard, onSuccess, onClose]
+    [formData, validate, isEditMode, standard, domainCode, addStandard, updateStandard, onSuccess, onClose]
   )
 
   // Preview keywords

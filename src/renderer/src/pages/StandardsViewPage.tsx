@@ -12,6 +12,8 @@ import Accordion from '@mui/material/Accordion'
 import AccordionSummary from '@mui/material/AccordionSummary'
 import AccordionDetails from '@mui/material/AccordionDetails'
 import Tooltip from '@mui/material/Tooltip'
+import MenuItem from '@mui/material/MenuItem'
+import TextField from '@mui/material/TextField'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -20,13 +22,12 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import CategoryIcon from '@mui/icons-material/Category'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import SourceIcon from '@mui/icons-material/Source'
-import RefreshIcon from '@mui/icons-material/Refresh'
 import { useStandardsStore } from '../stores'
 import { ConfirmModal } from '../components/ui'
 import { StandardsImportModal } from '../components/standards/StandardsImportModal'
 import { DomainFormModal } from '../components/standards/DomainFormModal'
 import { StandardFormModal } from '../components/standards/StandardFormModal'
-import type { CourseSummary, StandardDomain, Standard } from '../../../shared/types'
+import type { CourseSummary, StandardDomain, Standard, StandardsSummary } from '../../../shared/types'
 
 interface StandardsViewPageProps {
   course: CourseSummary
@@ -35,14 +36,20 @@ interface StandardsViewPageProps {
 
 export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): ReactElement {
   const {
-    standards,
+    summaries,
+    currentCollection,
     loading,
     error,
-    fetchStandards,
+    fetchCollections,
+    fetchCollection,
+    deleteCollection,
     deleteDomain,
     deleteStandard,
     clearError
   } = useStandardsStore()
+
+  // Selected collection ID
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null)
 
   // Modal states
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
@@ -50,6 +57,7 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
   const [isStandardModalOpen, setIsStandardModalOpen] = useState(false)
   const [isDeleteDomainModalOpen, setIsDeleteDomainModalOpen] = useState(false)
   const [isDeleteStandardModalOpen, setIsDeleteStandardModalOpen] = useState(false)
+  const [isDeleteCollectionModalOpen, setIsDeleteCollectionModalOpen] = useState(false)
 
   // Edit/Delete targets
   const [editingDomain, setEditingDomain] = useState<StandardDomain | null>(null)
@@ -64,11 +72,30 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
   // Accordion expansion state - all closed by default
   const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set())
 
-  // Fetch standards when component mounts
+  // Fetch collections when component mounts
   useEffect(() => {
-    fetchStandards(course.id)
+    fetchCollections(course.id)
     setExpandedDomains(new Set())
-  }, [course.id, fetchStandards])
+  }, [course.id, fetchCollections])
+
+  // Auto-select first collection when summaries load
+  useEffect(() => {
+    if (summaries.length > 0 && !selectedCollectionId) {
+      setSelectedCollectionId(summaries[0].id)
+    }
+  }, [summaries, selectedCollectionId])
+
+  // Fetch selected collection when it changes
+  useEffect(() => {
+    if (selectedCollectionId) {
+      fetchCollection(course.id, selectedCollectionId)
+    }
+  }, [selectedCollectionId, course.id, fetchCollection])
+
+  const handleCollectionChange = (collectionId: string): void => {
+    setSelectedCollectionId(collectionId)
+    setExpandedDomains(new Set())
+  }
 
   const handleToggleDomain = (domainCode: string): void => {
     setExpandedDomains((prev) => {
@@ -101,7 +128,7 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
   const handleConfirmDeleteDomain = async (): Promise<void> => {
     if (!deletingDomain) return
     setIsDeleting(true)
-    const success = await deleteDomain(course.id, deletingDomain.code)
+    const success = await deleteDomain(deletingDomain.code)
     setIsDeleting(false)
     if (success) {
       setIsDeleteDomainModalOpen(false)
@@ -131,7 +158,6 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
     if (!deletingStandard) return
     setIsDeleting(true)
     const success = await deleteStandard(
-      course.id,
       deletingStandard.domain.code,
       deletingStandard.standard.code
     )
@@ -142,26 +168,44 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
     }
   }
 
+  // Collection delete handlers
+  const handleDeleteCollectionClick = (): void => {
+    setIsDeleteCollectionModalOpen(true)
+  }
+
+  const handleConfirmDeleteCollection = async (): Promise<void> => {
+    if (!selectedCollectionId) return
+    setIsDeleting(true)
+    const success = await deleteCollection(course.id, selectedCollectionId)
+    setIsDeleting(false)
+    if (success) {
+      setIsDeleteCollectionModalOpen(false)
+      setSelectedCollectionId(summaries.length > 1 ? summaries.find(s => s.id !== selectedCollectionId)?.id ?? null : null)
+    }
+  }
+
   // Calculate totals
-  const domainCount = standards?.domains.length ?? 0
-  const standardCount = standards?.domains.reduce((sum, d) => sum + d.standards.length, 0) ?? 0
+  const domainCount = currentCollection?.domains.length ?? 0
+  const standardCount = currentCollection?.domains.reduce((sum: number, d: StandardDomain) => sum + d.standards.length, 0) ?? 0
 
   // Format source info
   const getSourceInfo = (): string => {
-    if (!standards) return ''
-    const { source } = standards
+    if (!currentCollection) return ''
+    const { source } = currentCollection
     if (source.type === 'url') return `Imported from URL`
     if (source.type === 'pdf') return `Imported from ${source.filename || 'PDF'}`
     return 'Manual entry'
   }
 
   const getSourceDate = (): string => {
-    if (!standards?.source.fetchedAt) return ''
-    return new Date(standards.source.fetchedAt).toLocaleDateString()
+    if (!currentCollection?.source.fetchedAt) return ''
+    return new Date(currentCollection.source.fetchedAt).toLocaleDateString()
   }
 
+  const selectedSummary: StandardsSummary | undefined = summaries.find(s => s.id === selectedCollectionId)
+
   // Loading state
-  if (loading && !standards) {
+  if (loading && summaries.length === 0) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <CircularProgress />
@@ -169,8 +213,8 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
     )
   }
 
-  // No standards imported
-  if (!standards) {
+  // No collections
+  if (summaries.length === 0) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, p: 3 }}>
         <Box component="header">
@@ -212,7 +256,7 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
           courseGradeLevel={course.gradeLevel}
           onSuccess={() => {
             setIsImportModalOpen(false)
-            fetchStandards(course.id)
+            fetchCollections(course.id)
           }}
         />
       </Box>
@@ -236,30 +280,47 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
             <Typography variant="h5" fontWeight={700}>
               Standards for {course.name}
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 1, flexWrap: 'wrap' }}>
-              <Chip label={standards.framework} size="small" variant="outlined" />
-              <Typography variant="body2" color="text.secondary">
-                {standards.state} • {domainCount} domains, {standardCount} standards
-              </Typography>
-            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {summaries.length} collection{summaries.length !== 1 ? 's' : ''}
+            </Typography>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button
-              variant="outlined"
-              startIcon={<RefreshIcon />}
-              onClick={() => setIsImportModalOpen(true)}
-            >
-              Re-import
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleAddDomain}
-            >
-              Add Domain
-            </Button>
-          </Box>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setIsImportModalOpen(true)}
+          >
+            Add Collection
+          </Button>
         </Box>
+      </Box>
+
+      {/* Collection Selector */}
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+        <TextField
+          select
+          label="Standards Collection"
+          value={selectedCollectionId ?? ''}
+          onChange={(e) => handleCollectionChange(e.target.value)}
+          size="small"
+          sx={{ minWidth: 300 }}
+        >
+          {summaries.map((summary: StandardsSummary) => (
+            <MenuItem key={summary.id} value={summary.id}>
+              {summary.name} ({summary.standardCount} standards)
+            </MenuItem>
+          ))}
+        </TextField>
+        {selectedCollectionId && (
+          <Tooltip title="Delete this collection">
+            <IconButton
+              size="small"
+              color="error"
+              onClick={handleDeleteCollectionClick}
+            >
+              <DeleteIcon />
+            </IconButton>
+          </Tooltip>
+        )}
       </Box>
 
       {/* Error display */}
@@ -269,209 +330,238 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
         </Alert>
       )}
 
-      {/* Stats Cards */}
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <Paper variant="outlined" sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-              <CategoryIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-              <Typography variant="body2" color="text.secondary">Domains</Typography>
-            </Box>
-            <Typography variant="h4" fontWeight={700}>
-              {domainCount}
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <Paper variant="outlined" sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-              <MenuBookIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-              <Typography variant="body2" color="text.secondary">Standards</Typography>
-            </Box>
-            <Typography variant="h4" fontWeight={700}>
-              {standardCount}
-            </Typography>
-          </Paper>
-        </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
-          <Paper variant="outlined" sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-              <SourceIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-              <Typography variant="body2" color="text.secondary">Source</Typography>
-            </Box>
-            <Typography variant="body1" fontWeight={500}>
-              {getSourceInfo()}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              {getSourceDate()}
-            </Typography>
-          </Paper>
-        </Grid>
-      </Grid>
+      {/* Loading selected collection */}
+      {loading && !currentCollection && selectedCollectionId && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 6 }}>
+          <CircularProgress size={24} />
+        </Box>
+      )}
 
-      {/* Domains List */}
-      <Box component="section">
-        <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-          Domains & Standards
-        </Typography>
-
-        {standards.domains.length === 0 ? (
-          <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
-            <CategoryIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-            <Typography color="text.secondary">
-              No domains yet. Add a domain to get started.
-            </Typography>
+      {/* Selected collection content */}
+      {currentCollection && selectedSummary && (
+        <>
+          {/* Collection header with edit actions */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+              <Chip label={currentCollection.framework} size="small" variant="outlined" />
+              <Typography variant="body2" color="text.secondary">
+                {currentCollection.state} • {domainCount} domains, {standardCount} standards
+              </Typography>
+            </Box>
             <Button
-              size="small"
-              sx={{ mt: 1 }}
+              variant="outlined"
+              startIcon={<AddIcon />}
               onClick={handleAddDomain}
             >
               Add Domain
             </Button>
-          </Paper>
-        ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {standards.domains.map((domain) => (
-              <Accordion
-                key={domain.code}
-                expanded={expandedDomains.has(domain.code)}
-                onChange={() => handleToggleDomain(domain.code)}
-                disableGutters
-                sx={{
-                  '&:before': { display: 'none' },
-                  border: 1,
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  '&:first-of-type': { borderRadius: 1 },
-                  '&:last-of-type': { borderRadius: 1 }
-                }}
-              >
-                <AccordionSummary
-                  expandIcon={<ExpandMoreIcon />}
-                  sx={{
-                    '& .MuiAccordionSummary-content': {
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      mr: 1
-                    }
-                  }}
+          </Box>
+
+          {/* Stats Cards */}
+          <Grid container spacing={2}>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                  <CategoryIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                  <Typography variant="body2" color="text.secondary">Domains</Typography>
+                </Box>
+                <Typography variant="h4" fontWeight={700}>
+                  {domainCount}
+                </Typography>
+              </Paper>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                  <MenuBookIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                  <Typography variant="body2" color="text.secondary">Standards</Typography>
+                </Box>
+                <Typography variant="h4" fontWeight={700}>
+                  {standardCount}
+                </Typography>
+              </Paper>
+            </Grid>
+            <Grid size={{ xs: 12, sm: 4 }}>
+              <Paper variant="outlined" sx={{ p: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                  <SourceIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                  <Typography variant="body2" color="text.secondary">Source</Typography>
+                </Box>
+                <Typography variant="body1" fontWeight={500}>
+                  {getSourceInfo()}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {getSourceDate()}
+                </Typography>
+              </Paper>
+            </Grid>
+          </Grid>
+
+          {/* Domains List */}
+          <Box component="section">
+            <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+              Domains & Standards
+            </Typography>
+
+            {currentCollection.domains.length === 0 ? (
+              <Paper variant="outlined" sx={{ p: 3, textAlign: 'center' }}>
+                <CategoryIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+                <Typography color="text.secondary">
+                  No domains yet. Add a domain to get started.
+                </Typography>
+                <Button
+                  size="small"
+                  sx={{ mt: 1 }}
+                  onClick={handleAddDomain}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1 }}>
-                    <Chip label={domain.code} size="small" color="primary" />
-                    <Typography variant="body1" fontWeight={500}>
-                      {domain.name}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      ({domain.standards.length} standards)
-                    </Typography>
-                  </Box>
-                  <Box
-                    sx={{ display: 'flex', gap: 0.5 }}
-                    onClick={(e) => e.stopPropagation()}
+                  Add Domain
+                </Button>
+              </Paper>
+            ) : (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {currentCollection.domains.map((domain: StandardDomain) => (
+                  <Accordion
+                    key={domain.code}
+                    expanded={expandedDomains.has(domain.code)}
+                    onChange={() => handleToggleDomain(domain.code)}
+                    disableGutters
+                    sx={{
+                      '&:before': { display: 'none' },
+                      border: 1,
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      '&:first-of-type': { borderRadius: 1 },
+                      '&:last-of-type': { borderRadius: 1 }
+                    }}
                   >
-                    <Tooltip title="Edit domain">
-                      <IconButton
-                        size="small"
-                        onClick={() => handleEditDomain(domain)}
+                    <AccordionSummary
+                      expandIcon={<ExpandMoreIcon />}
+                      sx={{
+                        '& .MuiAccordionSummary-content': {
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          mr: 1
+                        }
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1 }}>
+                        <Chip label={domain.code} size="small" color="primary" />
+                        <Typography variant="body1" fontWeight={500}>
+                          {domain.name}
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          ({domain.standards.length} standards)
+                        </Typography>
+                      </Box>
+                      <Box
+                        sx={{ display: 'flex', gap: 0.5 }}
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Delete domain">
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => handleDeleteDomainClick(domain)}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                </AccordionSummary>
-                <AccordionDetails sx={{ pt: 0, pb: 2 }}>
-                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {domain.standards.map((standard) => (
-                      <Paper
-                        key={standard.code}
-                        variant="outlined"
-                        sx={{
-                          p: 1.5,
-                          display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: 1.5,
-                          '&:hover': { bgcolor: 'action.hover' }
-                        }}
-                      >
-                        <Chip
-                          label={standard.code}
-                          size="small"
-                          variant="outlined"
-                          sx={{ flexShrink: 0 }}
-                        />
-                        <Box sx={{ flex: 1, minWidth: 0 }}>
-                          <Typography variant="body2">
-                            {standard.description}
-                          </Typography>
-                          {standard.keywords && standard.keywords.length > 0 && (
-                            <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
-                              {standard.keywords.slice(0, 5).map((keyword) => (
-                                <Chip
-                                  key={keyword}
-                                  label={keyword}
-                                  size="small"
-                                  variant="outlined"
-                                  sx={{ fontSize: '0.65rem', height: 18 }}
-                                />
-                              ))}
-                              {standard.keywords.length > 5 && (
-                                <Chip
-                                  label={`+${standard.keywords.length - 5}`}
-                                  size="small"
-                                  variant="outlined"
-                                  sx={{ fontSize: '0.65rem', height: 18 }}
-                                />
+                        <Tooltip title="Edit domain">
+                          <IconButton
+                            size="small"
+                            onClick={() => handleEditDomain(domain)}
+                          >
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Delete domain">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleDeleteDomainClick(domain)}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                    </AccordionSummary>
+                    <AccordionDetails sx={{ pt: 0, pb: 2 }}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                        {domain.standards.map((standard: Standard) => (
+                          <Paper
+                            key={standard.code}
+                            variant="outlined"
+                            sx={{
+                              p: 1.5,
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: 1.5,
+                              '&:hover': { bgcolor: 'action.hover' }
+                            }}
+                          >
+                            <Chip
+                              label={standard.code}
+                              size="small"
+                              variant="outlined"
+                              sx={{ flexShrink: 0 }}
+                            />
+                            <Box sx={{ flex: 1, minWidth: 0 }}>
+                              <Typography variant="body2">
+                                {standard.description}
+                              </Typography>
+                              {standard.keywords && standard.keywords.length > 0 && (
+                                <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
+                                  {standard.keywords.slice(0, 5).map((keyword: string) => (
+                                    <Chip
+                                      key={keyword}
+                                      label={keyword}
+                                      size="small"
+                                      variant="outlined"
+                                      sx={{ fontSize: '0.65rem', height: 18 }}
+                                    />
+                                  ))}
+                                  {standard.keywords.length > 5 && (
+                                    <Chip
+                                      label={`+${standard.keywords.length - 5}`}
+                                      size="small"
+                                      variant="outlined"
+                                      sx={{ fontSize: '0.65rem', height: 18 }}
+                                    />
+                                  )}
+                                </Box>
                               )}
                             </Box>
-                          )}
-                        </Box>
-                        <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                          <Tooltip title="Edit standard">
-                            <IconButton
-                              size="small"
-                              onClick={() => handleEditStandard(domain, standard)}
-                            >
-                              <EditIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title="Delete standard">
-                            <IconButton
-                              size="small"
-                              color="error"
-                              onClick={() => handleDeleteStandardClick(domain, standard)}
-                            >
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
-                          </Tooltip>
-                        </Box>
-                      </Paper>
-                    ))}
+                            <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
+                              <Tooltip title="Edit standard">
+                                <IconButton
+                                  size="small"
+                                  onClick={() => handleEditStandard(domain, standard)}
+                                >
+                                  <EditIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title="Delete standard">
+                                <IconButton
+                                  size="small"
+                                  color="error"
+                                  onClick={() => handleDeleteStandardClick(domain, standard)}
+                                >
+                                  <DeleteIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </Box>
+                          </Paper>
+                        ))}
 
-                    {/* Add Standard button */}
-                    <Button
-                      size="small"
-                      startIcon={<AddIcon />}
-                      onClick={() => handleAddStandard(domain)}
-                      sx={{ alignSelf: 'flex-start', mt: 0.5 }}
-                    >
-                      Add Standard
-                    </Button>
-                  </Box>
-                </AccordionDetails>
-              </Accordion>
-            ))}
+                        {/* Add Standard button */}
+                        <Button
+                          size="small"
+                          startIcon={<AddIcon />}
+                          onClick={() => handleAddStandard(domain)}
+                          sx={{ alignSelf: 'flex-start', mt: 0.5 }}
+                        >
+                          Add Standard
+                        </Button>
+                      </Box>
+                    </AccordionDetails>
+                  </Accordion>
+                ))}
+              </Box>
+            )}
           </Box>
-        )}
-      </Box>
+        </>
+      )}
 
       {/* Import Modal */}
       <StandardsImportModal
@@ -483,7 +573,7 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
         courseGradeLevel={course.gradeLevel}
         onSuccess={() => {
           setIsImportModalOpen(false)
-          fetchStandards(course.id)
+          fetchCollections(course.id)
         }}
       />
 
@@ -494,7 +584,6 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
           setIsDomainModalOpen(false)
           setEditingDomain(null)
         }}
-        courseId={course.id}
         domain={editingDomain ?? undefined}
         onSuccess={() => {
           setIsDomainModalOpen(false)
@@ -510,7 +599,6 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
           setEditingStandard(null)
           setAddingStandardToDomain(null)
         }}
-        courseId={course.id}
         domainCode={editingStandard?.domain.code ?? addingStandardToDomain?.code ?? ''}
         domainName={editingStandard?.domain.name ?? addingStandardToDomain?.name ?? ''}
         standard={editingStandard?.standard}
@@ -555,6 +643,22 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
             : ''
         }
         confirmText="Delete Standard"
+        variant="danger"
+        isLoading={isDeleting}
+      />
+
+      {/* Delete Collection Confirmation */}
+      <ConfirmModal
+        isOpen={isDeleteCollectionModalOpen}
+        onClose={() => setIsDeleteCollectionModalOpen(false)}
+        onConfirm={handleConfirmDeleteCollection}
+        title="Delete Collection"
+        message={
+          selectedSummary
+            ? `Are you sure you want to delete "${selectedSummary.name}"? This will delete all ${selectedSummary.domainCount} domains and ${selectedSummary.standardCount} standards. This action cannot be undone.`
+            : ''
+        }
+        confirmText="Delete Collection"
         variant="danger"
         isLoading={isDeleting}
       />

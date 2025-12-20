@@ -29,11 +29,13 @@ type InvokeChannel =
   | 'drive:addStudent'
   | 'drive:updateStudent'
   | 'drive:deleteStudent'
-  // Google Drive - Standards
-  | 'drive:getStandards'
-  | 'drive:getStandardsSummary'
-  | 'drive:saveStandards'
-  | 'drive:deleteStandards'
+  // Google Drive - Standards (Multiple Collections)
+  | 'drive:listStandardsCollections'
+  | 'drive:getStandardsCollection'
+  | 'drive:createStandardsCollection'
+  | 'drive:updateStandardsCollection'
+  | 'drive:deleteStandardsCollection'
+  | 'drive:getAllStandardsForCourse'
   // Google Drive - Units
   | 'drive:listUnits'
   | 'drive:getUnit'
