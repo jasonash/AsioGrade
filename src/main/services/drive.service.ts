@@ -27,6 +27,11 @@ import {
   AssessmentSummary,
   CreateAssessmentInput,
   UpdateAssessmentInput,
+  Assignment,
+  AssignmentSummary,
+  CreateAssignmentInput,
+  UpdateAssignmentInput,
+  StudentAssignment,
   ServiceResult
 } from '../../shared/types'
 
@@ -49,6 +54,7 @@ interface FolderCache {
   sectionFolderIds: Record<string, string> // sectionId -> folderId
   unitFolderIds: Record<string, string> // unitId -> folderId
   assessmentFileIds: Record<string, string> // assessmentId -> fileId
+  assignmentFileIds: Record<string, string> // assignmentId -> fileId
 }
 
 // Metadata cache with TTL for performance
@@ -62,12 +68,14 @@ interface MetadataCache {
   sections: Record<string, CacheEntry<Section>>
   units: Record<string, CacheEntry<Unit>>
   assessments: Record<string, CacheEntry<Assessment>> // assessmentId -> assessment
+  assignments: Record<string, CacheEntry<Assignment>> // assignmentId -> assignment
   standardsCollections: Record<string, CacheEntry<Standards>> // standardsId -> standards collection
   standardsSummaries: Record<string, CacheEntry<StandardsSummary[]>> // courseFolderId -> list of summaries
   sectionCounts: Record<string, CacheEntry<number>> // courseFolderId -> section count
   studentCounts: Record<string, CacheEntry<number>> // sectionFolderId -> student count
   unitCounts: Record<string, CacheEntry<number>> // courseFolderId -> unit count
   assessmentCounts: Record<string, CacheEntry<number>> // unitFolderId -> assessment count
+  assignmentCounts: Record<string, CacheEntry<number>> // sectionFolderId -> assignment count
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -79,19 +87,22 @@ class DriveService {
     courseFolderIds: {},
     sectionFolderIds: {},
     unitFolderIds: {},
-    assessmentFileIds: {}
+    assessmentFileIds: {},
+    assignmentFileIds: {}
   }
   private metadataCache: MetadataCache = {
     courses: {},
     sections: {},
     units: {},
     assessments: {},
+    assignments: {},
     standardsCollections: {},
     standardsSummaries: {},
     sectionCounts: {},
     studentCounts: {},
     unitCounts: {},
-    assessmentCounts: {}
+    assessmentCounts: {},
+    assignmentCounts: {}
   }
 
   /**
@@ -117,19 +128,22 @@ class DriveService {
       courseFolderIds: {},
       sectionFolderIds: {},
       unitFolderIds: {},
-      assessmentFileIds: {}
+      assessmentFileIds: {},
+      assignmentFileIds: {}
     }
     this.metadataCache = {
       courses: {},
       sections: {},
       units: {},
       assessments: {},
+      assignments: {},
       standardsCollections: {},
       standardsSummaries: {},
       sectionCounts: {},
       studentCounts: {},
       unitCounts: {},
-      assessmentCounts: {}
+      assessmentCounts: {},
+      assignmentCounts: {}
     }
   }
 
@@ -191,6 +205,16 @@ class DriveService {
     delete this.metadataCache.assessments[assessmentId]
     if (unitFolderId) {
       delete this.metadataCache.assessmentCounts[unitFolderId]
+    }
+  }
+
+  /**
+   * Invalidate caches related to an assignment (call after mutations)
+   */
+  private invalidateAssignmentCache(assignmentId: string, sectionFolderId?: string): void {
+    delete this.metadataCache.assignments[assignmentId]
+    if (sectionFolderId) {
+      delete this.metadataCache.assignmentCounts[sectionFolderId]
     }
   }
 
@@ -2460,6 +2484,328 @@ class DriveService {
       return { success: true, data: undefined }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to delete assessment'
+      return { success: false, error: message }
+    }
+  }
+
+  // ============================================================
+  // Assignment Operations
+  // ============================================================
+
+  /**
+   * List all assignments for a section
+   */
+  async listAssignments(sectionId: string): Promise<ServiceResult<AssignmentSummary[]>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get section folder ID
+      const sectionFolderId = this.folderCache.sectionFolderIds[sectionId] ?? sectionId
+
+      // Find assignments folder
+      const assignmentsFolderResponse = await drive.files.list({
+        q: `name='assignments' and mimeType='application/vnd.google-apps.folder' and '${sectionFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (
+        !assignmentsFolderResponse.data.files ||
+        assignmentsFolderResponse.data.files.length === 0
+      ) {
+        // No assignments folder yet, return empty list
+        return { success: true, data: [] }
+      }
+
+      const assignmentsFolderId = assignmentsFolderResponse.data.files[0].id!
+
+      // List all JSON files in assignments folder
+      const response = await drive.files.list({
+        q: `'${assignmentsFolderId}' in parents and mimeType='application/json' and trashed=false`,
+        fields: 'files(id, name, modifiedTime)',
+        spaces: 'drive'
+      })
+
+      if (!response.data.files || response.data.files.length === 0) {
+        return { success: true, data: [] }
+      }
+
+      // Read each assignment file and build summaries
+      const summaries: AssignmentSummary[] = []
+
+      for (const file of response.data.files) {
+        try {
+          const contentResponse = await drive.files.get({
+            fileId: file.id!,
+            alt: 'media'
+          })
+
+          const assignment = contentResponse.data as unknown as Assignment
+
+          // Cache the file ID mapping
+          this.folderCache.assignmentFileIds[assignment.id] = file.id!
+
+          summaries.push({
+            id: assignment.id,
+            sectionId: assignment.sectionId,
+            assessmentId: assignment.assessmentId,
+            assessmentTitle: assignment.assessmentTitle,
+            assessmentType: assignment.assessmentType,
+            assessmentPurpose: assignment.assessmentPurpose,
+            questionCount: assignment.questionCount,
+            assignedDate: assignment.assignedDate,
+            dueDate: assignment.dueDate,
+            status: assignment.status,
+            studentCount: assignment.studentAssignments.length,
+            createdAt: assignment.createdAt,
+            updatedAt: assignment.updatedAt
+          })
+        } catch {
+          // Skip invalid files
+          continue
+        }
+      }
+
+      // Sort by creation date (newest first)
+      summaries.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+
+      return { success: true, data: summaries }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to list assignments'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Get a specific assignment by ID
+   */
+  async getAssignment(assignmentId: string): Promise<ServiceResult<Assignment>> {
+    try {
+      // Check cache first
+      const cached = this.metadataCache.assignments[assignmentId]
+      if (this.isCacheValid(cached)) {
+        return { success: true, data: cached.data }
+      }
+
+      const drive = await this.getDrive()
+
+      // Get file ID from cache or use as-is
+      const fileId = this.folderCache.assignmentFileIds[assignmentId] ?? assignmentId
+
+      const response = await drive.files.get({
+        fileId,
+        alt: 'media'
+      })
+
+      const assignment = response.data as unknown as Assignment
+
+      // Cache the result
+      this.metadataCache.assignments[assignmentId] = {
+        data: assignment,
+        timestamp: Date.now()
+      }
+
+      return { success: true, data: assignment }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get assignment'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Create a new assignment (links an assessment to a section)
+   */
+  async createAssignment(input: CreateAssignmentInput): Promise<ServiceResult<Assignment>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get section to find folder ID
+      const sectionResult = await this.getSection(input.sectionId)
+      if (!sectionResult.success) {
+        return { success: false, error: sectionResult.error }
+      }
+
+      const sectionFolderId = sectionResult.data.driveFolderId
+      if (!sectionFolderId) {
+        return { success: false, error: 'Section folder not found' }
+      }
+
+      // Get the assessment to denormalize its info
+      const assessmentResult = await this.getAssessment(input.assessmentId)
+      if (!assessmentResult.success) {
+        return { success: false, error: assessmentResult.error }
+      }
+
+      const assessment = assessmentResult.data
+
+      // Only allow assigning published assessments
+      if (assessment.status !== 'published') {
+        return { success: false, error: 'Only published assessments can be assigned' }
+      }
+
+      // Get roster to auto-generate student assignments
+      const rosterResult = await this.getRoster(input.sectionId)
+      if (!rosterResult.success) {
+        return { success: false, error: rosterResult.error }
+      }
+
+      const roster = rosterResult.data
+      const activeStudents = roster.students.filter((s) => s.active)
+
+      if (activeStudents.length === 0) {
+        return { success: false, error: 'No active students in section' }
+      }
+
+      // Generate student assignments (all get version 'A' for now)
+      const studentAssignments: StudentAssignment[] = activeStudents.map((student) => ({
+        studentId: student.id,
+        versionId: 'A' as const
+      }))
+
+      // Ensure assignments folder exists
+      const assignmentsFolderId = await this.ensureSubfolder(sectionFolderId, 'assignments')
+
+      // Generate unique assignment ID
+      const assignmentId = this.generateUniqueId(assessment.title)
+      const now = new Date().toISOString()
+
+      // Create assignment object
+      const assignment: Assignment = {
+        id: assignmentId,
+        sectionId: input.sectionId,
+        assessmentId: input.assessmentId,
+        assessmentTitle: assessment.title,
+        assessmentType: assessment.type,
+        assessmentPurpose: assessment.purpose,
+        questionCount: assessment.questions.length,
+        assignedDate: input.assignedDate,
+        dueDate: input.dueDate,
+        status: 'draft' as const,
+        studentAssignments,
+        createdAt: now,
+        updatedAt: now,
+        version: 1
+      }
+
+      // Save to Drive
+      const fileResponse = await drive.files.create({
+        requestBody: {
+          name: `${assignmentId}.json`,
+          mimeType: 'application/json',
+          parents: [assignmentsFolderId]
+        },
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(assignment, null, 2)
+        },
+        fields: 'id'
+      })
+
+      // Cache the file ID mapping
+      this.folderCache.assignmentFileIds[assignmentId] = fileResponse.data.id!
+
+      // Invalidate assignment count cache
+      this.invalidateAssignmentCache(assignmentId, sectionFolderId)
+
+      return { success: true, data: assignment }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create assignment'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Update an existing assignment
+   */
+  async updateAssignment(input: UpdateAssignmentInput): Promise<ServiceResult<Assignment>> {
+    try {
+      // Get existing assignment
+      const existingResult = await this.getAssignment(input.id)
+      if (!existingResult.success) {
+        return { success: false, error: existingResult.error }
+      }
+
+      const existing = existingResult.data
+      const drive = await this.getDrive()
+
+      // Get file ID
+      const fileId = this.folderCache.assignmentFileIds[input.id]
+      if (!fileId) {
+        return { success: false, error: 'Assignment file not found in cache' }
+      }
+
+      const now = new Date().toISOString()
+
+      // Merge updates
+      const updated: Assignment = {
+        ...existing,
+        assignedDate: input.assignedDate ?? existing.assignedDate,
+        dueDate: input.dueDate ?? existing.dueDate,
+        status: input.status ?? existing.status,
+        updatedAt: now,
+        version: existing.version + 1
+      }
+
+      // Save to Drive
+      await drive.files.update({
+        fileId,
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(updated, null, 2)
+        }
+      })
+
+      // Invalidate cache
+      const sectionFolderId = this.folderCache.sectionFolderIds[input.sectionId]
+      this.invalidateAssignmentCache(input.id, sectionFolderId)
+
+      return { success: true, data: updated }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update assignment'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Delete an assignment
+   */
+  async deleteAssignment(assignmentId: string, sectionId: string): Promise<ServiceResult<void>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get file ID
+      let fileId = this.folderCache.assignmentFileIds[assignmentId]
+      if (!fileId) {
+        // Try to find it by listing assignments first
+        const listResult = await this.listAssignments(sectionId)
+        if (!listResult.success) {
+          return { success: false, error: 'Failed to find assignment' }
+        }
+
+        fileId = this.folderCache.assignmentFileIds[assignmentId]
+        if (!fileId) {
+          return { success: false, error: 'Assignment not found' }
+        }
+      }
+
+      // Move to trash
+      await drive.files.update({
+        fileId,
+        requestBody: { trashed: true }
+      })
+
+      // Get section folder ID for cache invalidation
+      const sectionFolderId = this.folderCache.sectionFolderIds[sectionId]
+
+      // Clear from caches
+      delete this.folderCache.assignmentFileIds[assignmentId]
+      this.invalidateAssignmentCache(assignmentId, sectionFolderId)
+
+      return { success: true, data: undefined }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete assignment'
       return { success: false, error: message }
     }
   }

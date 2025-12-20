@@ -4,38 +4,52 @@ import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
+import Divider from '@mui/material/Divider'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import AddIcon from '@mui/icons-material/Add'
 import UploadIcon from '@mui/icons-material/Upload'
 import PeopleIcon from '@mui/icons-material/People'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import RoomIcon from '@mui/icons-material/Room'
-import { useRosterStore } from '../stores'
+import AssignmentIcon from '@mui/icons-material/Assignment'
+import { useRosterStore, useAssignmentStore } from '../stores'
 import { StudentList, StudentFormModal, CSVImportModal } from '../components/roster'
+import { AssignmentCard, AssignmentCreationModal } from '../components/assignments'
 import { ConfirmModal } from '../components/ui'
-import type { Student, CourseSummary, SectionSummary } from '../../../shared/types'
+import type { Student, CourseSummary, SectionSummary, AssignmentSummary } from '../../../shared/types'
 
 interface SectionViewPageProps {
   course: CourseSummary
   section: SectionSummary
   onBack: () => void
+  onAssignmentSelect?: (assignment: AssignmentSummary) => void
 }
 
-export function SectionViewPage({ course, section, onBack }: SectionViewPageProps): ReactElement {
+export function SectionViewPage({ course, section, onBack, onAssignmentSelect }: SectionViewPageProps): ReactElement {
   const { roster, loading, error, fetchRoster, deleteStudent, clearRoster } = useRosterStore()
+  const {
+    assignments,
+    loading: assignmentsLoading,
+    error: assignmentsError,
+    fetchAssignments,
+    clearAssignments
+  } = useAssignmentStore()
 
   // Modal states
   const [isAddModalOpen, setIsAddModalOpen] = useState(false)
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false)
   const [editingStudent, setEditingStudent] = useState<Student | null>(null)
   const [deletingStudent, setDeletingStudent] = useState<Student | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
-  // Fetch roster when section changes
+  // Fetch roster and assignments when section changes
   useEffect(() => {
     fetchRoster(section.id)
+    fetchAssignments(section.id)
     return () => {
       clearRoster()
+      clearAssignments()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
   }, [section.id])
@@ -129,6 +143,78 @@ export function SectionViewPage({ course, section, onBack }: SectionViewPageProp
         />
       )}
 
+      {/* Assignments Section */}
+      <Divider sx={{ my: 2 }} />
+
+      <Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <AssignmentIcon sx={{ color: 'text.secondary' }} />
+            <Typography variant="h6" fontWeight={600}>
+              Assignments
+            </Typography>
+          </Box>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => setIsAssignModalOpen(true)}
+          >
+            Assign Assessment
+          </Button>
+        </Box>
+
+        {/* Assignments loading */}
+        {assignmentsLoading && assignments.length === 0 && (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
+            <CircularProgress size={24} />
+          </Box>
+        )}
+
+        {/* Assignments error */}
+        {assignmentsError && (
+          <Alert
+            severity="error"
+            action={
+              <Button size="small" onClick={() => fetchAssignments(section.id)}>
+                Try again
+              </Button>
+            }
+            sx={{ mb: 2 }}
+          >
+            {assignmentsError}
+          </Alert>
+        )}
+
+        {/* Assignments list */}
+        {!assignmentsLoading && assignments.length === 0 && !assignmentsError && (
+          <Box
+            sx={{
+              py: 4,
+              textAlign: 'center',
+              bgcolor: 'action.hover',
+              borderRadius: 1
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              No assignments yet. Click &quot;Assign Assessment&quot; to get started.
+            </Typography>
+          </Box>
+        )}
+
+        {assignments.length > 0 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {assignments.map((assignment) => (
+              <AssignmentCard
+                key={assignment.id}
+                assignment={assignment}
+                onClick={() => onAssignmentSelect?.(assignment)}
+              />
+            ))}
+          </Box>
+        )}
+      </Box>
+
       {/* Add Student Modal */}
       <StudentFormModal
         isOpen={isAddModalOpen}
@@ -162,6 +248,18 @@ export function SectionViewPage({ course, section, onBack }: SectionViewPageProp
         confirmText="Delete"
         variant="danger"
         isLoading={isDeleting}
+      />
+
+      {/* Assignment Creation Modal */}
+      <AssignmentCreationModal
+        isOpen={isAssignModalOpen}
+        onClose={() => setIsAssignModalOpen(false)}
+        sectionId={section.id}
+        courseId={course.id}
+        onSuccess={() => {
+          setIsAssignModalOpen(false)
+          fetchAssignments(section.id)
+        }}
       />
     </Box>
   )

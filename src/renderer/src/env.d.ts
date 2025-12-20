@@ -49,6 +49,12 @@ type InvokeChannel =
   | 'drive:createAssessment'
   | 'drive:updateAssessment'
   | 'drive:deleteAssessment'
+  // Google Drive - Assignments
+  | 'drive:listAssignments'
+  | 'drive:getAssignment'
+  | 'drive:createAssignment'
+  | 'drive:updateAssignment'
+  | 'drive:deleteAssignment'
   // Storage
   | 'storage:get'
   | 'storage:set'

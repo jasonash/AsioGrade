@@ -35,6 +35,8 @@
   "devDependencies": {
     "@electron-toolkit/utils": "^4.0.0",
     "@types/node": "^25.0.3",
+    "@types/pdfkit": "^0.17.4",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.2",
@@ -62,6 +64,8 @@
     "opencv-wasm": "^4.3.0-10",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
+    "pdfkit": "^0.17.2",
+    "qrcode": "^1.5.4",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "react-hook-form": "^7.68.0",

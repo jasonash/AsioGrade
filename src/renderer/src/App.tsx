@@ -1,9 +1,9 @@
 import { useState, type ReactElement } from 'react'
 import { Layout, type NavItem } from './components/layout'
-import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, UnitViewPage, StandardsViewPage, AssessmentViewPage } from './pages'
+import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, UnitViewPage, StandardsViewPage, AssessmentViewPage, AssignmentViewPage } from './pages'
 import { CourseCreationModal } from './components/courses'
-import { useUIStore, useCourseStore, useSectionStore, useUnitStore, useAssessmentStore } from './stores'
-import type { CourseSummary, SectionSummary, UnitSummary, AssessmentSummary } from '../../shared/types'
+import { useUIStore, useCourseStore, useSectionStore, useUnitStore, useAssessmentStore, useAssignmentStore } from './stores'
+import type { CourseSummary, SectionSummary, UnitSummary, AssessmentSummary, AssignmentSummary } from '../../shared/types'
 
 const pageConfig: Record<NavItem, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Your teaching dashboard' },
@@ -25,6 +25,7 @@ function App(): ReactElement {
   const { fetchSections } = useSectionStore()
   const { fetchUnits } = useUnitStore()
   const { fetchAssessments } = useAssessmentStore()
+  const { fetchAssignments } = useAssignmentStore()
 
   // State for current section view
   const [currentSection, setCurrentSection] = useState<SectionSummary | null>(null)
@@ -35,6 +36,9 @@ function App(): ReactElement {
   // State for current assessment view
   const [currentAssessment, setCurrentAssessment] = useState<AssessmentSummary | null>(null)
 
+  // State for current assignment view (assignments are instances of assessments given to sections)
+  const [currentAssignment, setCurrentAssignment] = useState<AssignmentSummary | null>(null)
+
   // State for standards view
   const [viewingStandards, setViewingStandards] = useState(false)
 
@@ -42,7 +46,7 @@ function App(): ReactElement {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   const handleNavigate = (nav: NavItem): void => {
-    // Clear current course, section, unit, assessment, and standards view when navigating away
+    // Clear current course, section, unit, assessment, assignment, and standards view when navigating away
     if (currentCourse) {
       setCurrentCourse(null)
     }
@@ -55,6 +59,9 @@ function App(): ReactElement {
     if (currentAssessment) {
       setCurrentAssessment(null)
     }
+    if (currentAssignment) {
+      setCurrentAssignment(null)
+    }
     if (viewingStandards) {
       setViewingStandards(false)
     }
@@ -66,6 +73,7 @@ function App(): ReactElement {
     setCurrentSection(null)
     setCurrentUnit(null)
     setCurrentAssessment(null)
+    setCurrentAssignment(null)
     setViewingStandards(false)
     setActiveNav('dashboard')
     // Fetch sections and units for this course
@@ -76,6 +84,7 @@ function App(): ReactElement {
   const handleSectionSelect = (section: SectionSummary, course: CourseSummary): void => {
     setCurrentCourse(course)
     setCurrentSection(section)
+    setCurrentAssignment(null)
     setActiveNav('dashboard')
     // Note: Sidebar handles its own section caching, no need to fetch here
   }
@@ -129,6 +138,23 @@ function App(): ReactElement {
       )
     }
 
+    // Show assignment view if an assignment is selected (within a section)
+    if (activeNav === 'dashboard' && currentAssignment && currentSection && currentCourse) {
+      return (
+        <AssignmentViewPage
+          course={currentCourse}
+          section={currentSection}
+          assignmentSummary={currentAssignment}
+          onBack={() => setCurrentAssignment(null)}
+          onDeleted={() => {
+            setCurrentAssignment(null)
+            // Refresh assignments list
+            fetchAssignments(currentSection.id)
+          }}
+        />
+      )
+    }
+
     // Show section view if a section is selected
     if (activeNav === 'dashboard' && currentSection && currentCourse) {
       return (
@@ -136,6 +162,7 @@ function App(): ReactElement {
           course={currentCourse}
           section={currentSection}
           onBack={() => setCurrentSection(null)}
+          onAssignmentSelect={(assignment) => setCurrentAssignment(assignment)}
         />
       )
     }

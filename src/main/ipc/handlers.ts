@@ -18,8 +18,13 @@ import {
   UpdateUnitInput,
   ReorderUnitsInput,
   CreateAssessmentInput,
-  UpdateAssessmentInput
+  UpdateAssessmentInput,
+  CreateAssignmentInput,
+  UpdateAssignmentInput,
+  ScantronGenerationRequest,
+  ScantronStudentInfo
 } from '../../shared/types'
+import { pdfService } from '../services/pdf.service'
 import { LLMRequest, LLMProviderType } from '../../shared/types/llm.types'
 
 /**
@@ -42,8 +47,10 @@ export function registerIpcHandlers(): void {
   // Import handlers
   registerImportHandlers()
 
+  // PDF handlers
+  registerPDFHandlers()
+
   // Future handlers will be registered here:
-  // registerPDFHandlers()
   // registerGradeHandlers()
 }
 
@@ -496,6 +503,38 @@ function registerDriveHandlers(): void {
       return driveService.deleteAssessment(assessmentId, unitId)
     }
   )
+
+  // ============================================================
+  // Assignment Operations
+  // ============================================================
+
+  // List assignments for a section
+  ipcMain.handle('drive:listAssignments', async (_event, sectionId: string) => {
+    return driveService.listAssignments(sectionId)
+  })
+
+  // Get a specific assignment
+  ipcMain.handle('drive:getAssignment', async (_event, assignmentId: string) => {
+    return driveService.getAssignment(assignmentId)
+  })
+
+  // Create a new assignment
+  ipcMain.handle('drive:createAssignment', async (_event, input: CreateAssignmentInput) => {
+    return driveService.createAssignment(input)
+  })
+
+  // Update an assignment
+  ipcMain.handle('drive:updateAssignment', async (_event, input: UpdateAssignmentInput) => {
+    return driveService.updateAssignment(input)
+  })
+
+  // Delete an assignment
+  ipcMain.handle(
+    'drive:deleteAssignment',
+    async (_event, assignmentId: string, sectionId: string) => {
+      return driveService.deleteAssignment(assignmentId, sectionId)
+    }
+  )
 }
 
 function registerLLMHandlers(): void {
@@ -581,5 +620,71 @@ function registerImportHandlers(): void {
   // Read PDF text
   ipcMain.handle('import:readPdfText', async (_event, filePath: string) => {
     return importService.readPdfText(filePath)
+  })
+}
+
+function registerPDFHandlers(): void {
+  // ============================================================
+  // PDF/Scantron Operations
+  // ============================================================
+
+  // Generate scantron PDF for an assignment
+  ipcMain.handle('pdf:generateScantron', async (_event, request: ScantronGenerationRequest) => {
+    try {
+      // Get assignment
+      const assignmentResult = await driveService.getAssignment(request.assignmentId)
+      if (!assignmentResult.success) {
+        return { success: false, error: assignmentResult.error }
+      }
+      const assignment = assignmentResult.data
+
+      // Get roster for student info
+      const rosterResult = await driveService.getRoster(request.sectionId)
+      if (!rosterResult.success) {
+        return { success: false, error: rosterResult.error }
+      }
+      const roster = rosterResult.data
+
+      // Build student info list (only active students)
+      const students: ScantronStudentInfo[] = roster.students
+        .filter((s) => s.active)
+        .map((s) => ({
+          studentId: s.id,
+          firstName: s.firstName,
+          lastName: s.lastName,
+          studentNumber: s.studentNumber
+        }))
+
+      if (students.length === 0) {
+        return { success: false, error: 'No active students in section' }
+      }
+
+      // Generate PDF
+      const result = await pdfService.generateScantronPDF(
+        students,
+        request.assignmentId,
+        request.sectionId,
+        assignment.questionCount,
+        request.options
+      )
+
+      // Convert Buffer to base64 for IPC transfer
+      if (result.success && result.pdfBuffer) {
+        return {
+          success: true,
+          data: {
+            pdfBase64: result.pdfBuffer.toString('base64'),
+            studentCount: result.studentCount,
+            pageCount: result.pageCount,
+            generatedAt: result.generatedAt
+          }
+        }
+      }
+
+      return { success: false, error: result.error ?? 'Failed to generate PDF' }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate scantron'
+      return { success: false, error: message }
+    }
   })
 }
