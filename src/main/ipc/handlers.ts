@@ -69,13 +69,27 @@ function registerAuthHandlers(): void {
     }
   })
 
-  // Get current auth status
-  ipcMain.handle('auth:getStatus', () => {
+  // Get current auth status (with automatic token refresh if needed)
+  ipcMain.handle('auth:getStatus', async () => {
+    const isConfigured = authService.isConfigured()
+
+    // If we have stored tokens but they're expired, try to refresh
+    if (isConfigured && !authService.isAuthenticated()) {
+      const hasRefreshToken = authService.hasRefreshToken()
+      if (hasRefreshToken) {
+        try {
+          await authService.refreshToken()
+        } catch {
+          // Refresh failed - user will need to log in again
+        }
+      }
+    }
+
     return {
       success: true,
       data: {
         isAuthenticated: authService.isAuthenticated(),
-        isConfigured: authService.isConfigured(),
+        isConfigured,
         user: authService.getCurrentUser()
       }
     }

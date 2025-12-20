@@ -53,6 +53,7 @@ function App(): ReactElement {
     setCurrentCourse(course)
     setCurrentSection(section)
     setActiveNav('dashboard')
+    // Note: Sidebar handles its own section caching, no need to fetch here
   }
 
   const handleNewCourse = (): void => {
