@@ -36,12 +36,33 @@ interface FolderCache {
   sectionFolderIds: Record<string, string> // sectionId -> folderId
 }
 
+// Metadata cache with TTL for performance
+interface CacheEntry<T> {
+  data: T
+  timestamp: number
+}
+
+interface MetadataCache {
+  courses: Record<string, CacheEntry<Course>>
+  sections: Record<string, CacheEntry<Section>>
+  sectionCounts: Record<string, CacheEntry<number>> // courseFolderId -> section count
+  studentCounts: Record<string, CacheEntry<number>> // sectionFolderId -> student count
+}
+
+const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+
 class DriveService {
   private drive: drive_v3.Drive | null = null
   private folderCache: FolderCache = {
     yearFolderIds: {},
     courseFolderIds: {},
     sectionFolderIds: {}
+  }
+  private metadataCache: MetadataCache = {
+    courses: {},
+    sections: {},
+    sectionCounts: {},
+    studentCounts: {}
   }
 
   /**
@@ -66,6 +87,40 @@ class DriveService {
       yearFolderIds: {},
       courseFolderIds: {},
       sectionFolderIds: {}
+    }
+    this.metadataCache = {
+      courses: {},
+      sections: {},
+      sectionCounts: {},
+      studentCounts: {}
+    }
+  }
+
+  /**
+   * Check if a cache entry is still valid
+   */
+  private isCacheValid<T>(entry: CacheEntry<T> | undefined): entry is CacheEntry<T> {
+    if (!entry) return false
+    return Date.now() - entry.timestamp < CACHE_TTL_MS
+  }
+
+  /**
+   * Invalidate caches related to a course (call after mutations)
+   */
+  private invalidateCourseCache(courseId: string, courseFolderId?: string): void {
+    delete this.metadataCache.courses[courseId]
+    if (courseFolderId) {
+      delete this.metadataCache.sectionCounts[courseFolderId]
+    }
+  }
+
+  /**
+   * Invalidate caches related to a section (call after mutations)
+   */
+  private invalidateSectionCache(sectionId: string, sectionFolderId?: string): void {
+    delete this.metadataCache.sections[sectionId]
+    if (sectionFolderId) {
+      delete this.metadataCache.studentCounts[sectionFolderId]
     }
   }
 
@@ -222,6 +277,7 @@ class DriveService {
 
   /**
    * List all courses for a given academic year
+   * Optimized: Uses Promise.all() for parallel fetching and caching
    */
   async listCourses(year: string): Promise<ServiceResult<CourseSummary[]>> {
     try {
@@ -241,30 +297,37 @@ class DriveService {
         orderBy: 'name'
       })
 
-      const courses: CourseSummary[] = []
+      const folders = response.data.files ?? []
 
-      for (const folder of response.data.files ?? []) {
-        // Read course metadata
-        const course = await this.readCourseMetadata(folder.id!)
-        if (course) {
-          // Populate folder cache so getCourse can find this course later
-          this.folderCache.courseFolderIds[course.id] = folder.id!
+      // Fetch all course metadata and section counts in parallel
+      const courseDataPromises = folders.map(async (folder) => {
+        const folderId = folder.id!
 
-          // Count sections
-          const sectionCount = await this.countSections(folder.id!)
+        // Fetch metadata and section count in parallel for each course
+        const [course, sectionCount] = await Promise.all([
+          this.readCourseMetadata(folderId),
+          this.countSections(folderId)
+        ])
 
-          courses.push({
-            id: course.id,
-            name: course.name,
-            subject: course.subject,
-            gradeLevel: course.gradeLevel,
-            academicYear: course.academicYear,
-            sectionCount,
-            lastModified: new Date(folder.modifiedTime ?? Date.now()).getTime(),
-            driveFolderId: folder.id!
-          })
-        }
-      }
+        if (!course) return null
+
+        // Populate folder cache
+        this.folderCache.courseFolderIds[course.id] = folderId
+
+        return {
+          id: course.id,
+          name: course.name,
+          subject: course.subject,
+          gradeLevel: course.gradeLevel,
+          academicYear: course.academicYear,
+          sectionCount,
+          lastModified: new Date(folder.modifiedTime ?? Date.now()).getTime(),
+          driveFolderId: folderId
+        } as CourseSummary
+      })
+
+      const courseResults = await Promise.all(courseDataPromises)
+      const courses = courseResults.filter((c): c is CourseSummary => c !== null)
 
       return { success: true, data: courses }
     } catch (error) {
@@ -274,10 +337,16 @@ class DriveService {
   }
 
   /**
-   * Read course metadata from a course folder
+   * Read course metadata from a course folder (with caching)
    */
   private async readCourseMetadata(courseFolderId: string): Promise<Course | null> {
     try {
+      // Check cache first
+      const cached = this.metadataCache.courses[courseFolderId]
+      if (this.isCacheValid(cached)) {
+        return cached.data
+      }
+
       const drive = await this.getDrive()
 
       // Find meta.json
@@ -299,17 +368,33 @@ class DriveService {
         alt: 'media'
       })
 
-      return fileResponse.data as unknown as Course
+      const course = fileResponse.data as unknown as Course
+
+      // Cache the result
+      if (course) {
+        this.metadataCache.courses[courseFolderId] = {
+          data: course,
+          timestamp: Date.now()
+        }
+      }
+
+      return course
     } catch {
       return null
     }
   }
 
   /**
-   * Count sections in a course folder
+   * Count sections in a course folder (with caching)
    */
   private async countSections(courseFolderId: string): Promise<number> {
     try {
+      // Check cache first
+      const cached = this.metadataCache.sectionCounts[courseFolderId]
+      if (this.isCacheValid(cached)) {
+        return cached.data
+      }
+
       const drive = await this.getDrive()
 
       // Find sections folder
@@ -320,6 +405,11 @@ class DriveService {
       })
 
       if (!sectionsResponse.data.files || sectionsResponse.data.files.length === 0) {
+        // Cache zero count
+        this.metadataCache.sectionCounts[courseFolderId] = {
+          data: 0,
+          timestamp: Date.now()
+        }
         return 0
       }
 
@@ -332,7 +422,15 @@ class DriveService {
         spaces: 'drive'
       })
 
-      return response.data.files?.length ?? 0
+      const count = response.data.files?.length ?? 0
+
+      // Cache the result
+      this.metadataCache.sectionCounts[courseFolderId] = {
+        data: count,
+        timestamp: Date.now()
+      }
+
+      return count
     } catch {
       return 0
     }
@@ -485,6 +583,9 @@ class DriveService {
         }
       })
 
+      // Invalidate cache
+      this.invalidateCourseCache(input.id, courseFolderId)
+
       return { success: true, data: updated }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update course'
@@ -520,8 +621,9 @@ class DriveService {
         }
       })
 
-      // Clear from cache
+      // Clear from caches
       delete this.folderCache.courseFolderIds[courseId]
+      this.invalidateCourseCache(courseId, courseFolderId)
 
       return { success: true, data: undefined }
     } catch (error) {
@@ -536,6 +638,7 @@ class DriveService {
 
   /**
    * List all sections for a course
+   * Optimized: Uses Promise.all() for parallel fetching and caching
    */
   async listSections(courseId: string): Promise<ServiceResult<SectionSummary[]>> {
     try {
@@ -563,27 +666,36 @@ class DriveService {
         orderBy: 'name'
       })
 
-      const sections: SectionSummary[] = []
+      const folders = response.data.files ?? []
 
-      for (const folder of response.data.files ?? []) {
-        const section = await this.readSectionMetadata(folder.id!)
-        if (section) {
-          // Populate folder cache so getSection can find this section later
-          this.folderCache.sectionFolderIds[section.id] = folder.id!
+      // Fetch all section metadata and student counts in parallel
+      const sectionDataPromises = folders.map(async (folder) => {
+        const folderId = folder.id!
 
-          const studentCount = await this.countStudents(folder.id!)
+        // Fetch metadata and student count in parallel for each section
+        const [section, studentCount] = await Promise.all([
+          this.readSectionMetadata(folderId),
+          this.countStudents(folderId)
+        ])
 
-          sections.push({
-            id: section.id,
-            courseId: section.courseId,
-            name: section.name,
-            studentCount,
-            schedule: section.schedule,
-            room: section.room,
-            driveFolderId: folder.id ?? undefined
-          })
-        }
-      }
+        if (!section) return null
+
+        // Populate folder cache
+        this.folderCache.sectionFolderIds[section.id] = folderId
+
+        return {
+          id: section.id,
+          courseId: section.courseId,
+          name: section.name,
+          studentCount,
+          schedule: section.schedule,
+          room: section.room,
+          driveFolderId: folderId
+        } as SectionSummary
+      })
+
+      const sectionResults = await Promise.all(sectionDataPromises)
+      const sections = sectionResults.filter((s): s is SectionSummary => s !== null)
 
       return { success: true, data: sections }
     } catch (error) {
@@ -593,10 +705,16 @@ class DriveService {
   }
 
   /**
-   * Read section metadata from a section folder
+   * Read section metadata from a section folder (with caching)
    */
   private async readSectionMetadata(sectionFolderId: string): Promise<Section | null> {
     try {
+      // Check cache first
+      const cached = this.metadataCache.sections[sectionFolderId]
+      if (this.isCacheValid(cached)) {
+        return cached.data
+      }
+
       const drive = await this.getDrive()
 
       // Find meta.json
@@ -618,19 +736,43 @@ class DriveService {
         alt: 'media'
       })
 
-      return fileResponse.data as unknown as Section
+      const section = fileResponse.data as unknown as Section
+
+      // Cache the result
+      if (section) {
+        this.metadataCache.sections[sectionFolderId] = {
+          data: section,
+          timestamp: Date.now()
+        }
+      }
+
+      return section
     } catch {
       return null
     }
   }
 
   /**
-   * Count students in a section
+   * Count students in a section (with caching)
    */
   private async countStudents(sectionFolderId: string): Promise<number> {
     try {
+      // Check cache first
+      const cached = this.metadataCache.studentCounts[sectionFolderId]
+      if (this.isCacheValid(cached)) {
+        return cached.data
+      }
+
       const roster = await this.readRosterFile(sectionFolderId)
-      return roster?.students.filter((s) => s.active).length ?? 0
+      const count = roster?.students.filter((s) => s.active).length ?? 0
+
+      // Cache the result
+      this.metadataCache.studentCounts[sectionFolderId] = {
+        data: count,
+        timestamp: Date.now()
+      }
+
+      return count
     } catch {
       return 0
     }
@@ -745,6 +887,9 @@ class DriveService {
         }
       })
 
+      // Invalidate section count cache for the course
+      delete this.metadataCache.sectionCounts[courseFolderId]
+
       return { success: true, data: section }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to create section'
@@ -803,6 +948,9 @@ class DriveService {
         }
       })
 
+      // Invalidate cache
+      this.invalidateSectionCache(input.id, sectionFolderId)
+
       return { success: true, data: updated }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update section'
@@ -838,8 +986,16 @@ class DriveService {
         }
       })
 
-      // Clear from cache
+      // Clear from caches
       delete this.folderCache.sectionFolderIds[sectionId]
+      this.invalidateSectionCache(sectionId, sectionFolderId)
+
+      // Also invalidate section count for the course
+      const courseId = existingResult.data.courseId
+      const courseFolderId = this.folderCache.courseFolderIds[courseId]
+      if (courseFolderId) {
+        delete this.metadataCache.sectionCounts[courseFolderId]
+      }
 
       return { success: true, data: undefined }
     } catch (error) {
@@ -977,6 +1133,9 @@ class DriveService {
           }
         })
       }
+
+      // Invalidate student count cache for this section
+      delete this.metadataCache.studentCounts[sectionFolderId]
 
       return { success: true, data: updatedRoster }
     } catch (error) {
