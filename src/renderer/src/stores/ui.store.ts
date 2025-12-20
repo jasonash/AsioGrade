@@ -8,6 +8,7 @@ interface UIState {
   // Sidebar
   sidebarExpanded: boolean
   activeNav: NavItem
+  expandedCourses: Set<string> // Track which courses are expanded in sidebar
 
   // Theme
   theme: Theme
@@ -18,6 +19,8 @@ interface UIState {
   setSidebarExpanded: (expanded: boolean) => void
   setActiveNav: (nav: NavItem) => void
   setTheme: (theme: Theme) => void
+  toggleCourseExpanded: (courseId: string) => void
+  setCourseExpanded: (courseId: string, expanded: boolean) => void
 }
 
 // Get system preference
@@ -53,6 +56,7 @@ export const useUIStore = create<UIState>()(
       // Initial state
       sidebarExpanded: true,
       activeNav: 'dashboard',
+      expandedCourses: new Set<string>(),
       theme: 'dark',
       resolvedTheme: 'dark',
 
@@ -67,13 +71,43 @@ export const useUIStore = create<UIState>()(
         const resolvedTheme = resolveTheme(theme)
         applyTheme(resolvedTheme)
         set({ theme, resolvedTheme })
-      }
+      },
+
+      toggleCourseExpanded: (courseId) =>
+        set((state) => {
+          const newSet = new Set(state.expandedCourses)
+          if (newSet.has(courseId)) {
+            newSet.delete(courseId)
+          } else {
+            newSet.add(courseId)
+          }
+          return { expandedCourses: newSet }
+        }),
+
+      setCourseExpanded: (courseId, expanded) =>
+        set((state) => {
+          const newSet = new Set(state.expandedCourses)
+          if (expanded) {
+            newSet.add(courseId)
+          } else {
+            newSet.delete(courseId)
+          }
+          return { expandedCourses: newSet }
+        })
     }),
     {
       name: 'teachinghelp-ui',
       partialize: (state) => ({
         sidebarExpanded: state.sidebarExpanded,
-        theme: state.theme
+        theme: state.theme,
+        expandedCourses: Array.from(state.expandedCourses) // Serialize Set to Array
+      }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      merge: (persistedState: any, currentState) => ({
+        ...currentState,
+        ...persistedState,
+        // Deserialize Array back to Set
+        expandedCourses: new Set(persistedState?.expandedCourses || [])
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
