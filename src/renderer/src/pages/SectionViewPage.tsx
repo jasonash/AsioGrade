@@ -1,5 +1,15 @@
 import { type ReactElement, useEffect, useState } from 'react'
-import { ArrowLeft, Plus, Upload, Loader2, Users, Calendar, MapPin } from 'lucide-react'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Button from '@mui/material/Button'
+import Alert from '@mui/material/Alert'
+import CircularProgress from '@mui/material/CircularProgress'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import AddIcon from '@mui/icons-material/Add'
+import UploadIcon from '@mui/icons-material/Upload'
+import PeopleIcon from '@mui/icons-material/People'
+import ScheduleIcon from '@mui/icons-material/Schedule'
+import RoomIcon from '@mui/icons-material/Room'
 import { useRosterStore } from '../stores'
 import { StudentList, StudentFormModal, CSVImportModal } from '../components/roster'
 import { ConfirmModal } from '../components/ui'
@@ -44,78 +54,69 @@ export function SectionViewPage({ course, section, onBack }: SectionViewPageProp
   const activeStudentCount = roster?.students.filter((s) => s.active).length ?? 0
 
   return (
-    <div className="space-y-6">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, p: 3 }}>
       {/* Header */}
-      <header>
-        <button
+      <Box component="header">
+        <Button
+          startIcon={<ArrowBackIcon />}
           onClick={onBack}
-          className="flex items-center gap-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors mb-4"
+          sx={{ mb: 2, color: 'text.secondary' }}
         >
-          <ArrowLeft size={16} />
-          <span className="text-sm">Back to {course.name}</span>
-        </button>
+          Back to {course.name}
+        </Button>
 
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">{section.name}</h1>
-            <div className="flex items-center gap-4 mt-1 text-sm text-[var(--color-text-secondary)]">
-              <span className="flex items-center gap-1">
-                <Users size={14} />
-                {activeStudentCount} students
-              </span>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography variant="h5" fontWeight={700}>{section.name}</Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+                <PeopleIcon sx={{ fontSize: 14 }} />
+                <Typography variant="body2">{activeStudentCount} students</Typography>
+              </Box>
               {section.schedule && (
-                <span className="flex items-center gap-1">
-                  <Calendar size={14} />
-                  {section.schedule}
-                </span>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+                  <ScheduleIcon sx={{ fontSize: 14 }} />
+                  <Typography variant="body2">{section.schedule}</Typography>
+                </Box>
               )}
               {section.room && (
-                <span className="flex items-center gap-1">
-                  <MapPin size={14} />
-                  {section.room}
-                </span>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+                  <RoomIcon sx={{ fontSize: 14 }} />
+                  <Typography variant="body2">{section.room}</Typography>
+                </Box>
               )}
-            </div>
-          </div>
-        </div>
-      </header>
+            </Box>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Actions */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => setIsAddModalOpen(true)}
-          className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
-        >
-          <Plus size={16} />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setIsAddModalOpen(true)}>
           Add Student
-        </button>
-        <button
-          onClick={() => setIsImportModalOpen(true)}
-          className="px-4 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] text-sm hover:border-[var(--color-accent)] transition-colors flex items-center gap-2"
-        >
-          <Upload size={16} />
+        </Button>
+        <Button variant="outlined" startIcon={<UploadIcon />} onClick={() => setIsImportModalOpen(true)}>
           Import CSV
-        </button>
-      </div>
+        </Button>
+      </Box>
 
       {/* Loading state */}
       {loading && !roster && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-6 h-6 text-[var(--color-accent)] animate-spin" />
-        </div>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 6 }}>
+          <CircularProgress size={24} />
+        </Box>
       )}
 
       {/* Error state */}
       {error && (
-        <div className="p-4 rounded-lg bg-[var(--color-error)]/10 border border-[var(--color-error)]/20">
-          <p className="text-sm text-[var(--color-error)]">{error}</p>
-          <button
-            onClick={() => fetchRoster(section.id)}
-            className="mt-2 text-sm text-[var(--color-accent)] hover:underline"
-          >
-            Try again
-          </button>
-        </div>
+        <Alert
+          severity="error"
+          action={
+            <Button size="small" onClick={() => fetchRoster(section.id)}>Try again</Button>
+          }
+        >
+          {error}
+        </Alert>
       )}
 
       {/* Student list */}
@@ -161,6 +162,6 @@ export function SectionViewPage({ course, section, onBack }: SectionViewPageProp
         variant="danger"
         isLoading={isDeleting}
       />
-    </div>
+    </Box>
   )
 }

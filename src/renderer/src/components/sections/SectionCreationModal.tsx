@@ -1,5 +1,10 @@
 import { type ReactElement, useState, useCallback, useEffect } from 'react'
-import { Loader2 } from 'lucide-react'
+import Box from '@mui/material/Box'
+import TextField from '@mui/material/TextField'
+import Button from '@mui/material/Button'
+import Alert from '@mui/material/Alert'
+import Typography from '@mui/material/Typography'
+import CircularProgress from '@mui/material/CircularProgress'
 import { Modal } from '../ui'
 import { useSectionStore } from '../../stores'
 import type { Section, CreateSectionInput } from '../../../../shared/types'
@@ -106,101 +111,77 @@ export function SectionCreationModal({
     [formData, validate, createSection, courseId, onSuccess, onClose]
   )
 
-  const inputClassName =
-    'w-full px-3 py-2 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors'
-
-  const labelClassName = 'block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5'
-
-  const errorClassName = 'mt-1 text-xs text-[var(--color-error)]'
-
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Add Section" size="sm">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {/* Course context */}
-        <div className="text-sm text-[var(--color-text-muted)]">
-          Adding section to <span className="font-medium text-[var(--color-text-secondary)]">{courseName}</span>
-        </div>
+        <Typography variant="body2" color="text.secondary">
+          Adding section to <Box component="span" sx={{ fontWeight: 500, color: 'text.primary' }}>{courseName}</Box>
+        </Typography>
 
         {/* Store error */}
         {storeError && (
-          <div className="p-3 rounded-lg bg-[var(--color-error)]/10 border border-[var(--color-error)]/20">
-            <p className="text-sm text-[var(--color-error)]">{storeError}</p>
-          </div>
+          <Alert severity="error">{storeError}</Alert>
         )}
 
         {/* Section Name */}
-        <div>
-          <label htmlFor="section-name" className={labelClassName}>
-            Section Name <span className="text-[var(--color-error)]">*</span>
-          </label>
-          <input
-            id="section-name"
-            type="text"
+        <Box>
+          <TextField
+            label="Section Name"
+            required
             value={formData.name}
             onChange={(e) => handleChange('name', e.target.value)}
             placeholder="e.g., Period 1, Block A, 3rd Hour"
-            className={`${inputClassName} ${errors.name ? 'border-[var(--color-error)]' : ''}`}
+            error={!!errors.name}
+            helperText={errors.name || "Use whatever naming works for your school (Period, Block, Hour, etc.)"}
             disabled={isSubmitting}
+            size="small"
+            fullWidth
             autoFocus
           />
-          {errors.name && <p className={errorClassName}>{errors.name}</p>}
-          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
-            Use whatever naming works for your school (Period, Block, Hour, etc.)
-          </p>
-        </div>
+        </Box>
 
         {/* Schedule */}
-        <div>
-          <label htmlFor="section-schedule" className={labelClassName}>
-            Schedule <span className="text-[var(--color-text-muted)]">(optional)</span>
-          </label>
-          <input
-            id="section-schedule"
-            type="text"
-            value={formData.schedule}
-            onChange={(e) => handleChange('schedule', e.target.value)}
-            placeholder="e.g., MWF 8:00-8:50am"
-            className={inputClassName}
-            disabled={isSubmitting}
-          />
-        </div>
+        <TextField
+          label="Schedule (optional)"
+          value={formData.schedule}
+          onChange={(e) => handleChange('schedule', e.target.value)}
+          placeholder="e.g., MWF 8:00-8:50am"
+          disabled={isSubmitting}
+          size="small"
+          fullWidth
+        />
 
         {/* Room */}
-        <div>
-          <label htmlFor="section-room" className={labelClassName}>
-            Room <span className="text-[var(--color-text-muted)]">(optional)</span>
-          </label>
-          <input
-            id="section-room"
-            type="text"
-            value={formData.room}
-            onChange={(e) => handleChange('room', e.target.value)}
-            placeholder="e.g., Room 204, Lab B"
-            className={inputClassName}
-            disabled={isSubmitting}
-          />
-        </div>
+        <TextField
+          label="Room (optional)"
+          value={formData.room}
+          onChange={(e) => handleChange('room', e.target.value)}
+          placeholder="e.g., Room 204, Lab B"
+          disabled={isSubmitting}
+          size="small"
+          fullWidth
+        />
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-[var(--color-border)]">
-          <button
-            type="button"
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+          <Button
+            variant="outlined"
             onClick={onClose}
             disabled={isSubmitting}
-            className="px-4 py-2 rounded-lg bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] text-sm hover:bg-[var(--color-surface-active)] transition-colors disabled:opacity-50"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
+            variant="contained"
             disabled={isSubmitting}
-            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            startIcon={isSubmitting ? <CircularProgress size={16} color="inherit" /> : undefined}
           >
-            {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
             {isSubmitting ? 'Adding...' : 'Add Section'}
-          </button>
-        </div>
-      </form>
+          </Button>
+        </Box>
+      </Box>
     </Modal>
   )
 }

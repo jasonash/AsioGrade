@@ -1,5 +1,9 @@
 import { type ReactElement } from 'react'
-import { BookOpen, Users, ChevronRight } from 'lucide-react'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
+import PeopleIcon from '@mui/icons-material/People'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import type { CourseSummary } from '../../../../shared/types'
 import { Card } from '@/components/ui/card'
 
@@ -11,7 +15,6 @@ interface CourseCardProps {
 export function CourseCard({ course, onClick }: CourseCardProps): ReactElement {
   return (
     <Card
-      className="p-5 hover:border-primary/50 transition-colors cursor-pointer group"
       onClick={onClick}
       role="button"
       tabIndex={0}
@@ -21,32 +24,72 @@ export function CourseCard({ course, onClick }: CourseCardProps): ReactElement {
           onClick?.()
         }
       }}
+      sx={{
+        p: 2.5,
+        cursor: 'pointer',
+        transition: 'border-color 0.2s',
+        '&:hover': {
+          borderColor: 'primary.main'
+        },
+        '&:hover .arrow-icon': {
+          color: 'primary.main'
+        }
+      }}
     >
-      <div className="flex items-start gap-4">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
         {/* Icon */}
-        <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
-          <BookOpen className="w-5 h-5 text-primary" />
-        </div>
+        <Box
+          sx={{
+            width: 40,
+            height: 40,
+            borderRadius: 2,
+            bgcolor: 'primary.main',
+            opacity: 0.1,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            position: 'relative'
+          }}
+        >
+          <MenuBookIcon
+            sx={{
+              color: 'primary.main',
+              position: 'absolute'
+            }}
+          />
+        </Box>
 
         {/* Content */}
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-foreground truncate">{course.name}</h3>
-          <p className="text-sm text-muted-foreground mt-0.5">
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle1" fontWeight={600} noWrap>
+            {course.name}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
             {course.subject} &middot; Grade {course.gradeLevel}
-          </p>
+          </Typography>
 
           {/* Stats */}
-          <div className="flex items-center gap-4 mt-3 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <Users size={14} />
-              {course.sectionCount} {course.sectionCount === 1 ? 'section' : 'sections'}
-            </span>
-          </div>
-        </div>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <PeopleIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+              <Typography variant="body2" color="text.secondary">
+                {course.sectionCount} {course.sectionCount === 1 ? 'section' : 'sections'}
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
 
         {/* Arrow indicator */}
-        <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors flex-shrink-0" />
-      </div>
+        <ChevronRightIcon
+          className="arrow-icon"
+          sx={{
+            color: 'text.secondary',
+            flexShrink: 0,
+            transition: 'color 0.2s'
+          }}
+        />
+      </Box>
     </Card>
   )
 }

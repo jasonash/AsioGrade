@@ -1,142 +1,193 @@
-import * as React from "react"
-import * as AlertDialogPrimitive from "@radix-ui/react-alert-dialog"
+import * as React from 'react'
+import MuiDialog from '@mui/material/Dialog'
+import MuiDialogTitle from '@mui/material/DialogTitle'
+import MuiDialogContent from '@mui/material/DialogContent'
+import MuiDialogActions from '@mui/material/DialogActions'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import { Button } from '@/components/ui/button'
+import type { SxProps, Theme } from '@mui/material/styles'
 
-import { cn } from "@/lib/utils"
-import { buttonVariants } from "@/components/ui/button"
-
-function AlertDialog({
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Root>) {
-  return <AlertDialogPrimitive.Root data-slot="alert-dialog" {...props} />
+interface AlertDialogProps {
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  children?: React.ReactNode
+  className?: string
 }
 
-function AlertDialogTrigger({
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Trigger>) {
+function AlertDialog({ open = false, onOpenChange, children, className }: AlertDialogProps) {
+  const handleClose = () => {
+    onOpenChange?.(false)
+  }
+
   return (
-    <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...props} />
+    <MuiDialog
+      open={open}
+      onClose={handleClose}
+      className={className}
+      maxWidth="sm"
+      fullWidth
+    >
+      {children}
+    </MuiDialog>
   )
 }
 
-function AlertDialogPortal({
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Portal>) {
+// AlertDialogTrigger - Not used with MUI, provided for API compatibility
+interface AlertDialogTriggerProps {
+  children?: React.ReactNode
+  asChild?: boolean
+}
+
+function AlertDialogTrigger({ children }: AlertDialogTriggerProps) {
+  return <>{children}</>
+}
+
+// AlertDialogPortal - Not needed with MUI
+interface AlertDialogPortalProps {
+  children?: React.ReactNode
+}
+
+function AlertDialogPortal({ children }: AlertDialogPortalProps) {
+  return <>{children}</>
+}
+
+// AlertDialogOverlay - Not needed with MUI
+interface AlertDialogOverlayProps {
+  className?: string
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function AlertDialogOverlay(_props: AlertDialogOverlayProps) {
+  return null
+}
+
+interface AlertDialogContentProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function AlertDialogContent({ children, className, sx }: AlertDialogContentProps) {
   return (
-    <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal" {...props} />
+    <MuiDialogContent className={className} sx={sx}>
+      {children}
+    </MuiDialogContent>
   )
 }
 
-function AlertDialogOverlay({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Overlay>) {
+interface AlertDialogHeaderProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function AlertDialogHeader({ children, className, sx }: AlertDialogHeaderProps) {
   return (
-    <AlertDialogPrimitive.Overlay
-      data-slot="alert-dialog-overlay"
-      className={cn(
-        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50",
-        className
-      )}
-      {...props}
-    />
+    <Box
+      className={className}
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0.5,
+        textAlign: { xs: 'center', sm: 'left' },
+        ...sx
+      }}
+    >
+      {children}
+    </Box>
   )
 }
 
-function AlertDialogContent({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Content>) {
+interface AlertDialogFooterProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function AlertDialogFooter({ children, className, sx }: AlertDialogFooterProps) {
   return (
-    <AlertDialogPortal>
-      <AlertDialogOverlay />
-      <AlertDialogPrimitive.Content
-        data-slot="alert-dialog-content"
-        className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
-          className
-        )}
-        {...props}
-      />
-    </AlertDialogPortal>
+    <MuiDialogActions
+      className={className}
+      sx={{
+        flexDirection: { xs: 'column-reverse', sm: 'row' },
+        gap: 1,
+        justifyContent: 'flex-end',
+        ...sx
+      }}
+    >
+      {children}
+    </MuiDialogActions>
   )
 }
 
-function AlertDialogHeader({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+interface AlertDialogTitleProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function AlertDialogTitle({ children, className, sx }: AlertDialogTitleProps) {
   return (
-    <div
-      data-slot="alert-dialog-header"
-      className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
-      {...props}
-    />
+    <MuiDialogTitle
+      className={className}
+      sx={{
+        fontSize: '1.125rem',
+        fontWeight: 600,
+        ...sx
+      }}
+    >
+      {children}
+    </MuiDialogTitle>
   )
 }
 
-function AlertDialogFooter({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+interface AlertDialogDescriptionProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function AlertDialogDescription({ children, className, sx }: AlertDialogDescriptionProps) {
   return (
-    <div
-      data-slot="alert-dialog-footer"
-      className={cn(
-        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
-        className
-      )}
-      {...props}
-    />
+    <Typography
+      variant="body2"
+      color="text.secondary"
+      className={className}
+      sx={sx}
+    >
+      {children}
+    </Typography>
   )
 }
 
-function AlertDialogTitle({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Title>) {
+interface AlertDialogActionProps {
+  children?: React.ReactNode
+  className?: string
+  onClick?: () => void
+  disabled?: boolean
+}
+
+function AlertDialogAction({ children, className, onClick, disabled }: AlertDialogActionProps) {
   return (
-    <AlertDialogPrimitive.Title
-      data-slot="alert-dialog-title"
-      className={cn("text-lg font-semibold", className)}
-      {...props}
-    />
+    <Button variant="default" className={className} onClick={onClick} disabled={disabled}>
+      {children}
+    </Button>
   )
 }
 
-function AlertDialogDescription({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Description>) {
-  return (
-    <AlertDialogPrimitive.Description
-      data-slot="alert-dialog-description"
-      className={cn("text-muted-foreground text-sm", className)}
-      {...props}
-    />
-  )
+interface AlertDialogCancelProps {
+  children?: React.ReactNode
+  className?: string
+  onClick?: () => void
+  disabled?: boolean
 }
 
-function AlertDialogAction({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
+function AlertDialogCancel({ children, className, onClick, disabled }: AlertDialogCancelProps) {
   return (
-    <AlertDialogPrimitive.Action
-      className={cn(buttonVariants(), className)}
-      {...props}
-    />
-  )
-}
-
-function AlertDialogCancel({
-  className,
-  ...props
-}: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
-  return (
-    <AlertDialogPrimitive.Cancel
-      className={cn(buttonVariants({ variant: "outline" }), className)}
-      {...props}
-    />
+    <Button variant="outline" className={className} onClick={onClick} disabled={disabled}>
+      {children}
+    </Button>
   )
 }
 
@@ -151,5 +202,19 @@ export {
   AlertDialogTitle,
   AlertDialogDescription,
   AlertDialogAction,
-  AlertDialogCancel,
+  AlertDialogCancel
+}
+
+export type {
+  AlertDialogProps,
+  AlertDialogTriggerProps,
+  AlertDialogPortalProps,
+  AlertDialogOverlayProps,
+  AlertDialogContentProps,
+  AlertDialogHeaderProps,
+  AlertDialogFooterProps,
+  AlertDialogTitleProps,
+  AlertDialogDescriptionProps,
+  AlertDialogActionProps,
+  AlertDialogCancelProps
 }

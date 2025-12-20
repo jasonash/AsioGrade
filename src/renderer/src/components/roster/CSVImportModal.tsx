@@ -1,5 +1,21 @@
 import { type ReactElement, useState, useCallback, useRef } from 'react'
-import { Upload, FileText, AlertCircle, CheckCircle, Loader2, Download } from 'lucide-react'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Button from '@mui/material/Button'
+import Alert from '@mui/material/Alert'
+import Paper from '@mui/material/Paper'
+import Table from '@mui/material/Table'
+import TableBody from '@mui/material/TableBody'
+import TableCell from '@mui/material/TableCell'
+import TableContainer from '@mui/material/TableContainer'
+import TableHead from '@mui/material/TableHead'
+import TableRow from '@mui/material/TableRow'
+import CircularProgress from '@mui/material/CircularProgress'
+import UploadIcon from '@mui/icons-material/Upload'
+import DescriptionIcon from '@mui/icons-material/Description'
+import ErrorIcon from '@mui/icons-material/Error'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import DownloadIcon from '@mui/icons-material/Download'
 import { Modal } from '../ui'
 import { useRosterStore } from '../../stores'
 import type { CreateStudentInput } from '../../../../shared/types'
@@ -172,161 +188,168 @@ Jane,Doe,jane.doe@school.edu,12346
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title="Import Students from CSV" size="lg">
-      <div className="space-y-4">
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {/* Instructions */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="text-sm text-[var(--color-text-muted)]">
-            <p>Upload a CSV file with student information. Required columns:</p>
-            <ul className="mt-1 ml-4 list-disc">
-              <li>
-                <code className="text-[var(--color-text-secondary)]">firstName</code> (required)
-              </li>
-              <li>
-                <code className="text-[var(--color-text-secondary)]">lastName</code> (required)
-              </li>
-              <li>
-                <code className="text-[var(--color-text-secondary)]">email</code> (optional)
-              </li>
-              <li>
-                <code className="text-[var(--color-text-secondary)]">studentNumber</code> (optional)
-              </li>
-            </ul>
-          </div>
-          <button
-            type="button"
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 2 }}>
+          <Box>
+            <Typography variant="body2" color="text.secondary">
+              Upload a CSV file with student information. Required columns:
+            </Typography>
+            <Box component="ul" sx={{ mt: 0.5, ml: 2, pl: 2, listStyleType: 'disc' }}>
+              <Typography component="li" variant="body2" color="text.secondary">
+                <code>firstName</code> (required)
+              </Typography>
+              <Typography component="li" variant="body2" color="text.secondary">
+                <code>lastName</code> (required)
+              </Typography>
+              <Typography component="li" variant="body2" color="text.secondary">
+                <code>email</code> (optional)
+              </Typography>
+              <Typography component="li" variant="body2" color="text.secondary">
+                <code>studentNumber</code> (optional)
+              </Typography>
+            </Box>
+          </Box>
+          <Button
+            size="small"
+            startIcon={<DownloadIcon />}
             onClick={downloadTemplate}
-            className="shrink-0 px-3 py-1.5 rounded-lg text-sm text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors flex items-center gap-1.5"
+            sx={{ flexShrink: 0 }}
           >
-            <Download size={14} />
             Template
-          </button>
-        </div>
+          </Button>
+        </Box>
 
         {/* Error display */}
         {(parseError || storeError) && (
-          <div className="p-3 rounded-lg bg-[var(--color-error)]/10 border border-[var(--color-error)]/20">
-            <p className="text-sm text-[var(--color-error)]">{parseError || storeError}</p>
-          </div>
+          <Alert severity="error">{parseError || storeError}</Alert>
         )}
 
         {/* File upload */}
-        <div>
+        <Box>
           <input
             ref={fileInputRef}
             type="file"
             accept=".csv"
             onChange={handleFileChange}
-            className="hidden"
+            style={{ display: 'none' }}
           />
-          <button
-            type="button"
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 3,
+              textAlign: 'center',
+              cursor: 'pointer',
+              borderStyle: 'dashed',
+              borderWidth: 2,
+              '&:hover': {
+                borderColor: 'primary.main'
+              }
+            }}
             onClick={() => fileInputRef.current?.click()}
-            className="w-full p-6 border-2 border-dashed border-[var(--color-border)] rounded-lg hover:border-[var(--color-accent)] transition-colors flex flex-col items-center gap-2"
           >
             {file ? (
-              <>
-                <FileText className="w-8 h-8 text-[var(--color-accent)]" />
-                <span className="text-[var(--color-text-primary)] font-medium">{file.name}</span>
-                <span className="text-xs text-[var(--color-text-muted)]">Click to change file</span>
-              </>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                <DescriptionIcon sx={{ fontSize: 32, color: 'primary.main' }} />
+                <Typography fontWeight={500}>{file.name}</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Click to change file
+                </Typography>
+              </Box>
             ) : (
-              <>
-                <Upload className="w-8 h-8 text-[var(--color-text-muted)]" />
-                <span className="text-[var(--color-text-secondary)]">Click to upload CSV file</span>
-              </>
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                <UploadIcon sx={{ fontSize: 32, color: 'text.secondary' }} />
+                <Typography color="text.secondary">Click to upload CSV file</Typography>
+              </Box>
             )}
-          </button>
-        </div>
+          </Paper>
+        </Box>
 
         {/* Preview */}
         {parsedStudents.length > 0 && (
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-[var(--color-text-primary)]">
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="subtitle2">
                 Preview ({parsedStudents.length} rows)
-              </h3>
-              <div className="flex items-center gap-3 text-xs">
-                <span className="flex items-center gap-1 text-green-500">
-                  <CheckCircle size={12} /> {validCount} valid
-                </span>
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'success.main' }}>
+                  <CheckCircleIcon sx={{ fontSize: 14 }} />
+                  <Typography variant="caption">{validCount} valid</Typography>
+                </Box>
                 {invalidCount > 0 && (
-                  <span className="flex items-center gap-1 text-[var(--color-error)]">
-                    <AlertCircle size={12} /> {invalidCount} invalid
-                  </span>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'error.main' }}>
+                    <ErrorIcon sx={{ fontSize: 14 }} />
+                    <Typography variant="caption">{invalidCount} invalid</Typography>
+                  </Box>
                 )}
-              </div>
-            </div>
-            <div className="max-h-48 overflow-auto border border-[var(--color-border)] rounded-lg">
-              <table className="w-full text-sm">
-                <thead className="bg-[var(--color-surface)]">
-                  <tr>
-                    <th className="px-3 py-2 text-left text-[var(--color-text-secondary)] font-medium">
-                      Status
-                    </th>
-                    <th className="px-3 py-2 text-left text-[var(--color-text-secondary)] font-medium">
-                      Name
-                    </th>
-                    <th className="px-3 py-2 text-left text-[var(--color-text-secondary)] font-medium">
-                      Email
-                    </th>
-                    <th className="px-3 py-2 text-left text-[var(--color-text-secondary)] font-medium">
-                      Student #
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
+              </Box>
+            </Box>
+            <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 200 }}>
+              <Table size="small" stickyHeader>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 500 }}>Status</TableCell>
+                    <TableCell sx={{ fontWeight: 500 }}>Name</TableCell>
+                    <TableCell sx={{ fontWeight: 500 }}>Email</TableCell>
+                    <TableCell sx={{ fontWeight: 500 }}>Student #</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
                   {parsedStudents.slice(0, 10).map((student, index) => (
-                    <tr key={index} className="border-t border-[var(--color-border)]">
-                      <td className="px-3 py-2">
+                    <TableRow key={index}>
+                      <TableCell>
                         {student.valid ? (
-                          <CheckCircle size={14} className="text-green-500" />
+                          <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />
                         ) : (
-                          <AlertCircle size={14} className="text-[var(--color-error)]" />
+                          <ErrorIcon sx={{ fontSize: 16, color: 'error.main' }} />
                         )}
-                      </td>
-                      <td className="px-3 py-2 text-[var(--color-text-primary)]">
+                      </TableCell>
+                      <TableCell>
                         {student.firstName} {student.lastName}
-                      </td>
-                      <td className="px-3 py-2 text-[var(--color-text-muted)]">
-                        {student.email || '-'}
-                      </td>
-                      <td className="px-3 py-2 text-[var(--color-text-muted)]">
-                        {student.studentNumber || '-'}
-                      </td>
-                    </tr>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {student.email || '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {student.studentNumber || '-'}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
-              {parsedStudents.length > 10 && (
-                <div className="px-3 py-2 text-center text-xs text-[var(--color-text-muted)] border-t border-[var(--color-border)]">
-                  ... and {parsedStudents.length - 10} more
-                </div>
-              )}
-            </div>
-          </div>
+                </TableBody>
+              </Table>
+            </TableContainer>
+            {parsedStudents.length > 10 && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 1 }}>
+                ... and {parsedStudents.length - 10} more
+              </Typography>
+            )}
+          </Box>
         )}
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-[var(--color-border)]">
-          <button
-            type="button"
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+          <Button
+            variant="outlined"
             onClick={handleClose}
             disabled={isImporting}
-            className="px-4 py-2 rounded-lg bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] text-sm hover:bg-[var(--color-surface-active)] transition-colors disabled:opacity-50"
           >
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="contained"
             onClick={handleImport}
             disabled={isImporting || validCount === 0}
-            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            startIcon={isImporting ? <CircularProgress size={16} color="inherit" /> : undefined}
           >
-            {isImporting && <Loader2 className="w-4 h-4 animate-spin" />}
             {isImporting ? 'Importing...' : `Import ${validCount} Students`}
-          </button>
-        </div>
-      </div>
+          </Button>
+        </Box>
+      </Box>
     </Modal>
   )
 }

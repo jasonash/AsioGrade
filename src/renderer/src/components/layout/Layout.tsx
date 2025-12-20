@@ -1,8 +1,9 @@
 import type { ReactElement, ReactNode } from 'react'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
 import { Sidebar, type NavItem } from './Sidebar'
 import { useUIStore, useAppStore } from '../../stores'
 import type { CourseSummary, SectionSummary } from '../../../../shared/types'
-import { cn } from '@/lib/utils'
 
 interface LayoutProps {
   children: ReactNode
@@ -24,22 +25,22 @@ export function Layout({
   const { sidebarExpanded, toggleSidebar } = useUIStore()
   const { syncStatus, lastSyncTime } = useAppStore()
 
-  const getSyncStatusDisplay = (): { text: string; colorClass: string } => {
+  const getSyncStatusDisplay = (): { text: string; color: string } => {
     switch (syncStatus) {
       case 'syncing':
-        return { text: 'Syncing...', colorClass: 'bg-blue-500' }
+        return { text: 'Syncing...', color: 'info.main' }
       case 'synced':
-        return { text: 'Up to date', colorClass: 'bg-green-500' }
+        return { text: 'Up to date', color: 'success.main' }
       case 'error':
-        return { text: 'Sync error', colorClass: 'bg-destructive' }
+        return { text: 'Sync error', color: 'error.main' }
       case 'offline':
-        return { text: 'Offline', colorClass: 'bg-yellow-500' }
+        return { text: 'Offline', color: 'warning.main' }
       default:
-        return { text: 'Ready', colorClass: 'bg-green-500' }
+        return { text: 'Ready', color: 'success.main' }
     }
   }
 
-  const { text: statusText, colorClass } = getSyncStatusDisplay()
+  const { text: statusText, color: statusColor } = getSyncStatusDisplay()
 
   const formatLastSync = (): string => {
     if (!lastSyncTime) return ''
@@ -59,7 +60,14 @@ export function Layout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <Box
+      sx={{
+        display: 'flex',
+        height: '100vh',
+        overflow: 'hidden',
+        bgcolor: 'background.default'
+      }}
+    >
       <Sidebar
         isExpanded={sidebarExpanded}
         onToggle={toggleSidebar}
@@ -70,22 +78,56 @@ export function Layout({
         onNewCourse={onNewCourse}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <Box
+        sx={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden'
+        }}
+      >
         {/* Main content area */}
-        <main className="flex-1 overflow-auto">{children}</main>
+        <Box component="main" sx={{ flex: 1, overflow: 'auto' }}>
+          {children}
+        </Box>
 
         {/* Status bar */}
-        <footer className="h-8 px-4 flex items-center gap-4 text-xs text-muted-foreground bg-muted/50 border-t border-border">
-          <span className="flex items-center gap-1.5">
-            <span className={cn('w-2 h-2 rounded-full', colorClass)} />
-            {statusText}
-            {lastSyncTime && syncStatus === 'synced' && (
-              <span className="text-muted-foreground">({formatLastSync()})</span>
-            )}
-          </span>
-          <span className="ml-auto">TeachingHelp v1.0.0</span>
-        </footer>
-      </div>
-    </div>
+        <Box
+          component="footer"
+          sx={{
+            height: 32,
+            px: 2,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 2,
+            bgcolor: 'action.hover',
+            borderTop: 1,
+            borderColor: 'divider'
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Box
+              sx={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                bgcolor: statusColor
+              }}
+            />
+            <Typography variant="caption" color="text.secondary">
+              {statusText}
+              {lastSyncTime && syncStatus === 'synced' && (
+                <Box component="span" sx={{ ml: 0.5 }}>
+                  ({formatLastSync()})
+                </Box>
+              )}
+            </Typography>
+          </Box>
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>
+            TeachingHelp v1.0.0
+          </Typography>
+        </Box>
+      </Box>
+    </Box>
   )
 }

@@ -1,5 +1,18 @@
 import { type ReactElement } from 'react'
-import { Edit2, Trash2, Mail, Hash } from 'lucide-react'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import IconButton from '@mui/material/IconButton'
+import Table from '@mui/material/Table'
+import TableBody from '@mui/material/TableBody'
+import TableCell from '@mui/material/TableCell'
+import TableContainer from '@mui/material/TableContainer'
+import TableHead from '@mui/material/TableHead'
+import TableRow from '@mui/material/TableRow'
+import Paper from '@mui/material/Paper'
+import EditIcon from '@mui/icons-material/Edit'
+import DeleteIcon from '@mui/icons-material/Delete'
+import EmailIcon from '@mui/icons-material/Email'
+import TagIcon from '@mui/icons-material/Tag'
 import type { Student } from '../../../../shared/types'
 
 interface StudentListProps {
@@ -16,84 +29,97 @@ export function StudentList({ students, onEdit, onDelete }: StudentListProps): R
 
   if (activeStudents.length === 0) {
     return (
-      <div className="text-center py-8 text-[var(--color-text-muted)]">
-        No students in this section yet.
-      </div>
+      <Box sx={{ textAlign: 'center', py: 4 }}>
+        <Typography color="text.secondary">
+          No students in this section yet.
+        </Typography>
+      </Box>
     )
   }
 
   return (
-    <div className="border border-[var(--color-border)] rounded-lg overflow-hidden">
-      <table className="w-full">
-        <thead className="bg-[var(--color-surface)]">
-          <tr>
-            <th className="px-4 py-3 text-left text-sm font-medium text-[var(--color-text-secondary)]">
-              Name
-            </th>
-            <th className="px-4 py-3 text-left text-sm font-medium text-[var(--color-text-secondary)]">
-              Student #
-            </th>
-            <th className="px-4 py-3 text-left text-sm font-medium text-[var(--color-text-secondary)]">
-              Email
-            </th>
-            <th className="px-4 py-3 text-right text-sm font-medium text-[var(--color-text-secondary)]">
-              Actions
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {activeStudents.map((student, index) => (
-            <tr
+    <TableContainer component={Paper} variant="outlined">
+      <Table size="small">
+        <TableHead>
+          <TableRow sx={{ bgcolor: 'action.hover' }}>
+            <TableCell sx={{ fontWeight: 500 }}>Name</TableCell>
+            <TableCell sx={{ fontWeight: 500 }}>Student #</TableCell>
+            <TableCell sx={{ fontWeight: 500 }}>Email</TableCell>
+            <TableCell align="right" sx={{ fontWeight: 500 }}>Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {activeStudents.map((student) => (
+            <TableRow
               key={student.id}
-              className={`${index > 0 ? 'border-t border-[var(--color-border)]' : ''} hover:bg-[var(--color-surface-hover)]`}
+              hover
+              sx={{ '&:last-child td, &:last-child th': { border: 0 } }}
             >
-              <td className="px-4 py-3">
-                <span className="text-[var(--color-text-primary)] font-medium">
+              <TableCell>
+                <Typography variant="body2" fontWeight={500}>
                   {student.lastName}, {student.firstName}
-                </span>
-              </td>
-              <td className="px-4 py-3">
+                </Typography>
+              </TableCell>
+              <TableCell>
                 {student.studentNumber ? (
-                  <span className="flex items-center gap-1 text-[var(--color-text-secondary)]">
-                    <Hash size={12} className="text-[var(--color-text-muted)]" />
-                    {student.studentNumber}
-                  </span>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <TagIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+                    <Typography variant="body2" color="text.secondary">
+                      {student.studentNumber}
+                    </Typography>
+                  </Box>
                 ) : (
-                  <span className="text-[var(--color-text-muted)]">-</span>
+                  <Typography variant="body2" color="text.disabled">-</Typography>
                 )}
-              </td>
-              <td className="px-4 py-3">
+              </TableCell>
+              <TableCell>
                 {student.email ? (
-                  <span className="flex items-center gap-1 text-[var(--color-text-secondary)]">
-                    <Mail size={12} className="text-[var(--color-text-muted)]" />
-                    {student.email}
-                  </span>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                    <EmailIcon sx={{ fontSize: 14, color: 'text.disabled' }} />
+                    <Typography variant="body2" color="text.secondary">
+                      {student.email}
+                    </Typography>
+                  </Box>
                 ) : (
-                  <span className="text-[var(--color-text-muted)]">-</span>
+                  <Typography variant="body2" color="text.disabled">-</Typography>
                 )}
-              </td>
-              <td className="px-4 py-3">
-                <div className="flex items-center justify-end gap-2">
-                  <button
+              </TableCell>
+              <TableCell align="right">
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 0.5 }}>
+                  <IconButton
+                    size="small"
                     onClick={() => onEdit(student)}
-                    className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
                     title="Edit student"
+                    sx={{
+                      color: 'text.secondary',
+                      '&:hover': {
+                        color: 'primary.main',
+                        bgcolor: 'primary.light'
+                      }
+                    }}
                   >
-                    <Edit2 size={16} />
-                  </button>
-                  <button
+                    <EditIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton
+                    size="small"
                     onClick={() => onDelete(student)}
-                    className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors"
                     title="Delete student"
+                    sx={{
+                      color: 'text.secondary',
+                      '&:hover': {
+                        color: 'error.main',
+                        bgcolor: 'error.light'
+                      }
+                    }}
                   >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              </td>
-            </tr>
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
+                </Box>
+              </TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </TableBody>
+      </Table>
+    </TableContainer>
   )
 }

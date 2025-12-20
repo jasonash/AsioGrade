@@ -1,12 +1,11 @@
 import type { ReactElement, ReactNode } from 'react'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription
-} from './dialog'
-import { cn } from '@/lib/utils'
+import MuiDialog from '@mui/material/Dialog'
+import MuiDialogContent from '@mui/material/DialogContent'
+import MuiDialogTitle from '@mui/material/DialogTitle'
+import Typography from '@mui/material/Typography'
+import IconButton from '@mui/material/IconButton'
+import Box from '@mui/material/Box'
+import CloseIcon from '@mui/icons-material/Close'
 
 interface ModalProps {
   isOpen: boolean
@@ -17,11 +16,11 @@ interface ModalProps {
   children: ReactNode
 }
 
-const sizeClasses = {
-  sm: 'sm:max-w-sm',
-  md: 'sm:max-w-md',
-  lg: 'sm:max-w-lg',
-  xl: 'sm:max-w-xl'
+const sizeMap = {
+  sm: 'sm' as const,
+  md: 'sm' as const,
+  lg: 'md' as const,
+  xl: 'lg' as const
 }
 
 export function Modal({
@@ -33,14 +32,37 @@ export function Modal({
   children
 }: ModalProps): ReactElement {
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={cn(sizeClasses[size])}>
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-          {description && <DialogDescription>{description}</DialogDescription>}
-        </DialogHeader>
+    <MuiDialog
+      open={isOpen}
+      onClose={onClose}
+      maxWidth={sizeMap[size]}
+      fullWidth
+    >
+      <MuiDialogTitle sx={{ m: 0, p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ flex: 1 }}>
+          <Typography variant="h6" component="span" sx={{ fontWeight: 600 }}>
+            {title}
+          </Typography>
+          {description && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {description}
+            </Typography>
+          )}
+        </Box>
+        <IconButton
+          aria-label="close"
+          onClick={onClose}
+          size="small"
+          sx={{
+            color: 'text.secondary'
+          }}
+        >
+          <CloseIcon fontSize="small" />
+        </IconButton>
+      </MuiDialogTitle>
+      <MuiDialogContent dividers>
         {children}
-      </DialogContent>
-    </Dialog>
+      </MuiDialogContent>
+    </MuiDialog>
   )
 }

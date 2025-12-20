@@ -1,16 +1,12 @@
 import type { ReactElement } from 'react'
-import { Loader2 } from 'lucide-react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle
-} from './alert-dialog'
-import { cn } from '@/lib/utils'
+import MuiDialog from '@mui/material/Dialog'
+import MuiDialogContent from '@mui/material/DialogContent'
+import MuiDialogTitle from '@mui/material/DialogTitle'
+import MuiDialogActions from '@mui/material/DialogActions'
+import Typography from '@mui/material/Typography'
+import CircularProgress from '@mui/material/CircularProgress'
+import Box from '@mui/material/Box'
+import { Button } from './button'
 
 interface ConfirmModalProps {
   isOpen: boolean
@@ -38,28 +34,37 @@ export function ConfirmModal({
   const isDestructive = variant === 'destructive' || variant === 'danger'
 
   return (
-    <AlertDialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{message}</AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={onClose} disabled={isLoading}>
-            {cancelText}
-          </AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirm}
-            disabled={isLoading}
-            className={cn(
-              isDestructive && 'bg-destructive text-destructive-foreground hover:bg-destructive/90'
-            )}
-          >
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {confirmText}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+    <MuiDialog
+      open={isOpen}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+    >
+      <MuiDialogTitle sx={{ fontWeight: 600 }}>
+        {title}
+      </MuiDialogTitle>
+      <MuiDialogContent>
+        <Typography color="text.secondary">
+          {message}
+        </Typography>
+      </MuiDialogContent>
+      <MuiDialogActions sx={{ px: 3, pb: 2 }}>
+        <Button variant="outline" onClick={onClose} disabled={isLoading}>
+          {cancelText}
+        </Button>
+        <Button
+          variant={isDestructive ? 'destructive' : 'default'}
+          onClick={onConfirm}
+          disabled={isLoading}
+        >
+          {isLoading && (
+            <Box component="span" sx={{ display: 'flex', alignItems: 'center', mr: 1 }}>
+              <CircularProgress size={16} color="inherit" />
+            </Box>
+          )}
+          {confirmText}
+        </Button>
+      </MuiDialogActions>
+    </MuiDialog>
   )
 }

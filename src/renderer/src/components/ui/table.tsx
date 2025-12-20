@@ -1,104 +1,161 @@
-import * as React from "react"
+import * as React from 'react'
+import MuiTable from '@mui/material/Table'
+import MuiTableBody from '@mui/material/TableBody'
+import MuiTableCell from '@mui/material/TableCell'
+import MuiTableContainer from '@mui/material/TableContainer'
+import MuiTableHead from '@mui/material/TableHead'
+import MuiTableRow from '@mui/material/TableRow'
+import MuiTableFooter from '@mui/material/TableFooter'
+import Typography from '@mui/material/Typography'
+import type { SxProps, Theme } from '@mui/material/styles'
 
-import { cn } from "@/lib/utils"
+interface TableProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({ children, className, sx }: TableProps) {
   return (
-    <div
-      data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+    <MuiTableContainer className={className} sx={sx}>
+      <MuiTable size="small">{children}</MuiTable>
+    </MuiTableContainer>
+  )
+}
+
+interface TableHeaderProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function TableHeader({ children, className, sx }: TableHeaderProps) {
+  return (
+    <MuiTableHead className={className} sx={sx}>
+      {children}
+    </MuiTableHead>
+  )
+}
+
+interface TableBodyProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function TableBody({ children, className, sx }: TableBodyProps) {
+  return (
+    <MuiTableBody className={className} sx={sx}>
+      {children}
+    </MuiTableBody>
+  )
+}
+
+interface TableFooterProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function TableFooter({ children, className, sx }: TableFooterProps) {
+  return (
+    <MuiTableFooter
+      className={className}
+      sx={{
+        bgcolor: 'action.hover',
+        ...sx
+      }}
     >
-      <table
-        data-slot="table"
-        className={cn("w-full caption-bottom text-sm", className)}
-        {...props}
-      />
-    </div>
+      {children}
+    </MuiTableFooter>
   )
 }
 
-function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
+interface TableRowProps {
+  children?: React.ReactNode
+  className?: string
+  selected?: boolean
+  sx?: SxProps<Theme>
+}
+
+function TableRow({ children, className, selected, sx }: TableRowProps) {
   return (
-    <thead
-      data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
-      {...props}
-    />
+    <MuiTableRow
+      className={className}
+      selected={selected}
+      hover
+      sx={sx}
+    >
+      {children}
+    </MuiTableRow>
   )
 }
 
-function TableBody({ className, ...props }: React.ComponentProps<"tbody">) {
+interface TableHeadProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function TableHead({ children, className, sx }: TableHeadProps) {
   return (
-    <tbody
-      data-slot="table-body"
-      className={cn("[&_tr:last-child]:border-0", className)}
-      {...props}
-    />
+    <MuiTableCell
+      component="th"
+      className={className}
+      sx={{
+        fontWeight: 600,
+        whiteSpace: 'nowrap',
+        ...sx
+      }}
+    >
+      {children}
+    </MuiTableCell>
   )
 }
 
-function TableFooter({ className, ...props }: React.ComponentProps<"tfoot">) {
+interface TableCellProps {
+  children?: React.ReactNode
+  className?: string
+  colSpan?: number
+  sx?: SxProps<Theme>
+}
+
+function TableCell({ children, className, colSpan, sx }: TableCellProps) {
   return (
-    <tfoot
-      data-slot="table-footer"
-      className={cn(
-        "bg-muted/50 border-t font-medium [&>tr]:last:border-b-0",
-        className
-      )}
-      {...props}
-    />
+    <MuiTableCell
+      className={className}
+      colSpan={colSpan}
+      sx={{
+        whiteSpace: 'nowrap',
+        ...sx
+      }}
+    >
+      {children}
+    </MuiTableCell>
   )
 }
 
-function TableRow({ className, ...props }: React.ComponentProps<"tr">) {
-  return (
-    <tr
-      data-slot="table-row"
-      className={cn(
-        "hover:bg-muted/50 data-[state=selected]:bg-muted border-b transition-colors",
-        className
-      )}
-      {...props}
-    />
-  )
+interface TableCaptionProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
 }
 
-function TableHead({ className, ...props }: React.ComponentProps<"th">) {
+function TableCaption({ children, className, sx }: TableCaptionProps) {
   return (
-    <th
-      data-slot="table-head"
-      className={cn(
-        "text-foreground h-10 px-2 text-left align-middle font-medium whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
-        className
-      )}
-      {...props}
-    />
-  )
-}
-
-function TableCell({ className, ...props }: React.ComponentProps<"td">) {
-  return (
-    <td
-      data-slot="table-cell"
-      className={cn(
-        "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
-        className
-      )}
-      {...props}
-    />
-  )
-}
-
-function TableCaption({
-  className,
-  ...props
-}: React.ComponentProps<"caption">) {
-  return (
-    <caption
-      data-slot="table-caption"
-      className={cn("text-muted-foreground mt-4 text-sm", className)}
-      {...props}
-    />
+    <Typography
+      component="caption"
+      variant="body2"
+      color="text.secondary"
+      className={className}
+      sx={{
+        mt: 2,
+        captionSide: 'bottom',
+        ...sx
+      }}
+    >
+      {children}
+    </Typography>
   )
 }
 
@@ -110,5 +167,16 @@ export {
   TableHead,
   TableRow,
   TableCell,
-  TableCaption,
+  TableCaption
+}
+
+export type {
+  TableProps,
+  TableHeaderProps,
+  TableBodyProps,
+  TableFooterProps,
+  TableRowProps,
+  TableHeadProps,
+  TableCellProps,
+  TableCaptionProps
 }

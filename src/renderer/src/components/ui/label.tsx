@@ -1,22 +1,32 @@
-import * as React from "react"
-import * as LabelPrimitive from "@radix-ui/react-label"
+import * as React from 'react'
+import InputLabel, { type InputLabelProps } from '@mui/material/InputLabel'
+import FormLabel, { type FormLabelProps } from '@mui/material/FormLabel'
 
-import { cn } from "@/lib/utils"
-
-function Label({
-  className,
-  ...props
-}: React.ComponentProps<typeof LabelPrimitive.Root>) {
-  return (
-    <LabelPrimitive.Root
-      data-slot="label"
-      className={cn(
-        "flex items-center gap-2 text-sm leading-none font-medium select-none group-data-[disabled=true]:pointer-events-none group-data-[disabled=true]:opacity-50 peer-disabled:cursor-not-allowed peer-disabled:opacity-50",
-        className
-      )}
-      {...props}
-    />
-  )
+interface LabelProps extends FormLabelProps {
+  htmlFor?: string
 }
 
-export { Label }
+const Label = React.forwardRef<HTMLLabelElement, LabelProps>(
+  ({ children, sx, ...props }, ref) => {
+    return (
+      <FormLabel
+        ref={ref}
+        sx={{
+          fontSize: '0.875rem',
+          fontWeight: 500,
+          mb: 0.5,
+          display: 'block',
+          ...sx
+        }}
+        {...props}
+      >
+        {children}
+      </FormLabel>
+    )
+  }
+)
+
+Label.displayName = 'Label'
+
+export { Label, InputLabel }
+export type { LabelProps, InputLabelProps }

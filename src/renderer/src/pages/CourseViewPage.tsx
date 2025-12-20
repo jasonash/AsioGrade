@@ -1,5 +1,16 @@
 import { type ReactElement, useEffect, useState } from 'react'
-import { ArrowLeft, Plus, Loader2, Users, Calendar, MapPin } from 'lucide-react'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Button from '@mui/material/Button'
+import Paper from '@mui/material/Paper'
+import Grid from '@mui/material/Grid'
+import Alert from '@mui/material/Alert'
+import CircularProgress from '@mui/material/CircularProgress'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
+import AddIcon from '@mui/icons-material/Add'
+import PeopleIcon from '@mui/icons-material/People'
+import ScheduleIcon from '@mui/icons-material/Schedule'
+import RoomIcon from '@mui/icons-material/Room'
 import { useCourseStore, useSectionStore } from '../stores'
 import { SectionCreationModal } from '../components/sections'
 import type { SectionSummary } from '../../../shared/types'
@@ -30,111 +41,108 @@ export function CourseViewPage({ onSectionSelect }: CourseViewPageProps): ReactE
 
   if (!currentCourse) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-[var(--color-text-muted)]">No course selected</p>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <Typography color="text.secondary">No course selected</Typography>
+      </Box>
     )
   }
 
   return (
-    <div className="space-y-6">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, p: 3 }}>
       {/* Header */}
-      <header>
-        <button
+      <Box component="header">
+        <Button
+          startIcon={<ArrowBackIcon />}
           onClick={handleBackClick}
-          className="flex items-center gap-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors mb-4"
+          sx={{ mb: 2, color: 'text.secondary' }}
         >
-          <ArrowLeft size={16} />
-          <span className="text-sm">Back to Dashboard</span>
-        </button>
+          Back to Dashboard
+        </Button>
 
-        <div className="flex items-start justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <Box>
+            <Typography variant="h5" fontWeight={700}>
               {currentCourse.name}
-            </h1>
-            <p className="text-[var(--color-text-secondary)] mt-1">
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
               {currentCourse.subject} | Grade {currentCourse.gradeLevel} | {currentCourse.academicYear}
-            </p>
-          </div>
-        </div>
-      </header>
+            </Typography>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
-          <div className="text-2xl font-bold text-[var(--color-text-primary)]">
-            {sections.length}
-          </div>
-          <div className="text-sm text-[var(--color-text-muted)]">Sections</div>
-        </div>
-        <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
-          <div className="text-2xl font-bold text-[var(--color-text-primary)]">
-            {sections.reduce((sum, s) => sum + s.studentCount, 0)}
-          </div>
-          <div className="text-sm text-[var(--color-text-muted)]">Total Students</div>
-        </div>
-        <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
-          <div className="text-2xl font-bold text-[var(--color-text-primary)]">0</div>
-          <div className="text-sm text-[var(--color-text-muted)]">Units</div>
-        </div>
-      </div>
+      <Grid container spacing={2}>
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Typography variant="h4" fontWeight={700}>{sections.length}</Typography>
+            <Typography variant="body2" color="text.secondary">Sections</Typography>
+          </Paper>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Typography variant="h4" fontWeight={700}>
+              {sections.reduce((sum, s) => sum + s.studentCount, 0)}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">Total Students</Typography>
+          </Paper>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 4 }}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Typography variant="h4" fontWeight={700}>0</Typography>
+            <Typography variant="body2" color="text.secondary">Units</Typography>
+          </Paper>
+        </Grid>
+      </Grid>
 
       {/* Sections */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Sections</h2>
-          <button
-            onClick={() => setIsCreateModalOpen(true)}
-            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
-          >
-            <Plus size={16} />
+      <Box component="section">
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" fontWeight={600}>Sections</Typography>
+          <Button variant="contained" size="small" startIcon={<AddIcon />} onClick={() => setIsCreateModalOpen(true)}>
             Add Section
-          </button>
-        </div>
+          </Button>
+        </Box>
 
         {/* Loading state */}
         {loading && sections.length === 0 && (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-6 h-6 text-[var(--color-accent)] animate-spin" />
-          </div>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 6 }}>
+            <CircularProgress size={24} />
+          </Box>
         )}
 
         {/* Error state */}
         {error && (
-          <div className="p-4 rounded-lg bg-[var(--color-error)]/10 border border-[var(--color-error)]/20 mb-4">
-            <p className="text-sm text-[var(--color-error)]">{error}</p>
-            <button
-              onClick={() => fetchSections(currentCourse.id)}
-              className="mt-2 text-sm text-[var(--color-accent)] hover:underline"
-            >
-              Try again
-            </button>
-          </div>
+          <Alert
+            severity="error"
+            sx={{ mb: 2 }}
+            action={
+              <Button size="small" onClick={() => fetchSections(currentCourse.id)}>Try again</Button>
+            }
+          >
+            {error}
+          </Alert>
         )}
 
         {/* Empty state */}
         {!loading && !error && sections.length === 0 && (
-          <div className="p-8 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-center">
-            <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-[var(--color-accent)]/10 flex items-center justify-center">
-              <Users className="w-6 h-6 text-[var(--color-accent)]" />
-            </div>
-            <h3 className="text-[var(--color-text-primary)] font-medium mb-1">No sections yet</h3>
-            <p className="text-[var(--color-text-muted)] text-sm mb-4">
+          <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
+            <Box sx={{ width: 48, height: 48, mx: 'auto', mb: 2, borderRadius: '50%', bgcolor: 'primary.light', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <PeopleIcon sx={{ fontSize: 24, color: 'primary.main' }} />
+            </Box>
+            <Typography fontWeight={500} gutterBottom>No sections yet</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Add sections to organize your students by period or block.
-            </p>
-            <button
-              onClick={() => setIsCreateModalOpen(true)}
-              className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity"
-            >
+            </Typography>
+            <Button variant="contained" onClick={() => setIsCreateModalOpen(true)}>
               Add Your First Section
-            </button>
-          </div>
+            </Button>
+          </Paper>
         )}
 
         {/* Sections list */}
         {sections.length > 0 && (
-          <div className="space-y-2">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {sections.map((section) => (
               <SectionCard
                 key={section.id}
@@ -142,9 +150,9 @@ export function CourseViewPage({ onSectionSelect }: CourseViewPageProps): ReactE
                 onView={() => onSectionSelect?.(section)}
               />
             ))}
-          </div>
+          </Box>
         )}
-      </section>
+      </Box>
 
       {/* Section Creation Modal */}
       <SectionCreationModal
@@ -156,7 +164,7 @@ export function CourseViewPage({ onSectionSelect }: CourseViewPageProps): ReactE
           console.log('Section created:', section.name)
         }}
       />
-    </div>
+    </Box>
   )
 }
 
@@ -167,36 +175,39 @@ interface SectionCardProps {
 
 function SectionCard({ section, onView }: SectionCardProps): ReactElement {
   return (
-    <div className="p-4 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-accent)]/50 transition-colors">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="font-medium text-[var(--color-text-primary)]">{section.name}</h3>
-          <div className="flex items-center gap-4 mt-1 text-sm text-[var(--color-text-muted)]">
-            <span className="flex items-center gap-1">
-              <Users size={14} />
-              {section.studentCount} students
-            </span>
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 2,
+        '&:hover': {
+          borderColor: 'primary.main'
+        }
+      }}
+    >
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box>
+          <Typography fontWeight={500}>{section.name}</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+              <PeopleIcon sx={{ fontSize: 14 }} />
+              <Typography variant="body2">{section.studentCount} students</Typography>
+            </Box>
             {section.schedule && (
-              <span className="flex items-center gap-1">
-                <Calendar size={14} />
-                {section.schedule}
-              </span>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+                <ScheduleIcon sx={{ fontSize: 14 }} />
+                <Typography variant="body2">{section.schedule}</Typography>
+              </Box>
             )}
             {section.room && (
-              <span className="flex items-center gap-1">
-                <MapPin size={14} />
-                {section.room}
-              </span>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+                <RoomIcon sx={{ fontSize: 14 }} />
+                <Typography variant="body2">{section.room}</Typography>
+              </Box>
             )}
-          </div>
-        </div>
-        <button
-          onClick={onView}
-          className="px-3 py-1.5 rounded-lg text-sm text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 transition-colors"
-        >
-          View
-        </button>
-      </div>
-    </div>
+          </Box>
+        </Box>
+        <Button size="small" onClick={onView}>View</Button>
+      </Box>
+    </Paper>
   )
 }

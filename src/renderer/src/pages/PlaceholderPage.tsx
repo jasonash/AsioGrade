@@ -1,13 +1,15 @@
 import type { ReactElement } from 'react'
-import {
-  Users,
-  FileText,
-  ClipboardList,
-  CheckCircle,
-  BarChart3,
-  BookOpen,
-  Settings
-} from 'lucide-react'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Paper from '@mui/material/Paper'
+import PeopleIcon from '@mui/icons-material/People'
+import DescriptionIcon from '@mui/icons-material/Description'
+import AssignmentIcon from '@mui/icons-material/Assignment'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import BarChartIcon from '@mui/icons-material/BarChart'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
+import SettingsIcon from '@mui/icons-material/Settings'
+import type { SvgIconComponent } from '@mui/icons-material'
 
 interface PlaceholderPageProps {
   title: string
@@ -15,35 +17,47 @@ interface PlaceholderPageProps {
   description: string
 }
 
-const icons = {
-  roster: Users,
-  tests: FileText,
-  scantrons: ClipboardList,
-  grading: CheckCircle,
-  analytics: BarChart3,
-  standards: BookOpen,
-  settings: Settings
+const icons: Record<PlaceholderPageProps['icon'], SvgIconComponent> = {
+  roster: PeopleIcon,
+  tests: DescriptionIcon,
+  scantrons: AssignmentIcon,
+  grading: CheckCircleIcon,
+  analytics: BarChartIcon,
+  standards: MenuBookIcon,
+  settings: SettingsIcon
 }
 
 export function PlaceholderPage({ title, icon, description }: PlaceholderPageProps): ReactElement {
   const Icon = icons[icon]
 
   return (
-    <div className="flex flex-col items-center justify-center h-full min-h-[400px]">
-      <div className="p-6 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] text-center max-w-md">
-        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--color-surface-hover)] flex items-center justify-center">
-          <Icon size={32} className="text-[var(--color-accent)]" />
-        </div>
-        <h1 className="text-2xl font-bold text-[var(--color-text-primary)] mb-2">
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', minHeight: 400 }}>
+      <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', maxWidth: 400 }}>
+        <Box
+          sx={{
+            width: 64,
+            height: 64,
+            mx: 'auto',
+            mb: 2,
+            borderRadius: '50%',
+            bgcolor: 'action.hover',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
+          }}
+        >
+          <Icon sx={{ fontSize: 32, color: 'primary.main' }} />
+        </Box>
+        <Typography variant="h5" fontWeight={700} gutterBottom>
           {title}
-        </h1>
-        <p className="text-[var(--color-text-secondary)]">
+        </Typography>
+        <Typography color="text.secondary">
           {description}
-        </p>
-        <p className="text-[var(--color-text-muted)] text-sm mt-4">
+        </Typography>
+        <Typography variant="body2" color="text.disabled" sx={{ mt: 2 }}>
           Coming soon
-        </p>
-      </div>
-    </div>
+        </Typography>
+      </Paper>
+    </Box>
   )
 }

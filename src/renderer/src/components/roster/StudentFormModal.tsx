@@ -1,5 +1,9 @@
 import { type ReactElement, useState, useCallback, useEffect } from 'react'
-import { Loader2 } from 'lucide-react'
+import Box from '@mui/material/Box'
+import TextField from '@mui/material/TextField'
+import Button from '@mui/material/Button'
+import Alert from '@mui/material/Alert'
+import CircularProgress from '@mui/material/CircularProgress'
 import { Modal } from '../ui'
 import { useRosterStore } from '../../stores'
 import type { Student, CreateStudentInput, UpdateStudentInput } from '../../../../shared/types'
@@ -142,13 +146,6 @@ export function StudentFormModal({
     [formData, validate, isEditMode, student, sectionId, addStudent, updateStudent, onSuccess, onClose]
   )
 
-  const inputClassName =
-    'w-full px-3 py-2 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors'
-
-  const labelClassName = 'block text-sm font-medium text-[var(--color-text-secondary)] mb-1.5'
-
-  const errorClassName = 'mt-1 text-xs text-[var(--color-error)]'
-
   return (
     <Modal
       isOpen={isOpen}
@@ -156,113 +153,93 @@ export function StudentFormModal({
       title={isEditMode ? 'Edit Student' : 'Add Student'}
       size="sm"
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {storeError && (
-          <div className="p-3 rounded-lg bg-[var(--color-error)]/10 border border-[var(--color-error)]/20">
-            <p className="text-sm text-[var(--color-error)]">{storeError}</p>
-          </div>
+          <Alert severity="error">{storeError}</Alert>
         )}
 
         {/* First Name */}
-        <div>
-          <label htmlFor="student-firstName" className={labelClassName}>
-            First Name <span className="text-[var(--color-error)]">*</span>
-          </label>
-          <input
-            id="student-firstName"
-            type="text"
-            value={formData.firstName}
-            onChange={(e) => handleChange('firstName', e.target.value)}
-            placeholder="John"
-            className={`${inputClassName} ${errors.firstName ? 'border-[var(--color-error)]' : ''}`}
-            disabled={isSubmitting}
-            autoFocus
-          />
-          {errors.firstName && <p className={errorClassName}>{errors.firstName}</p>}
-        </div>
+        <TextField
+          label="First Name"
+          required
+          value={formData.firstName}
+          onChange={(e) => handleChange('firstName', e.target.value)}
+          placeholder="John"
+          error={!!errors.firstName}
+          helperText={errors.firstName}
+          disabled={isSubmitting}
+          size="small"
+          fullWidth
+          autoFocus
+        />
 
         {/* Last Name */}
-        <div>
-          <label htmlFor="student-lastName" className={labelClassName}>
-            Last Name <span className="text-[var(--color-error)]">*</span>
-          </label>
-          <input
-            id="student-lastName"
-            type="text"
-            value={formData.lastName}
-            onChange={(e) => handleChange('lastName', e.target.value)}
-            placeholder="Doe"
-            className={`${inputClassName} ${errors.lastName ? 'border-[var(--color-error)]' : ''}`}
-            disabled={isSubmitting}
-          />
-          {errors.lastName && <p className={errorClassName}>{errors.lastName}</p>}
-        </div>
+        <TextField
+          label="Last Name"
+          required
+          value={formData.lastName}
+          onChange={(e) => handleChange('lastName', e.target.value)}
+          placeholder="Doe"
+          error={!!errors.lastName}
+          helperText={errors.lastName}
+          disabled={isSubmitting}
+          size="small"
+          fullWidth
+        />
 
         {/* Student Number */}
-        <div>
-          <label htmlFor="student-number" className={labelClassName}>
-            Student Number <span className="text-[var(--color-text-muted)]">(optional)</span>
-          </label>
-          <input
-            id="student-number"
-            type="text"
-            value={formData.studentNumber}
-            onChange={(e) => handleChange('studentNumber', e.target.value)}
-            placeholder="e.g., 12345"
-            className={inputClassName}
-            disabled={isSubmitting}
-          />
-        </div>
+        <TextField
+          label="Student Number (optional)"
+          value={formData.studentNumber}
+          onChange={(e) => handleChange('studentNumber', e.target.value)}
+          placeholder="e.g., 12345"
+          disabled={isSubmitting}
+          size="small"
+          fullWidth
+        />
 
         {/* Email */}
-        <div>
-          <label htmlFor="student-email" className={labelClassName}>
-            Email <span className="text-[var(--color-text-muted)]">(optional)</span>
-          </label>
-          <input
-            id="student-email"
-            type="email"
-            value={formData.email}
-            onChange={(e) => handleChange('email', e.target.value)}
-            placeholder="student@school.edu"
-            className={`${inputClassName} ${errors.email ? 'border-[var(--color-error)]' : ''}`}
-            disabled={isSubmitting}
-          />
-          {errors.email && <p className={errorClassName}>{errors.email}</p>}
-        </div>
+        <TextField
+          label="Email (optional)"
+          type="email"
+          value={formData.email}
+          onChange={(e) => handleChange('email', e.target.value)}
+          placeholder="student@school.edu"
+          error={!!errors.email}
+          helperText={errors.email}
+          disabled={isSubmitting}
+          size="small"
+          fullWidth
+        />
 
         {/* Notes */}
-        <div>
-          <label htmlFor="student-notes" className={labelClassName}>
-            Notes <span className="text-[var(--color-text-muted)]">(optional)</span>
-          </label>
-          <textarea
-            id="student-notes"
-            value={formData.notes}
-            onChange={(e) => handleChange('notes', e.target.value)}
-            placeholder="Private notes about this student..."
-            rows={2}
-            className={`${inputClassName} resize-none`}
-            disabled={isSubmitting}
-          />
-        </div>
+        <TextField
+          label="Notes (optional)"
+          value={formData.notes}
+          onChange={(e) => handleChange('notes', e.target.value)}
+          placeholder="Private notes about this student..."
+          multiline
+          rows={2}
+          disabled={isSubmitting}
+          size="small"
+          fullWidth
+        />
 
         {/* Actions */}
-        <div className="flex justify-end gap-3 pt-4 border-t border-[var(--color-border)]">
-          <button
-            type="button"
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+          <Button
+            variant="outlined"
             onClick={onClose}
             disabled={isSubmitting}
-            className="px-4 py-2 rounded-lg bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] text-sm hover:bg-[var(--color-surface-active)] transition-colors disabled:opacity-50"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="submit"
+            variant="contained"
             disabled={isSubmitting}
-            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-white text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            startIcon={isSubmitting ? <CircularProgress size={16} color="inherit" /> : undefined}
           >
-            {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
             {isSubmitting
               ? isEditMode
                 ? 'Saving...'
@@ -270,9 +247,9 @@ export function StudentFormModal({
               : isEditMode
                 ? 'Save Changes'
                 : 'Add Student'}
-          </button>
-        </div>
-      </form>
+          </Button>
+        </Box>
+      </Box>
     </Modal>
   )
 }

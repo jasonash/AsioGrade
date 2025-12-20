@@ -1,28 +1,29 @@
-"use client"
+import * as React from 'react'
+import Divider, { type DividerProps } from '@mui/material/Divider'
 
-import * as React from "react"
-import * as SeparatorPrimitive from "@radix-ui/react-separator"
-
-import { cn } from "@/lib/utils"
-
-function Separator({
-  className,
-  orientation = "horizontal",
-  decorative = true,
-  ...props
-}: React.ComponentProps<typeof SeparatorPrimitive.Root>) {
-  return (
-    <SeparatorPrimitive.Root
-      data-slot="separator"
-      decorative={decorative}
-      orientation={orientation}
-      className={cn(
-        "bg-border shrink-0 data-[orientation=horizontal]:h-px data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-px",
-        className
-      )}
-      {...props}
-    />
-  )
+interface SeparatorProps extends DividerProps {
+  decorative?: boolean
 }
 
+const Separator = React.forwardRef<HTMLHRElement, SeparatorProps>(
+  ({ orientation = 'horizontal', decorative = true, sx, ...props }, ref) => {
+    return (
+      <Divider
+        ref={ref}
+        orientation={orientation}
+        aria-hidden={decorative}
+        sx={{
+          my: orientation === 'horizontal' ? 1 : 0,
+          mx: orientation === 'vertical' ? 1 : 0,
+          ...sx
+        }}
+        {...props}
+      />
+    )
+  }
+)
+
+Separator.displayName = 'Separator'
+
 export { Separator }
+export type { SeparatorProps }

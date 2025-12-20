@@ -1,5 +1,34 @@
 import { type ReactElement, useState, useEffect, useCallback } from 'react'
-import { Settings, Cpu, User, Info, Eye, EyeOff, Check, X, Loader2 } from 'lucide-react'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Button from '@mui/material/Button'
+import TextField from '@mui/material/TextField'
+import Paper from '@mui/material/Paper'
+import List from '@mui/material/List'
+import ListItemButton from '@mui/material/ListItemButton'
+import ListItemIcon from '@mui/material/ListItemIcon'
+import ListItemText from '@mui/material/ListItemText'
+import IconButton from '@mui/material/IconButton'
+import InputAdornment from '@mui/material/InputAdornment'
+import FormControl from '@mui/material/FormControl'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import Checkbox from '@mui/material/Checkbox'
+import Select from '@mui/material/Select'
+import MenuItem from '@mui/material/MenuItem'
+import Slider from '@mui/material/Slider'
+import Avatar from '@mui/material/Avatar'
+import Divider from '@mui/material/Divider'
+import CircularProgress from '@mui/material/CircularProgress'
+import Chip from '@mui/material/Chip'
+import SettingsIcon from '@mui/icons-material/Settings'
+import MemoryIcon from '@mui/icons-material/Memory'
+import PersonIcon from '@mui/icons-material/Person'
+import InfoIcon from '@mui/icons-material/Info'
+import VisibilityIcon from '@mui/icons-material/Visibility'
+import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
+import CheckIcon from '@mui/icons-material/Check'
+import CloseIcon from '@mui/icons-material/Close'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
 import type { LLMProviderType, LLMProvidersConfig } from '../../../shared/types/llm.types'
 import { getProviderName, getModelsForProvider } from '../../../shared/types/llm.types'
 import { useAuthStore } from '../stores'
@@ -14,10 +43,10 @@ interface ProviderCardState {
 }
 
 const sectionIcons = {
-  general: Settings,
-  'ai-providers': Cpu,
-  'google-account': User,
-  about: Info
+  general: SettingsIcon,
+  'ai-providers': MemoryIcon,
+  'google-account': PersonIcon,
+  about: InfoIcon
 }
 
 const sectionLabels = {
@@ -260,29 +289,44 @@ export function SettingsPage(): ReactElement {
   }, [])
 
   const renderSidebar = (): ReactElement => (
-    <div className="w-48 shrink-0 border-r border-[var(--color-border)] pr-4">
-      <nav className="space-y-1">
+    <Box sx={{ width: 200, flexShrink: 0, borderRight: 1, borderColor: 'divider', pr: 2 }}>
+      <List disablePadding>
         {(Object.keys(sectionLabels) as SettingsSection[]).map((section) => {
           const Icon = sectionIcons[section]
           const isActive = activeSection === section
 
           return (
-            <button
+            <ListItemButton
               key={section}
+              selected={isActive}
               onClick={() => setActiveSection(section)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left text-sm transition-colors ${
-                isActive
-                  ? 'bg-[var(--color-accent)] text-white'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
-              }`}
+              sx={{
+                borderRadius: 1,
+                mb: 0.5,
+                '&.Mui-selected': {
+                  bgcolor: 'primary.main',
+                  color: 'primary.contrastText',
+                  '&:hover': {
+                    bgcolor: 'primary.dark'
+                  },
+                  '& .MuiListItemIcon-root': {
+                    color: 'inherit'
+                  }
+                }
+              }}
             >
-              <Icon size={18} />
-              {sectionLabels[section]}
-            </button>
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <Icon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText
+                primary={sectionLabels[section]}
+                primaryTypographyProps={{ variant: 'body2' }}
+              />
+            </ListItemButton>
           )
         })}
-      </nav>
-    </div>
+      </List>
+    </Box>
   )
 
   const renderProviderCard = (provider: LLMProviderType): ReactElement => {
@@ -293,329 +337,333 @@ export function SettingsPage(): ReactElement {
     const hasApiKey = config?.apiKey !== null
 
     return (
-      <div
+      <Paper
         key={provider}
-        className={`p-4 rounded-lg border ${
-          isDefault
-            ? 'border-[var(--color-accent)] bg-[var(--color-accent)]/5'
-            : 'border-[var(--color-border)] bg-[var(--color-surface)]'
-        }`}
+        variant="outlined"
+        sx={{
+          p: 2.5,
+          borderColor: isDefault ? 'primary.main' : 'divider',
+          bgcolor: isDefault ? 'primary.main' : 'background.paper',
+          ...(isDefault && { bgcolor: (theme) => `${theme.palette.primary.main}10` })
+        }}
       >
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-[var(--color-text-primary)]">
-              {getProviderName(provider)}
-            </h3>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography fontWeight={600}>{getProviderName(provider)}</Typography>
             {isDefault && (
-              <span className="px-2 py-0.5 text-xs rounded bg-[var(--color-accent)] text-white">
-                Default
-              </span>
+              <Chip label="Default" size="small" color="primary" />
             )}
-          </div>
+          </Box>
           {!isDefault && hasApiKey && (
-            <button
+            <Button
+              size="small"
               onClick={() => handleSetDefault(provider)}
-              className="text-xs text-[var(--color-accent)] hover:underline"
+              sx={{ textTransform: 'none' }}
             >
               Set as default
-            </button>
+            </Button>
           )}
-        </div>
+        </Box>
 
         {/* API Key Input */}
-        <div className="mb-4">
-          <label className="block text-sm text-[var(--color-text-secondary)] mb-1.5">
+        <Box sx={{ mb: 2.5 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             API Key
-          </label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                type={state.showApiKey ? 'text' : 'password'}
-                value={state.apiKey}
-                onChange={(e) => handleApiKeyChange(provider, e.target.value)}
-                onBlur={() => handleSaveApiKey(provider)}
-                placeholder={`Enter ${getProviderName(provider)} API key`}
-                className="w-full px-3 py-2 pr-10 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] text-sm focus:outline-none focus:border-[var(--color-accent)]"
-              />
-              <button
-                type="button"
-                onClick={() => updateProviderState(provider, { showApiKey: !state.showApiKey })}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text-secondary)]"
-              >
-                {state.showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-            </div>
-            <button
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <TextField
+              type={state.showApiKey ? 'text' : 'password'}
+              value={state.apiKey}
+              onChange={(e) => handleApiKeyChange(provider, e.target.value)}
+              onBlur={() => handleSaveApiKey(provider)}
+              placeholder={`Enter ${getProviderName(provider)} API key`}
+              size="small"
+              fullWidth
+              slotProps={{
+                input: {
+                  endAdornment: (
+                    <InputAdornment position="end">
+                      <IconButton
+                        size="small"
+                        onClick={() => updateProviderState(provider, { showApiKey: !state.showApiKey })}
+                        edge="end"
+                      >
+                        {state.showApiKey ? <VisibilityOffIcon fontSize="small" /> : <VisibilityIcon fontSize="small" />}
+                      </IconButton>
+                    </InputAdornment>
+                  )
+                }
+              }}
+            />
+            <Button
+              variant="outlined"
+              size="small"
               onClick={() => handleTestConnection(provider)}
               disabled={state.testing || !hasApiKey}
-              className="px-3 py-2 rounded-lg bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] text-sm hover:bg-[var(--color-surface-active)] disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              sx={{ minWidth: 70 }}
             >
-              {state.testing ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                'Test'
-              )}
-            </button>
-          </div>
+              {state.testing ? <CircularProgress size={16} /> : 'Test'}
+            </Button>
+          </Box>
 
           {/* Test Result */}
           {state.testResult && (
-            <div
-              className={`flex items-center gap-2 mt-2 text-sm ${
-                state.testResult.success
-                  ? 'text-[var(--color-success)]'
-                  : 'text-[var(--color-error)]'
-              }`}
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 0.5,
+                mt: 1,
+                color: state.testResult.success ? 'success.main' : 'error.main'
+              }}
             >
-              {state.testResult.success ? <Check size={14} /> : <X size={14} />}
-              {state.testResult.message}
-            </div>
+              {state.testResult.success ? <CheckIcon sx={{ fontSize: 16 }} /> : <CloseIcon sx={{ fontSize: 16 }} />}
+              <Typography variant="body2">{state.testResult.message}</Typography>
+            </Box>
           )}
-        </div>
+        </Box>
 
         {/* Model Selection */}
-        <div>
-          <label className="block text-sm text-[var(--color-text-secondary)] mb-1.5">
+        <Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
             Model
-          </label>
-          <select
-            value={config?.model || models[0]?.id}
-            onChange={(e) => handleModelChange(provider, e.target.value)}
-            disabled={!hasApiKey}
-            className="w-full px-3 py-2 rounded-lg bg-[var(--color-bg-secondary)] border border-[var(--color-border)] text-[var(--color-text-primary)] text-sm focus:outline-none focus:border-[var(--color-accent)] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {models.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.name}
-              </option>
-            ))}
-          </select>
+          </Typography>
+          <FormControl fullWidth size="small" disabled={!hasApiKey}>
+            <Select
+              value={config?.model || models[0]?.id || ''}
+              onChange={(e) => handleModelChange(provider, e.target.value)}
+            >
+              {models.map((model) => (
+                <MenuItem key={model.id} value={model.id}>
+                  {model.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
           {hasApiKey && config?.model && (
-            <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
               {models.find((m) => m.id === config.model)?.description}
-            </p>
+            </Typography>
           )}
-        </div>
-      </div>
+        </Box>
+      </Paper>
     )
   }
 
   const renderAIProvidersSection = (): ReactElement => (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-1">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box>
+        <Typography variant="h6" fontWeight={600} gutterBottom>
           AI Providers
-        </h2>
-        <p className="text-sm text-[var(--color-text-secondary)]">
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
           Configure API keys for AI-powered features like question generation and lesson planning.
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
       {/* Provider Cards */}
-      <div className="space-y-4">
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {renderProviderCard('openai')}
         {renderProviderCard('anthropic')}
         {renderProviderCard('google')}
-      </div>
+      </Box>
 
       {/* Temperature Setting */}
-      <div className="p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-[var(--color-text-primary)]">
+      <Paper variant="outlined" sx={{ p: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+          <Typography variant="body2" fontWeight={500}>
             Temperature
-          </label>
-          <span className="text-sm text-[var(--color-text-muted)]">
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
             {llmConfig?.temperature.toFixed(1)}
-          </span>
-        </div>
-        <input
-          type="range"
-          min="0"
-          max="2"
-          step="0.1"
+          </Typography>
+        </Box>
+        <Slider
+          min={0}
+          max={2}
+          step={0.1}
           value={llmConfig?.temperature ?? 0.7}
-          onChange={(e) => handleTemperatureChange(parseFloat(e.target.value))}
-          className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-[var(--color-bg-secondary)]"
+          onChange={(_, value) => handleTemperatureChange(value as number)}
+          size="small"
         />
-        <div className="flex justify-between text-xs text-[var(--color-text-muted)] mt-1">
-          <span>Precise</span>
-          <span>Creative</span>
-        </div>
-        <p className="text-xs text-[var(--color-text-muted)] mt-2">
+        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+          <Typography variant="caption" color="text.secondary">Precise</Typography>
+          <Typography variant="caption" color="text.secondary">Creative</Typography>
+        </Box>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
           Lower values produce more focused, deterministic responses. Higher values increase creativity and variation.
-        </p>
-      </div>
-    </div>
+        </Typography>
+      </Paper>
+    </Box>
   )
 
   const renderGeneralSection = (): ReactElement => (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-1">General</h2>
-        <p className="text-sm text-[var(--color-text-secondary)]">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box>
+        <Typography variant="h6" fontWeight={600} gutterBottom>
+          General
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
           Configure application appearance and behavior.
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
       {/* Theme */}
-      <div className="p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
-        <h3 className="font-medium text-[var(--color-text-primary)] mb-3">Appearance</h3>
-        <div className="space-y-2">
-          <label className="block text-sm text-[var(--color-text-secondary)] mb-2">Theme</label>
-          <div className="flex gap-2">
-            {(['dark', 'light', 'system'] as const).map((theme) => (
-              <button
-                key={theme}
-                onClick={() => handleThemeChange(theme)}
-                className={`px-4 py-2 rounded-lg text-sm capitalize transition-colors ${
-                  settings?.theme === theme
-                    ? 'bg-[var(--color-accent)] text-white'
-                    : 'bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-active)]'
-                }`}
-              >
-                {theme}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      <Paper variant="outlined" sx={{ p: 2.5 }}>
+        <Typography fontWeight={500} gutterBottom>Appearance</Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          Theme
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {(['dark', 'light', 'system'] as const).map((theme) => (
+            <Button
+              key={theme}
+              variant={settings?.theme === theme ? 'contained' : 'outlined'}
+              size="small"
+              onClick={() => handleThemeChange(theme)}
+              sx={{ textTransform: 'capitalize' }}
+            >
+              {theme}
+            </Button>
+          ))}
+        </Box>
+      </Paper>
 
       {/* Sync Settings */}
-      <div className="p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
-        <h3 className="font-medium text-[var(--color-text-primary)] mb-3">Sync</h3>
-        <div className="space-y-3">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings?.autoSyncOnStart ?? true}
-              onChange={(e) => {
-                window.electronAPI.invoke('storage:set', 'settings', {
-                  autoSyncOnStart: e.target.checked
-                })
-                setSettings((prev) =>
-                  prev ? { ...prev, autoSyncOnStart: e.target.checked } : null
-                )
-              }}
-              className="w-4 h-4 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
-            />
-            <span className="text-sm text-[var(--color-text-secondary)]">
-              Auto-sync on app start
-            </span>
-          </label>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings?.showSyncStatus ?? true}
-              onChange={(e) => {
-                window.electronAPI.invoke('storage:set', 'settings', {
-                  showSyncStatus: e.target.checked
-                })
-                setSettings((prev) =>
-                  prev ? { ...prev, showSyncStatus: e.target.checked } : null
-                )
-              }}
-              className="w-4 h-4 rounded border-[var(--color-border)] text-[var(--color-accent)] focus:ring-[var(--color-accent)]"
-            />
-            <span className="text-sm text-[var(--color-text-secondary)]">
-              Show sync status indicator
-            </span>
-          </label>
-        </div>
-      </div>
-    </div>
+      <Paper variant="outlined" sx={{ p: 2.5 }}>
+        <Typography fontWeight={500} gutterBottom>Sync</Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={settings?.autoSyncOnStart ?? true}
+                onChange={(e) => {
+                  window.electronAPI.invoke('storage:set', 'settings', {
+                    autoSyncOnStart: e.target.checked
+                  })
+                  setSettings((prev) =>
+                    prev ? { ...prev, autoSyncOnStart: e.target.checked } : null
+                  )
+                }}
+                size="small"
+              />
+            }
+            label={<Typography variant="body2">Auto-sync on app start</Typography>}
+          />
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={settings?.showSyncStatus ?? true}
+                onChange={(e) => {
+                  window.electronAPI.invoke('storage:set', 'settings', {
+                    showSyncStatus: e.target.checked
+                  })
+                  setSettings((prev) =>
+                    prev ? { ...prev, showSyncStatus: e.target.checked } : null
+                  )
+                }}
+                size="small"
+              />
+            }
+            label={<Typography variant="body2">Show sync status indicator</Typography>}
+          />
+        </Box>
+      </Paper>
+    </Box>
   )
 
   const renderGoogleAccountSection = (): ReactElement => (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-1">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box>
+        <Typography variant="h6" fontWeight={600} gutterBottom>
           Google Account
-        </h2>
-        <p className="text-sm text-[var(--color-text-secondary)]">
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
           Manage your connected Google account for Drive storage.
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
-      <div className="p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
+      <Paper variant="outlined" sx={{ p: 2.5 }}>
         {user ? (
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
               {user.picture && (
-                <img
-                  src={user.picture}
-                  alt={user.name}
-                  className="w-12 h-12 rounded-full"
-                />
+                <Avatar src={user.picture} alt={user.name} sx={{ width: 48, height: 48 }} />
               )}
-              <div>
-                <p className="font-medium text-[var(--color-text-primary)]">{user.name}</p>
-                <p className="text-sm text-[var(--color-text-secondary)]">{user.email}</p>
-              </div>
-            </div>
-            <div className="pt-4 border-t border-[var(--color-border)]">
-              <button
-                onClick={logout}
-                className="px-4 py-2 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] text-sm hover:bg-[var(--color-error)]/20 transition-colors"
-              >
-                Sign out
-              </button>
-            </div>
-          </div>
+              <Box>
+                <Typography fontWeight={500}>{user.name}</Typography>
+                <Typography variant="body2" color="text.secondary">{user.email}</Typography>
+              </Box>
+            </Box>
+            <Divider sx={{ my: 2 }} />
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              onClick={logout}
+            >
+              Sign out
+            </Button>
+          </Box>
         ) : (
-          <div className="text-center py-4">
-            <p className="text-[var(--color-text-muted)] mb-4">No account connected</p>
-            <p className="text-sm text-[var(--color-text-secondary)]">
+          <Box sx={{ textAlign: 'center', py: 2 }}>
+            <Typography color="text.secondary" gutterBottom>No account connected</Typography>
+            <Typography variant="body2" color="text.secondary">
               Sign in from the Dashboard to connect your Google account.
-            </p>
-          </div>
+            </Typography>
+          </Box>
         )}
-      </div>
-    </div>
+      </Paper>
+    </Box>
   )
 
   const renderAboutSection = (): ReactElement => (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl font-semibold text-[var(--color-text-primary)] mb-1">About</h2>
-        <p className="text-sm text-[var(--color-text-secondary)]">
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box>
+        <Typography variant="h6" fontWeight={600} gutterBottom>
+          About
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
           Information about TeachingHelp.
-        </p>
-      </div>
+        </Typography>
+      </Box>
 
-      <div className="p-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)]">
-        <div className="flex items-center gap-4 mb-4">
-          <div className="w-12 h-12 rounded-lg bg-[var(--color-accent)] flex items-center justify-center">
-            <svg
-              className="w-8 h-8 text-white"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
-              />
-            </svg>
-          </div>
-          <div>
-            <h3 className="font-semibold text-[var(--color-text-primary)]">TeachingHelp</h3>
-            <p className="text-sm text-[var(--color-text-secondary)]">Version 0.1.0</p>
-          </div>
-        </div>
+      <Paper variant="outlined" sx={{ p: 2.5 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+          <Box
+            sx={{
+              width: 48,
+              height: 48,
+              borderRadius: 2,
+              bgcolor: 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <MenuBookIcon sx={{ fontSize: 28, color: 'primary.contrastText' }} />
+          </Box>
+          <Box>
+            <Typography fontWeight={600}>TeachingHelp</Typography>
+            <Typography variant="body2" color="text.secondary">Version 0.1.0</Typography>
+          </Box>
+        </Box>
 
-        <p className="text-sm text-[var(--color-text-secondary)] mb-4">
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           An AI-powered desktop application designed to help teachers create lesson plans,
           generate tests, and grade assessments efficiently.
-        </p>
+        </Typography>
 
-        <div className="space-y-2 text-sm text-[var(--color-text-muted)]">
-          <p>Built with Electron, React, and TypeScript</p>
-          <p>Platform: {window.electronAPI.platform}</p>
-        </div>
-      </div>
-    </div>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            Built with Electron, React, and TypeScript
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            Platform: {window.electronAPI.platform}
+          </Typography>
+        </Box>
+      </Paper>
+    </Box>
   )
 
   const renderContent = (): ReactElement => {
@@ -633,23 +681,25 @@ export function SettingsPage(): ReactElement {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="w-8 h-8 border-2 border-[var(--color-accent)] border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-[var(--color-text-muted)]">Loading settings...</p>
-        </div>
-      </div>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
+        <Box sx={{ textAlign: 'center' }}>
+          <CircularProgress sx={{ mb: 2 }} />
+          <Typography color="text.secondary">Loading settings...</Typography>
+        </Box>
+      </Box>
     )
   }
 
   return (
-    <div className="h-full">
-      <h1 className="text-2xl font-bold text-[var(--color-text-primary)] mb-6">Settings</h1>
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h5" fontWeight={700} sx={{ mb: 3 }}>
+        Settings
+      </Typography>
 
-      <div className="flex gap-6">
+      <Box sx={{ display: 'flex', gap: 3 }}>
         {renderSidebar()}
-        <div className="flex-1 min-w-0">{renderContent()}</div>
-      </div>
-    </div>
+        <Box sx={{ flex: 1, minWidth: 0 }}>{renderContent()}</Box>
+      </Box>
+    </Box>
   )
 }

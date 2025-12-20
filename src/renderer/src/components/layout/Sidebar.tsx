@@ -1,27 +1,29 @@
 import type { ReactElement } from 'react'
 import { useEffect, useState, useCallback } from 'react'
-import {
-  Home,
-  Settings,
-  ChevronLeft,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
-  BookOpen,
-  Users,
-  Plus
-} from 'lucide-react'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import IconButton from '@mui/material/IconButton'
+import List from '@mui/material/List'
+import ListItem from '@mui/material/ListItem'
+import ListItemButton from '@mui/material/ListItemButton'
+import ListItemIcon from '@mui/material/ListItemIcon'
+import ListItemText from '@mui/material/ListItemText'
+import Collapse from '@mui/material/Collapse'
+import Chip from '@mui/material/Chip'
+import CircularProgress from '@mui/material/CircularProgress'
+import MuiTooltip from '@mui/material/Tooltip'
+import HomeIcon from '@mui/icons-material/Home'
+import SettingsIcon from '@mui/icons-material/Settings'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
+import PeopleIcon from '@mui/icons-material/People'
+import AddIcon from '@mui/icons-material/Add'
 import { useCourseStore, useUIStore, useAuthStore } from '../../stores'
 import type { CourseSummary, SectionSummary, ServiceResult } from '../../../../shared/types'
-import { cn } from '@/lib/utils'
-import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from '@/components/ui/tooltip'
 
 export type NavItem =
   | 'dashboard'
@@ -152,114 +154,138 @@ export function Sidebar({
   }
 
   return (
-    <TooltipProvider delayDuration={0}>
-      <aside
-        className={cn(
-          'flex flex-col h-full bg-sidebar border-r border-sidebar-border transition-all duration-200 ease-out',
-          isExpanded ? 'w-[240px]' : 'w-[60px]'
-        )}
+    <Box
+      component="aside"
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        bgcolor: 'background.paper',
+        borderRight: 1,
+        borderColor: 'divider',
+        transition: 'width 0.2s ease-out',
+        width: isExpanded ? 240 : 60,
+        overflow: 'hidden'
+      }}
+    >
+      {/* Header with app name and toggle */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          height: 56,
+          px: 1.5,
+          borderBottom: 1,
+          borderColor: 'divider'
+        }}
       >
-        {/* Header with app name and toggle */}
-        <div className="flex items-center h-14 px-3 border-b border-sidebar-border">
-          {isExpanded ? (
-            <>
-              <span className="flex-1 text-sm font-semibold text-sidebar-foreground">
-                TeachingHelp
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onToggle}
-                className="h-8 w-8 text-muted-foreground hover:text-sidebar-foreground"
-              >
-                <ChevronLeft size={18} />
-                <span className="sr-only">Collapse sidebar</span>
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onToggle}
-              className="w-full h-8 text-muted-foreground hover:text-sidebar-foreground"
+        {isExpanded ? (
+          <>
+            <Typography
+              variant="subtitle2"
+              sx={{ flex: 1, fontWeight: 600, color: 'text.primary' }}
             >
-              <ChevronRight size={18} />
-              <span className="sr-only">Expand sidebar</span>
-            </Button>
-          )}
-        </div>
+              TeachingHelp
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={onToggle}
+              sx={{ color: 'text.secondary' }}
+            >
+              <ChevronLeftIcon fontSize="small" />
+            </IconButton>
+          </>
+        ) : (
+          <IconButton
+            size="small"
+            onClick={onToggle}
+            sx={{ width: '100%', color: 'text.secondary' }}
+          >
+            <ChevronRightIcon fontSize="small" />
+          </IconButton>
+        )}
+      </Box>
 
-        {/* Dashboard link */}
-        <div className="py-2 border-b border-sidebar-border">
-          <NavButton
-            icon={<Home size={20} />}
-            label="Dashboard"
-            isExpanded={isExpanded}
-            isActive={activeItem === 'dashboard' && !currentCourse}
-            onClick={() => onNavigate('dashboard')}
-          />
-        </div>
+      {/* Dashboard link */}
+      <Box sx={{ py: 1, borderBottom: 1, borderColor: 'divider' }}>
+        <NavButton
+          icon={<HomeIcon />}
+          label="Dashboard"
+          isExpanded={isExpanded}
+          isActive={activeItem === 'dashboard' && !currentCourse}
+          onClick={() => onNavigate('dashboard')}
+        />
+      </Box>
 
-        {/* Courses section */}
-        <ScrollArea className="flex-1">
-          {isExpanded && (
-            <div className="px-3 py-2">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Courses
-              </span>
-            </div>
-          )}
+      {/* Courses section */}
+      <ScrollArea sx={{ flex: 1 }}>
+        {isExpanded && (
+          <Box sx={{ px: 2, py: 1.5 }}>
+            <Typography
+              variant="caption"
+              sx={{
+                fontWeight: 600,
+                color: 'text.secondary',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}
+            >
+              Courses
+            </Typography>
+          </Box>
+        )}
 
-          {isLoggedIn ? (
-            <div className="py-1">
-              {courses.map((course) => (
-                <CourseItem
-                  key={course.id}
-                  course={course}
-                  isExpanded={isExpanded}
-                  isCourseExpanded={expandedCourses.has(course.id)}
-                  isSelected={currentCourse?.id === course.id}
-                  sections={getSectionsForCourse(course.id)}
-                  loadingSections={loadingSections === course.id}
-                  onToggleExpand={() => handleCourseClick(course)}
-                  onCourseClick={() => handleCourseNavigate(course)}
-                  onSectionClick={handleSectionClick}
-                />
-              ))}
+        {isLoggedIn ? (
+          <List disablePadding sx={{ py: 0.5 }}>
+            {courses.map((course) => (
+              <CourseItem
+                key={course.id}
+                course={course}
+                isExpanded={isExpanded}
+                isCourseExpanded={expandedCourses.has(course.id)}
+                isSelected={currentCourse?.id === course.id}
+                sections={getSectionsForCourse(course.id)}
+                loadingSections={loadingSections === course.id}
+                onToggleExpand={() => handleCourseClick(course)}
+                onCourseClick={() => handleCourseNavigate(course)}
+                onSectionClick={handleSectionClick}
+              />
+            ))}
 
-              {/* New Course button */}
-              {onNewCourse && (
-                <NavButton
-                  icon={<Plus size={20} />}
-                  label="New Course"
-                  isExpanded={isExpanded}
-                  isActive={false}
-                  onClick={onNewCourse}
-                  variant="accent"
-                />
-              )}
-            </div>
-          ) : (
-            isExpanded && (
-              <div className="px-3 py-4 text-center">
-                <p className="text-sm text-muted-foreground">Sign in to view your courses</p>
-              </div>
-            )
-          )}
-        </ScrollArea>
+            {/* New Course button */}
+            {onNewCourse && (
+              <NavButton
+                icon={<AddIcon />}
+                label="New Course"
+                isExpanded={isExpanded}
+                isActive={false}
+                onClick={onNewCourse}
+                variant="accent"
+              />
+            )}
+          </List>
+        ) : (
+          isExpanded && (
+            <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary">
+                Sign in to view your courses
+              </Typography>
+            </Box>
+          )
+        )}
+      </ScrollArea>
 
-        {/* Settings at bottom */}
-        <div className="py-2 border-t border-sidebar-border">
-          <NavButton
-            icon={<Settings size={20} />}
-            label="Settings"
-            isExpanded={isExpanded}
-            isActive={activeItem === 'settings'}
-            onClick={() => onNavigate('settings')}
-          />
-        </div>
-      </aside>
-    </TooltipProvider>
+      {/* Settings at bottom */}
+      <Box sx={{ py: 1, borderTop: 1, borderColor: 'divider' }}>
+        <NavButton
+          icon={<SettingsIcon />}
+          label="Settings"
+          isExpanded={isExpanded}
+          isActive={activeItem === 'settings'}
+          onClick={() => onNavigate('settings')}
+        />
+      </Box>
+    </Box>
   )
 }
 
@@ -281,31 +307,56 @@ function NavButton({
   variant = 'default'
 }: NavButtonProps): ReactElement {
   const button = (
-    <button
-      onClick={onClick}
-      className={cn(
-        'flex items-center w-full h-10 px-3 gap-3 text-left transition-colors duration-150 rounded-md mx-1',
-        isExpanded ? 'w-[calc(100%-8px)]' : 'w-[calc(100%-8px)] justify-center',
-        isActive
-          ? 'bg-sidebar-accent text-primary'
-          : variant === 'accent'
-            ? 'text-primary hover:bg-sidebar-accent'
-            : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
-      )}
-    >
-      <span className="flex-shrink-0">{icon}</span>
-      {isExpanded && <span className="truncate text-sm font-medium">{label}</span>}
-    </button>
+    <ListItem disablePadding sx={{ px: 0.5 }}>
+      <ListItemButton
+        onClick={onClick}
+        selected={isActive}
+        sx={{
+          minHeight: 40,
+          borderRadius: 1,
+          justifyContent: isExpanded ? 'initial' : 'center',
+          px: isExpanded ? 1.5 : 1,
+          color: variant === 'accent' ? 'primary.main' : 'text.secondary',
+          '&.Mui-selected': {
+            bgcolor: 'action.selected',
+            color: 'primary.main',
+            '&:hover': {
+              bgcolor: 'action.selected'
+            }
+          },
+          '&:hover': {
+            bgcolor: 'action.hover'
+          }
+        }}
+      >
+        <ListItemIcon
+          sx={{
+            minWidth: 0,
+            mr: isExpanded ? 1.5 : 0,
+            justifyContent: 'center',
+            color: 'inherit'
+          }}
+        >
+          {icon}
+        </ListItemIcon>
+        {isExpanded && (
+          <ListItemText
+            primary={label}
+            primaryTypographyProps={{
+              variant: 'body2',
+              fontWeight: 500
+            }}
+          />
+        )}
+      </ListItemButton>
+    </ListItem>
   )
 
   if (!isExpanded) {
     return (
-      <Tooltip>
-        <TooltipTrigger asChild>{button}</TooltipTrigger>
-        <TooltipContent side="right" sideOffset={10}>
-          {label}
-        </TooltipContent>
-      </Tooltip>
+      <MuiTooltip title={label} placement="right" arrow>
+        {button}
+      </MuiTooltip>
     )
   }
 
@@ -338,93 +389,157 @@ function CourseItem({
   if (!isExpanded) {
     // Collapsed view - just show icon with tooltip
     return (
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
+      <MuiTooltip title={course.name} placement="right" arrow>
+        <ListItem disablePadding sx={{ px: 0.5 }}>
+          <ListItemButton
             onClick={onCourseClick}
-            className={cn(
-              'flex items-center justify-center w-[calc(100%-8px)] h-10 mx-1 rounded-md transition-colors duration-150',
-              isSelected
-                ? 'bg-sidebar-accent text-primary'
-                : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
-            )}
+            selected={isSelected}
+            sx={{
+              minHeight: 40,
+              borderRadius: 1,
+              justifyContent: 'center',
+              px: 1,
+              '&.Mui-selected': {
+                bgcolor: 'action.selected',
+                color: 'primary.main',
+                '&:hover': {
+                  bgcolor: 'action.selected'
+                }
+              }
+            }}
           >
-            <BookOpen size={20} />
-          </button>
-        </TooltipTrigger>
-        <TooltipContent side="right" sideOffset={10}>
-          {course.name}
-        </TooltipContent>
-      </Tooltip>
+            <ListItemIcon
+              sx={{
+                minWidth: 0,
+                justifyContent: 'center',
+                color: isSelected ? 'primary.main' : 'text.secondary'
+              }}
+            >
+              <MenuBookIcon />
+            </ListItemIcon>
+          </ListItemButton>
+        </ListItem>
+      </MuiTooltip>
     )
   }
 
   // Expanded view
   return (
-    <div>
-      <div
-        className={cn(
-          'flex items-center w-[calc(100%-8px)] h-10 px-3 gap-2 mx-1 rounded-md transition-colors duration-150 cursor-pointer',
-          isSelected
-            ? 'bg-sidebar-accent text-primary'
-            : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground'
-        )}
+    <Box>
+      <ListItem
+        disablePadding
+        sx={{ px: 0.5 }}
+        secondaryAction={
+          course.sectionCount > 0 ? (
+            <Chip
+              label={course.sectionCount}
+              size="small"
+              sx={{
+                height: 20,
+                fontSize: '0.7rem',
+                mr: 0.5
+              }}
+            />
+          ) : undefined
+        }
       >
-        {/* Expand/collapse toggle */}
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onToggleExpand()
+        <ListItemButton
+          selected={isSelected}
+          sx={{
+            minHeight: 40,
+            borderRadius: 1,
+            pr: course.sectionCount > 0 ? 5 : 1.5,
+            '&.Mui-selected': {
+              bgcolor: 'action.selected',
+              color: 'primary.main',
+              '&:hover': {
+                bgcolor: 'action.selected'
+              }
+            }
           }}
-          className="p-0.5 rounded hover:bg-sidebar-accent transition-colors"
-          aria-label={isCourseExpanded ? 'Collapse' : 'Expand'}
         >
-          {isCourseExpanded ? (
-            <ChevronDown size={16} />
-          ) : (
-            <ChevronUp size={16} className="rotate-180" />
-          )}
-        </button>
+          {/* Expand/collapse toggle */}
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleExpand()
+            }}
+            sx={{ mr: 0.5, p: 0.25 }}
+          >
+            {isCourseExpanded ? (
+              <ExpandLessIcon fontSize="small" />
+            ) : (
+              <ExpandMoreIcon fontSize="small" />
+            )}
+          </IconButton>
 
-        {/* Course name - clickable */}
-        <button onClick={onCourseClick} className="flex-1 text-left truncate text-sm font-medium">
-          {course.name}
-        </button>
-
-        {/* Section count badge */}
-        {course.sectionCount > 0 && (
-          <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
-            {course.sectionCount}
-          </span>
-        )}
-      </div>
+          {/* Course name - clickable */}
+          <ListItemText
+            primary={course.name}
+            onClick={onCourseClick}
+            primaryTypographyProps={{
+              variant: 'body2',
+              fontWeight: 500,
+              noWrap: true,
+              sx: { cursor: 'pointer' }
+            }}
+          />
+        </ListItemButton>
+      </ListItem>
 
       {/* Sections list */}
-      {isCourseExpanded && (
-        <div className="ml-5 pl-3 border-l border-sidebar-border">
+      <Collapse in={isCourseExpanded} timeout="auto" unmountOnExit>
+        <Box sx={{ ml: 2.5, pl: 1.5, borderLeft: 1, borderColor: 'divider' }}>
           {loadingSections ? (
-            <div className="px-3 py-2">
-              <span className="text-xs text-muted-foreground">Loading...</span>
-            </div>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 1.5, py: 1 }}>
+              <CircularProgress size={14} />
+              <Typography variant="caption" color="text.secondary">
+                Loading...
+              </Typography>
+            </Box>
           ) : sections.length > 0 ? (
-            sections.map((section) => (
-              <button
-                key={section.id}
-                onClick={() => onSectionClick(section)}
-                className="flex items-center w-full h-9 pl-2 pr-3 gap-2 text-left transition-colors duration-150 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground rounded-md"
-              >
-                <Users size={14} className="flex-shrink-0 opacity-60" />
-                <span className="flex-1 truncate text-sm">{section.name}</span>
-                <span className="text-xs opacity-60">{section.studentCount}</span>
-              </button>
-            ))
+            <List disablePadding>
+              {sections.map((section) => (
+                <ListItem key={section.id} disablePadding>
+                  <ListItemButton
+                    onClick={() => onSectionClick(section)}
+                    sx={{
+                      minHeight: 36,
+                      borderRadius: 1,
+                      py: 0.5
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 28, color: 'text.disabled' }}>
+                      <PeopleIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={section.name}
+                      primaryTypographyProps={{
+                        variant: 'body2',
+                        noWrap: true
+                      }}
+                    />
+                    <Typography
+                      variant="caption"
+                      color="text.disabled"
+                      sx={{ ml: 1 }}
+                    >
+                      {section.studentCount}
+                    </Typography>
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
           ) : (
-            <div className="px-3 py-2">
-              <span className="text-xs text-muted-foreground">No sections</span>
-            </div>
+            <Box sx={{ px: 1.5, py: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                No sections
+              </Typography>
+            </Box>
           )}
-        </div>
-      )}
-    </div>
+        </Box>
+      </Collapse>
+    </Box>
   )
 }

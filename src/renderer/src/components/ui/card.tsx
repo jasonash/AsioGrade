@@ -1,92 +1,163 @@
-import * as React from "react"
+import * as React from 'react'
+import MuiCard, { type CardProps as MuiCardProps } from '@mui/material/Card'
+import MuiCardContent from '@mui/material/CardContent'
+import MuiCardActions from '@mui/material/CardActions'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import type { SxProps, Theme } from '@mui/material/styles'
 
-import { cn } from "@/lib/utils"
+interface CardProps extends MuiCardProps {
+  className?: string
+}
 
-function Card({ className, ...props }: React.ComponentProps<"div">) {
+const Card = React.forwardRef<HTMLDivElement, CardProps>(({ sx, className, ...props }, ref) => {
   return (
-    <div
-      data-slot="card"
-      className={cn(
-        "bg-card text-card-foreground flex flex-col gap-6 rounded-xl border border-border py-6 shadow-sm",
-        className
-      )}
+    <MuiCard
+      ref={ref}
+      variant="outlined"
+      className={className}
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        ...sx
+      }}
       {...props}
     />
   )
+})
+Card.displayName = 'Card'
+
+interface CardHeaderProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
 }
 
-function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
+function CardHeader({ children, className, sx }: CardHeaderProps) {
   return (
-    <div
-      data-slot="card-header"
-      className={cn(
-        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-2 px-6 has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-6",
-        className
-      )}
-      {...props}
-    />
+    <Box
+      className={className}
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0.5,
+        p: 2,
+        pb: 0,
+        ...sx
+      }}
+    >
+      {children}
+    </Box>
   )
 }
 
-function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+interface CardTitleProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function CardTitle({ children, className, sx }: CardTitleProps) {
   return (
-    <div
-      data-slot="card-title"
-      className={cn("leading-none font-semibold", className)}
-      {...props}
-    />
+    <Typography
+      variant="h6"
+      component="div"
+      className={className}
+      sx={{
+        fontWeight: 600,
+        lineHeight: 1.2,
+        ...sx
+      }}
+    >
+      {children}
+    </Typography>
   )
 }
 
-function CardDescription({ className, ...props }: React.ComponentProps<"div">) {
+interface CardDescriptionProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function CardDescription({ children, className, sx }: CardDescriptionProps) {
   return (
-    <div
-      data-slot="card-description"
-      className={cn("text-muted-foreground text-sm", className)}
-      {...props}
-    />
+    <Typography
+      variant="body2"
+      color="text.secondary"
+      className={className}
+      sx={sx}
+    >
+      {children}
+    </Typography>
   )
 }
 
-function CardAction({ className, ...props }: React.ComponentProps<"div">) {
+interface CardActionProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function CardAction({ children, className, sx }: CardActionProps) {
   return (
-    <div
-      data-slot="card-action"
-      className={cn(
-        "col-start-2 row-span-2 row-start-1 self-start justify-self-end",
-        className
-      )}
-      {...props}
-    />
+    <Box
+      className={className}
+      sx={{
+        position: 'absolute',
+        top: 16,
+        right: 16,
+        ...sx
+      }}
+    >
+      {children}
+    </Box>
   )
 }
 
-function CardContent({ className, ...props }: React.ComponentProps<"div">) {
+interface CardContentProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function CardContent({ children, className, sx }: CardContentProps) {
   return (
-    <div
-      data-slot="card-content"
-      className={cn("px-6", className)}
-      {...props}
-    />
+    <MuiCardContent className={className} sx={{ p: 2, '&:last-child': { pb: 2 }, ...sx }}>
+      {children}
+    </MuiCardContent>
   )
 }
 
-function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
+interface CardFooterProps {
+  children?: React.ReactNode
+  className?: string
+  sx?: SxProps<Theme>
+}
+
+function CardFooter({ children, className, sx }: CardFooterProps) {
   return (
-    <div
-      data-slot="card-footer"
-      className={cn("flex items-center px-6 [.border-t]:pt-6", className)}
-      {...props}
-    />
+    <MuiCardActions
+      className={className}
+      sx={{
+        p: 2,
+        pt: 0,
+        justifyContent: 'flex-start',
+        ...sx
+      }}
+    >
+      {children}
+    </MuiCardActions>
   )
 }
 
-export {
-  Card,
-  CardHeader,
-  CardFooter,
-  CardTitle,
-  CardAction,
-  CardDescription,
-  CardContent,
+export { Card, CardHeader, CardFooter, CardTitle, CardAction, CardDescription, CardContent }
+export type {
+  CardProps,
+  CardHeaderProps,
+  CardTitleProps,
+  CardDescriptionProps,
+  CardActionProps,
+  CardContentProps,
+  CardFooterProps
 }
