@@ -9,14 +9,17 @@ import Paper from '@mui/material/Paper'
 import List from '@mui/material/List'
 import ListItem from '@mui/material/ListItem'
 import ListItemText from '@mui/material/ListItemText'
+import Divider from '@mui/material/Divider'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import PrintIcon from '@mui/icons-material/Print'
 import DeleteIcon from '@mui/icons-material/Delete'
 import PeopleIcon from '@mui/icons-material/People'
 import QuizIcon from '@mui/icons-material/Quiz'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
-import { useAssignmentStore, useRosterStore } from '../stores'
+import GradingIcon from '@mui/icons-material/Grading'
+import { useAssignmentStore, useRosterStore, useGradeStore } from '../stores'
 import { ScantronGenerationModal } from '../components/assignments'
+import { ScantronUploadModal, GradeReviewPanel } from '../components/grades'
 import { ConfirmModal } from '../components/ui'
 import type {
   CourseSummary,
@@ -80,21 +83,31 @@ export function AssignmentViewPage({
     clearError
   } = useAssignmentStore()
   const { roster, fetchRoster } = useRosterStore()
+  const { currentGrades, clearGrades, setContext } = useGradeStore()
 
   const [isScantronModalOpen, setIsScantronModalOpen] = useState(false)
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [showGradeReview, setShowGradeReview] = useState(false)
 
   // Fetch full assignment and roster when page loads
   useEffect(() => {
     getAssignment(assignmentSummary.id)
     fetchRoster(section.id)
+    setContext(assignmentSummary.id, section.id)
     return () => {
       setCurrentAssignment(null)
       clearError()
+      clearGrades()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentSummary.id, section.id])
+
+  // Handle processing complete
+  const handleProcessingComplete = (): void => {
+    setShowGradeReview(true)
+  }
 
   const handleDelete = async (): Promise<void> => {
     setIsDeleting(true)
@@ -155,6 +168,14 @@ export function AssignmentViewPage({
               onClick={() => setIsScantronModalOpen(true)}
             >
               Generate Scantrons
+            </Button>
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<GradingIcon />}
+              onClick={() => setIsUploadModalOpen(true)}
+            >
+              Grade Scantrons
             </Button>
             <Button
               variant="outlined"
@@ -264,11 +285,43 @@ export function AssignmentViewPage({
         </Box>
       )}
 
+      {/* Grade Review Panel */}
+      {(showGradeReview || currentGrades) && roster && (
+        <>
+          <Divider sx={{ my: 2 }} />
+          <Paper variant="outlined" sx={{ p: 3 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Typography variant="h6" fontWeight={600}>
+                Grade Review
+              </Typography>
+              {!currentGrades && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => setShowGradeReview(false)}
+                >
+                  Hide
+                </Button>
+              )}
+            </Box>
+            <GradeReviewPanel students={roster.students} />
+          </Paper>
+        </>
+      )}
+
       {/* Scantron Generation Modal */}
       <ScantronGenerationModal
         isOpen={isScantronModalOpen}
         onClose={() => setIsScantronModalOpen(false)}
         assignment={assignmentSummary}
+      />
+
+      {/* Scantron Upload Modal */}
+      <ScantronUploadModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        assignment={assignment}
+        onProcessingComplete={handleProcessingComplete}
       />
 
       {/* Delete Confirmation Modal */}

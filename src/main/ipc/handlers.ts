@@ -25,7 +25,9 @@ import {
   ScantronStudentInfo
 } from '../../shared/types'
 import { pdfService } from '../services/pdf.service'
+import { gradeService } from '../services/grade.service'
 import { LLMRequest, LLMProviderType } from '../../shared/types/llm.types'
+import { GradeProcessRequest, SaveGradesInput, AssignmentGrades, GradeOverride } from '../../shared/types'
 
 /**
  * Register all IPC handlers for the main process
@@ -50,8 +52,8 @@ export function registerIpcHandlers(): void {
   // PDF handlers
   registerPDFHandlers()
 
-  // Future handlers will be registered here:
-  // registerGradeHandlers()
+  // Grade handlers
+  registerGradeHandlers()
 }
 
 function registerAuthHandlers(): void {
@@ -687,4 +689,42 @@ function registerPDFHandlers(): void {
       return { success: false, error: message }
     }
   })
+}
+
+function registerGradeHandlers(): void {
+  // ============================================================
+  // Grade Operations
+  // ============================================================
+
+  // Process scantron PDF and extract grades
+  ipcMain.handle('grade:processScantron', async (_event, request: GradeProcessRequest) => {
+    return gradeService.processScantronPDF(request)
+  })
+
+  // Save grades to Google Drive
+  ipcMain.handle('grade:saveGrades', async (_event, input: SaveGradesInput) => {
+    return gradeService.saveGrades(input)
+  })
+
+  // Get existing grades for an assignment
+  ipcMain.handle(
+    'grade:getGrades',
+    async (_event, assignmentId: string, sectionId: string) => {
+      return gradeService.getGrades(assignmentId, sectionId)
+    }
+  )
+
+  // Apply overrides to grades
+  ipcMain.handle(
+    'grade:applyOverrides',
+    async (_event, grades: AssignmentGrades, overrides: GradeOverride[]) => {
+      try {
+        const updated = gradeService.applyOverrides(grades, overrides)
+        return { success: true, data: updated }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to apply overrides'
+        return { success: false, error: message }
+      }
+    }
+  )
 }

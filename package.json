@@ -64,6 +64,7 @@
     "opencv-wasm": "^4.3.0-10",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^5.4.449",
     "pdfkit": "^0.17.2",
     "qrcode": "^1.5.4",
     "react": "^19.2.3",

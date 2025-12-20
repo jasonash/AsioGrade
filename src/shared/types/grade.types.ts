@@ -1,0 +1,273 @@
+/**
+ * Grade type definitions for the grading engine
+ *
+ * Types for processing scantrons, storing grades, and analyzing results.
+ */
+
+import type { QuestionType } from './question.types'
+import type { VersionId } from './assignment.types'
+import type { ScantronQRData } from './scantron.types'
+
+// ============================================================
+// Grade Flag Types
+// ============================================================
+
+/**
+ * Types of flags that can be raised during grading
+ */
+export type GradeFlagType =
+  | 'multiple_bubbles'
+  | 'no_answer'
+  | 'qr_error'
+  | 'variant_mismatch'
+  | 'low_confidence'
+  | 'student_not_found'
+
+/**
+ * Flag indicating an issue with a graded answer
+ */
+export interface GradeFlag {
+  type: GradeFlagType
+  questionNumber?: number
+  message: string
+}
+
+// ============================================================
+// Answer Result Types
+// ============================================================
+
+/**
+ * Result for a single question in a grade record
+ */
+export interface AnswerResult {
+  questionNumber: number
+  questionId: string
+  questionType: QuestionType
+  selected: string | string[] | boolean | number | null
+  confidence: number
+  correct: boolean
+  partialCredit?: number
+  multipleSelected: boolean
+  unclear: boolean
+}
+
+// ============================================================
+// Grade Record Types
+// ============================================================
+
+/**
+ * Complete grade record for a single student
+ */
+export interface GradeRecord {
+  id: string
+  studentId: string
+  assignmentId: string
+  variantId?: string
+  versionId: VersionId
+
+  gradedAt: string
+  scannedAt: string
+
+  rawScore: number
+  totalQuestions: number
+  percentage: number
+  points: number
+  maxPoints: number
+
+  answers: AnswerResult[]
+
+  flags: GradeFlag[]
+  needsReview: boolean
+  reviewNotes?: string
+
+  scantronPageNumber: number
+  scantronFileId?: string
+}
+
+/**
+ * Lightweight grade record for list views
+ */
+export interface GradeRecordSummary {
+  id: string
+  studentId: string
+  rawScore: number
+  totalQuestions: number
+  percentage: number
+  needsReview: boolean
+  flagCount: number
+}
+
+// ============================================================
+// Grade Statistics Types
+// ============================================================
+
+/**
+ * Statistics for variant-level analysis
+ */
+export interface VariantStats {
+  count: number
+  average: number
+}
+
+/**
+ * Statistics for question-level analysis
+ */
+export interface QuestionStats {
+  correctCount: number
+  incorrectCount: number
+  skippedCount: number
+  percentCorrect: number
+}
+
+/**
+ * Statistics for standard-level analysis
+ */
+export interface StandardStats {
+  questionCount: number
+  averageCorrect: number
+}
+
+/**
+ * Aggregate statistics for an assignment's grades
+ */
+export interface GradeStats {
+  totalStudents: number
+  averageScore: number
+  medianScore: number
+  highScore: number
+  lowScore: number
+  standardDeviation: number
+
+  byVariant: Record<string, VariantStats>
+  byQuestion: Record<string, QuestionStats>
+  byStandard: Record<string, StandardStats>
+}
+
+// ============================================================
+// Assignment Grades Container
+// ============================================================
+
+/**
+ * Container for all grades for an assignment
+ * Stored in: sections/{sectionId}/grades/{assignmentId}-grades.json
+ */
+export interface AssignmentGrades {
+  assignmentId: string
+  sectionId: string
+  assessmentId: string
+  gradedAt: string
+
+  records: GradeRecord[]
+  stats: GradeStats
+}
+
+// ============================================================
+// Bubble Detection Types
+// ============================================================
+
+/**
+ * Detection result for a single bubble
+ */
+export interface BubbleDetection {
+  id: string // 'A', 'B', 'C', 'D'
+  filled: boolean
+  confidence: number
+  x: number
+  y: number
+  radius: number
+  fillPercentage: number
+}
+
+/**
+ * Detection result for a single question (all 4 bubbles)
+ */
+export interface DetectedBubble {
+  questionNumber: number
+  row: number
+  column: number
+  bubbles: BubbleDetection[]
+  selected: string | null // 'A', 'B', 'C', 'D', or null
+  multipleDetected: boolean
+}
+
+// ============================================================
+// Parsed Scantron Types
+// ============================================================
+
+/**
+ * Result of parsing a single scantron page
+ */
+export interface ParsedScantron {
+  pageNumber: number
+  success: boolean
+  qrData: ScantronQRData | null
+  qrError?: string
+  answers: DetectedBubble[]
+  confidence: number
+  processingTimeMs: number
+  flags: string[]
+  imageWidth: number
+  imageHeight: number
+}
+
+// ============================================================
+// IPC Request/Response Types
+// ============================================================
+
+/**
+ * Request to process a scantron PDF
+ */
+export interface GradeProcessRequest {
+  assignmentId: string
+  sectionId: string
+  pdfBase64: string // Base64 encoded PDF file
+}
+
+/**
+ * Result of processing a scantron PDF
+ */
+export interface GradeProcessResult {
+  success: boolean
+  error?: string
+  parsedPages: ParsedScantron[]
+  grades?: AssignmentGrades
+  flaggedRecords: GradeRecord[]
+  processingTimeMs: number
+}
+
+/**
+ * Override for a single answer in a grade record
+ */
+export interface GradeOverride {
+  recordId: string
+  questionNumber: number
+  newAnswer: string | null
+  reason?: string
+}
+
+/**
+ * Request to save grades to Google Drive
+ */
+export interface SaveGradesInput {
+  assignmentId: string
+  sectionId: string
+  grades: AssignmentGrades
+  overrides?: GradeOverride[]
+}
+
+// ============================================================
+// Bubble Detection Options
+// ============================================================
+
+/**
+ * Options for bubble detection algorithm
+ */
+export interface BubbleDetectionOptions {
+  minRadius?: number // Minimum bubble radius in pixels
+  maxRadius?: number // Maximum bubble radius in pixels
+  fillThreshold?: number // Fill percentage threshold (0-1, default 0.4)
+  confidenceThreshold?: number // Confidence threshold for flagging (0-1, default 0.7)
+}
+
+// Re-export ScantronQRData for convenience
+export type { ScantronQRData } from './scantron.types'

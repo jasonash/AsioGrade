@@ -83,9 +83,10 @@ type InvokeChannel =
   | 'pdf:generateScantron'
   | 'pdf:exportTest'
   // Grading
-  | 'grade:process'
-  | 'grade:exportToSheets'
-  | 'grade:analyzeTest'
+  | 'grade:processScantron'
+  | 'grade:saveGrades'
+  | 'grade:getGrades'
+  | 'grade:applyOverrides'
   // Window
   | 'window:openTestEditor'
   | 'window:openRoster'
