@@ -2,6 +2,8 @@
 CLAUDE.md
 docs/PROJECT_STATUS.md
 config/oauth.json
+docs/client_secret_*.json
+docs/GoogleOAuth.txt
 
 # Dependencies
 node_modules/
