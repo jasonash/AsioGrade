@@ -81,7 +81,7 @@ Academic Year (2024-2025)
 | Runtime | Electron | 28.x+ |
 | UI Framework | React | 18.x |
 | Language | TypeScript | 5.x (strict mode) |
-| Styling | Tailwind CSS | 4.x |
+| Styling | Material UI (Emotion) | 6.x |
 | State Management | Zustand | 4.x |
 | Build Tool | Vite | 5.x |
 | Packaging | Electron Builder | 24.x |

@@ -450,7 +450,7 @@ TeachingHelp addresses these pain points by providing an integrated workflow tha
 
 - **Runtime:** Electron (cross-platform: macOS, Windows, Linux)
 - **Frontend:** React + TypeScript
-- **Styling:** Tailwind CSS (or similar utility-first framework)
+- **Styling:** Material UI v6 with Emotion
 - **State Management:** React Context or Zustand
 - **Build Tool:** Vite or Electron Forge
 
@@ -624,7 +624,7 @@ Support for multiple providers (user provides API key):
 | Runtime | Electron |
 | UI Framework | React |
 | Language | TypeScript (strict mode) |
-| Styling | Tailwind CSS |
+| Styling | Material UI (Emotion) |
 | State | React Context / Zustand |
 | PDF Read | pdf-parse, pdfjs-dist |
 | PDF Write | pdfkit, puppeteer |

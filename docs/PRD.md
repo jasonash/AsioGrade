@@ -611,7 +611,7 @@ This data enables accurate grading without encoding instructional judgments into
 
 * **Runtime:** Electron (cross-platform desktop application supporting macOS, Windows, and Linux)  
 * **Frontend:** React \+ TypeScript  
-* **Styling:** Tailwind CSS (or similar utility-first framework)  
+* **Styling:** Material UI v6 with Emotion  
 * **State Management:** React Context or Zustand  
   **Build Tool:** Vite or Electron Forge
 
@@ -997,7 +997,7 @@ Success will be evaluated using a combination of efficiency, accuracy, and teach
 | Runtime | Electron |
 | UI Framework | React |
 | Language | TypeScript (strict mode) |
-| Styling | Tailwind CSS |
+| Styling | Material UI (Emotion) |
 | State | React Context / Zustand |
 | PDF Read | pdf-parse, pdfjs-dist |
 | PDF Write | pdfkit, puppeteer |
