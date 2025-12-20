@@ -55,9 +55,8 @@ const DEFAULT_DETECTION_OPTIONS: Required<BubbleDetectionOptions> = {
   confidenceThreshold: 0.7
 }
 
-// Configure pdfjs worker
-// Note: In Electron, we'll use the bundled worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = ''
+// Disable worker for Node.js environment
+// The worker is not needed in Node.js and causes issues
 
 interface CircleData {
   x: number
@@ -153,9 +152,14 @@ class GradeService {
   private async extractPagesAsImages(pdfBuffer: Buffer): Promise<Buffer[]> {
     const images: Buffer[] = []
 
-    // Load PDF document
+    // Load PDF document (disable worker for Node.js compatibility)
     const pdfData = new Uint8Array(pdfBuffer)
-    const pdf = await pdfjsLib.getDocument({ data: pdfData }).promise
+    const pdf = await pdfjsLib.getDocument({
+      data: pdfData,
+      useWorkerFetch: false,
+      isEvalSupported: false,
+      useSystemFonts: true
+    }).promise
 
     // Process each page
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
