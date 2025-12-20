@@ -11,8 +11,10 @@ import AddIcon from '@mui/icons-material/Add'
 import PeopleIcon from '@mui/icons-material/People'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import RoomIcon from '@mui/icons-material/Room'
-import { useCourseStore, useSectionStore } from '../stores'
+import MenuBookIcon from '@mui/icons-material/MenuBook'
+import { useCourseStore, useSectionStore, useStandardsStore } from '../stores'
 import { SectionCreationModal } from '../components/sections'
+import { StandardsImportModal } from '../components/standards'
 import type { SectionSummary } from '../../../shared/types'
 
 interface CourseViewPageProps {
@@ -22,18 +24,22 @@ interface CourseViewPageProps {
 export function CourseViewPage({ onSectionSelect }: CourseViewPageProps): ReactElement {
   const { currentCourse, setCurrentCourse } = useCourseStore()
   const { sections, loading, error, fetchSections, clearSections } = useSectionStore()
+  const { summary: standardsSummary, fetchSummary: fetchStandardsSummary, clearStandards } = useStandardsStore()
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isStandardsModalOpen, setIsStandardsModalOpen] = useState(false)
 
-  // Fetch sections when course changes
+  // Fetch sections and standards when course changes
   useEffect(() => {
     if (currentCourse?.id) {
       fetchSections(currentCourse.id)
+      fetchStandardsSummary(currentCourse.id)
     }
     return () => {
       clearSections()
+      clearStandards()
     }
-  }, [currentCourse?.id, fetchSections, clearSections])
+  }, [currentCourse?.id, fetchSections, clearSections, fetchStandardsSummary, clearStandards])
 
   const handleBackClick = (): void => {
     setCurrentCourse(null)
@@ -73,13 +79,13 @@ export function CourseViewPage({ onSectionSelect }: CourseViewPageProps): ReactE
 
       {/* Stats Cards */}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="h4" fontWeight={700}>{sections.length}</Typography>
             <Typography variant="body2" color="text.secondary">Sections</Typography>
           </Paper>
         </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="h4" fontWeight={700}>
               {sections.reduce((sum, s) => sum + s.studentCount, 0)}
@@ -87,7 +93,15 @@ export function CourseViewPage({ onSectionSelect }: CourseViewPageProps): ReactE
             <Typography variant="body2" color="text.secondary">Total Students</Typography>
           </Paper>
         </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={{ xs: 12, sm: 3 }}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Typography variant="h4" fontWeight={700}>
+              {standardsSummary?.standardCount ?? 0}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">Standards</Typography>
+          </Paper>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Typography variant="h4" fontWeight={700}>0</Typography>
             <Typography variant="body2" color="text.secondary">Units</Typography>
@@ -154,6 +168,56 @@ export function CourseViewPage({ onSectionSelect }: CourseViewPageProps): ReactE
         )}
       </Box>
 
+      {/* Standards Section */}
+      <Box component="section">
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" fontWeight={600}>Standards</Typography>
+          <Button
+            variant={standardsSummary ? 'outlined' : 'contained'}
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => setIsStandardsModalOpen(true)}
+          >
+            {standardsSummary ? 'Update Standards' : 'Import Standards'}
+          </Button>
+        </Box>
+
+        {/* Empty state */}
+        {!standardsSummary && (
+          <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
+            <Box sx={{ width: 48, height: 48, mx: 'auto', mb: 2, borderRadius: '50%', bgcolor: 'primary.light', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <MenuBookIcon sx={{ fontSize: 24, color: 'primary.main' }} />
+            </Box>
+            <Typography fontWeight={500} gutterBottom>No standards imported</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Import teaching standards to align your units and assessments.
+            </Typography>
+            <Button variant="contained" onClick={() => setIsStandardsModalOpen(true)}>
+              Import Standards
+            </Button>
+          </Paper>
+        )}
+
+        {/* Standards summary */}
+        {standardsSummary && (
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box>
+                <Typography fontWeight={500}>
+                  {standardsSummary.framework} - {standardsSummary.state}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {standardsSummary.standardCount} standards across {standardsSummary.domainCount} domains
+                </Typography>
+              </Box>
+              <Button size="small" onClick={() => setIsStandardsModalOpen(true)}>
+                Update
+              </Button>
+            </Box>
+          </Paper>
+        )}
+      </Box>
+
       {/* Section Creation Modal */}
       <SectionCreationModal
         isOpen={isCreateModalOpen}
@@ -162,6 +226,19 @@ export function CourseViewPage({ onSectionSelect }: CourseViewPageProps): ReactE
         courseName={currentCourse.name}
         onSuccess={(section) => {
           console.log('Section created:', section.name)
+        }}
+      />
+
+      {/* Standards Import Modal */}
+      <StandardsImportModal
+        isOpen={isStandardsModalOpen}
+        onClose={() => setIsStandardsModalOpen(false)}
+        courseId={currentCourse.id}
+        courseName={currentCourse.name}
+        courseSubject={currentCourse.subject}
+        courseGradeLevel={currentCourse.gradeLevel}
+        onSuccess={() => {
+          fetchStandardsSummary(currentCourse.id)
         }}
       />
     </Box>
