@@ -37,7 +37,8 @@ export function SectionViewPage({ course, section, onBack }: SectionViewPageProp
     return () => {
       clearRoster()
     }
-  }, [section.id, fetchRoster, clearRoster])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
+  }, [section.id])
 
   const handleDeleteConfirm = async (): Promise<void> => {
     if (!deletingStudent) return

@@ -175,7 +175,7 @@ interface CacheStorage {
       course: Course;
       sections: SectionSummary[];
       units: UnitSummary[];
-      standards: Standards | null;
+      standards: Standards[];          // Array to support multiple collections
     };
   };
 
@@ -400,16 +400,25 @@ interface Unit {
 }
 ```
 
-### 3.7 Standards (standards/standards.json)
+### 3.7 Standards (standards/{standards-id}.json)
+
+> **PLANNED CHANGE:** The current implementation supports only one standards collection
+> per course (stored as `standards/standards.json`). This will be refactored to support
+> **multiple standards collections** per course, allowing teachers to import standards
+> from multiple sources (e.g., NGSS + state-specific standards, or physics + chemistry
+> for a combined course). Each collection will have its own ID, source, and metadata.
+> The folder structure will change from a single file to multiple files keyed by ID.
 
 ```typescript
 interface Standards {
+  id: string;                      // Unique identifier (NEW)
   courseId: string;
   version: number;
   updatedAt: string;
 
   source: StandardsSource;
 
+  name: string;                    // Display name for this collection (NEW)
   state: string;                   // "Kansas"
   subject: string;                 // "Science"
   gradeLevel: string;              // "6-8"

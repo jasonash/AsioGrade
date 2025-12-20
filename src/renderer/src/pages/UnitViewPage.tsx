@@ -44,7 +44,8 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessm
     getUnit(course.id, unitSummary.id)
     fetchAllCollections(course.id)
     fetchAssessments(unitSummary.id)
-  }, [course.id, unitSummary.id, getUnit, fetchAllCollections, fetchAssessments])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
+  }, [course.id, unitSummary.id])
 
   const handleDelete = async (): Promise<void> => {
     setIsDeleting(true)

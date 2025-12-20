@@ -66,13 +66,14 @@ export const useUnitStore = create<UnitState>((set, get) => ({
     }
   },
 
-  getUnit: async (courseId: string, unitId: string) => {
+  getUnit: async (_courseId: string, unitId: string) => {
     set({ loading: true, error: null })
 
     try {
+      // Note: courseId is kept for API consistency but not used by the backend
+      // The IPC handler only needs unitId (folder cache maps unitId -> folderId)
       const result = await window.electronAPI.invoke<ServiceResult<Unit>>(
         'drive:getUnit',
-        courseId,
         unitId
       )
 

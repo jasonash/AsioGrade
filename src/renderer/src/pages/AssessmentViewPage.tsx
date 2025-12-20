@@ -81,7 +81,8 @@ export function AssessmentViewPage({
   useEffect(() => {
     getAssessment(assessmentSummary.id)
     fetchAllCollections(course.id)
-  }, [assessmentSummary.id, course.id, getAssessment, fetchAllCollections])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
+  }, [assessmentSummary.id, course.id])
 
   const handleDelete = async (): Promise<void> => {
     setIsDeleting(true)

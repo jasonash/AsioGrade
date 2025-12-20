@@ -23,14 +23,16 @@ export function DashboardPage({ onOpenCreateModal }: DashboardPageProps): ReactE
   // Check auth status on mount
   useEffect(() => {
     checkAuth()
-  }, [checkAuth])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
+  }, [])
 
   // Fetch courses when authenticated
   useEffect(() => {
     if (status === 'authenticated') {
       fetchCourses()
     }
-  }, [status, fetchCourses])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
+  }, [status])
 
   const isLoading = status === 'loading' || status === 'idle'
   const isAuthenticated = status === 'authenticated'

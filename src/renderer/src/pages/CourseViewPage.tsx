@@ -58,7 +58,8 @@ export function CourseViewPage({ onSectionSelect, onUnitSelect, onStandardsSelec
       clearStandards()
       clearUnits()
     }
-  }, [currentCourse?.id, fetchSections, clearSections, fetchStandardsCollections, clearStandards, fetchUnits, clearUnits])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
+  }, [currentCourse?.id])
 
   const handleBackClick = (): void => {
     setCurrentCourse(null)

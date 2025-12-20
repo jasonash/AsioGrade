@@ -76,7 +76,8 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
   useEffect(() => {
     fetchCollections(course.id)
     setExpandedDomains(new Set())
-  }, [course.id, fetchCollections])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
+  }, [course.id])
 
   // Auto-select first collection when summaries load
   useEffect(() => {
@@ -90,7 +91,8 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
     if (selectedCollectionId) {
       fetchCollection(course.id, selectedCollectionId)
     }
-  }, [selectedCollectionId, course.id, fetchCollection])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
+  }, [selectedCollectionId, course.id])
 
   const handleCollectionChange = (collectionId: string): void => {
     setSelectedCollectionId(collectionId)
