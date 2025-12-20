@@ -16,7 +16,9 @@ import {
   UpdateStandardsInput,
   CreateUnitInput,
   UpdateUnitInput,
-  ReorderUnitsInput
+  ReorderUnitsInput,
+  CreateAssessmentInput,
+  UpdateAssessmentInput
 } from '../../shared/types'
 import { LLMRequest, LLMProviderType } from '../../shared/types/llm.types'
 
@@ -462,6 +464,38 @@ function registerDriveHandlers(): void {
   ipcMain.handle('drive:reorderUnits', async (_event, input: ReorderUnitsInput) => {
     return driveService.reorderUnits(input)
   })
+
+  // ============================================================
+  // Assessment Operations
+  // ============================================================
+
+  // List assessments for a unit
+  ipcMain.handle('drive:listAssessments', async (_event, unitId: string) => {
+    return driveService.listAssessments(unitId)
+  })
+
+  // Get a specific assessment
+  ipcMain.handle('drive:getAssessment', async (_event, assessmentId: string) => {
+    return driveService.getAssessment(assessmentId)
+  })
+
+  // Create a new assessment
+  ipcMain.handle('drive:createAssessment', async (_event, input: CreateAssessmentInput) => {
+    return driveService.createAssessment(input)
+  })
+
+  // Update an assessment
+  ipcMain.handle('drive:updateAssessment', async (_event, input: UpdateAssessmentInput) => {
+    return driveService.updateAssessment(input)
+  })
+
+  // Delete an assessment
+  ipcMain.handle(
+    'drive:deleteAssessment',
+    async (_event, assessmentId: string, unitId: string) => {
+      return driveService.deleteAssessment(assessmentId, unitId)
+    }
+  )
 }
 
 function registerLLMHandlers(): void {

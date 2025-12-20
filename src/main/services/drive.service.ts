@@ -23,6 +23,10 @@ import {
   CreateUnitInput,
   UpdateUnitInput,
   ReorderUnitsInput,
+  Assessment,
+  AssessmentSummary,
+  CreateAssessmentInput,
+  UpdateAssessmentInput,
   ServiceResult
 } from '../../shared/types'
 
@@ -44,6 +48,7 @@ interface FolderCache {
   courseFolderIds: Record<string, string> // courseId -> folderId
   sectionFolderIds: Record<string, string> // sectionId -> folderId
   unitFolderIds: Record<string, string> // unitId -> folderId
+  assessmentFileIds: Record<string, string> // assessmentId -> fileId
 }
 
 // Metadata cache with TTL for performance
@@ -56,11 +61,13 @@ interface MetadataCache {
   courses: Record<string, CacheEntry<Course>>
   sections: Record<string, CacheEntry<Section>>
   units: Record<string, CacheEntry<Unit>>
+  assessments: Record<string, CacheEntry<Assessment>> // assessmentId -> assessment
   standardsCollections: Record<string, CacheEntry<Standards>> // standardsId -> standards collection
   standardsSummaries: Record<string, CacheEntry<StandardsSummary[]>> // courseFolderId -> list of summaries
   sectionCounts: Record<string, CacheEntry<number>> // courseFolderId -> section count
   studentCounts: Record<string, CacheEntry<number>> // sectionFolderId -> student count
   unitCounts: Record<string, CacheEntry<number>> // courseFolderId -> unit count
+  assessmentCounts: Record<string, CacheEntry<number>> // unitFolderId -> assessment count
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -71,17 +78,20 @@ class DriveService {
     yearFolderIds: {},
     courseFolderIds: {},
     sectionFolderIds: {},
-    unitFolderIds: {}
+    unitFolderIds: {},
+    assessmentFileIds: {}
   }
   private metadataCache: MetadataCache = {
     courses: {},
     sections: {},
     units: {},
+    assessments: {},
     standardsCollections: {},
     standardsSummaries: {},
     sectionCounts: {},
     studentCounts: {},
-    unitCounts: {}
+    unitCounts: {},
+    assessmentCounts: {}
   }
 
   /**
@@ -106,17 +116,20 @@ class DriveService {
       yearFolderIds: {},
       courseFolderIds: {},
       sectionFolderIds: {},
-      unitFolderIds: {}
+      unitFolderIds: {},
+      assessmentFileIds: {}
     }
     this.metadataCache = {
       courses: {},
       sections: {},
       units: {},
+      assessments: {},
       standardsCollections: {},
       standardsSummaries: {},
       sectionCounts: {},
       studentCounts: {},
-      unitCounts: {}
+      unitCounts: {},
+      assessmentCounts: {}
     }
   }
 
@@ -167,6 +180,16 @@ class DriveService {
     // If a specific collection was modified, invalidate it too
     if (standardsId) {
       delete this.metadataCache.standardsCollections[standardsId]
+    }
+  }
+
+  /**
+   * Invalidate caches related to an assessment (call after mutations)
+   */
+  private invalidateAssessmentCache(assessmentId: string, unitFolderId?: string): void {
+    delete this.metadataCache.assessments[assessmentId]
+    if (unitFolderId) {
+      delete this.metadataCache.assessmentCounts[unitFolderId]
     }
   }
 
@@ -2142,6 +2165,300 @@ class DriveService {
       return { success: true, data: undefined }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to reorder units'
+      return { success: false, error: message }
+    }
+  }
+
+  // ============================================================
+  // Assessment Operations
+  // ============================================================
+
+  /**
+   * List all assessments in a unit
+   */
+  async listAssessments(unitId: string): Promise<ServiceResult<AssessmentSummary[]>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get unit folder ID
+      const unitFolderId = this.folderCache.unitFolderIds[unitId] ?? unitId
+
+      // Find assessments folder
+      const assessmentsFolderResponse = await drive.files.list({
+        q: `name='assessments' and mimeType='application/vnd.google-apps.folder' and '${unitFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (
+        !assessmentsFolderResponse.data.files ||
+        assessmentsFolderResponse.data.files.length === 0
+      ) {
+        // No assessments folder yet, return empty list
+        return { success: true, data: [] }
+      }
+
+      const assessmentsFolderId = assessmentsFolderResponse.data.files[0].id!
+
+      // List all JSON files in assessments folder
+      const response = await drive.files.list({
+        q: `'${assessmentsFolderId}' in parents and mimeType='application/json' and trashed=false`,
+        fields: 'files(id, name, modifiedTime)',
+        spaces: 'drive'
+      })
+
+      if (!response.data.files || response.data.files.length === 0) {
+        return { success: true, data: [] }
+      }
+
+      // Read each assessment file and build summaries
+      const summaries: AssessmentSummary[] = []
+
+      for (const file of response.data.files) {
+        try {
+          const contentResponse = await drive.files.get({
+            fileId: file.id!,
+            alt: 'media'
+          })
+
+          const assessment = contentResponse.data as unknown as Assessment
+
+          // Cache the file ID mapping
+          this.folderCache.assessmentFileIds[assessment.id] = file.id!
+
+          // Calculate total points
+          const totalPoints = assessment.questions.reduce((sum, q) => sum + q.points, 0)
+
+          summaries.push({
+            id: assessment.id,
+            unitId: assessment.unitId,
+            type: assessment.type,
+            title: assessment.title,
+            purpose: assessment.purpose,
+            questionCount: assessment.questions.length,
+            totalPoints,
+            status: assessment.status,
+            createdAt: assessment.createdAt,
+            updatedAt: assessment.updatedAt
+          })
+        } catch {
+          // Skip invalid files
+          continue
+        }
+      }
+
+      // Sort by creation date (newest first)
+      summaries.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+
+      return { success: true, data: summaries }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to list assessments'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Get a specific assessment by ID
+   */
+  async getAssessment(assessmentId: string): Promise<ServiceResult<Assessment>> {
+    try {
+      // Check cache first
+      const cached = this.metadataCache.assessments[assessmentId]
+      if (this.isCacheValid(cached)) {
+        return { success: true, data: cached.data }
+      }
+
+      const drive = await this.getDrive()
+
+      // Get file ID from cache or use as-is
+      const fileId = this.folderCache.assessmentFileIds[assessmentId] ?? assessmentId
+
+      const response = await drive.files.get({
+        fileId,
+        alt: 'media'
+      })
+
+      const assessment = response.data as unknown as Assessment
+
+      // Cache the result
+      this.metadataCache.assessments[assessmentId] = {
+        data: assessment,
+        timestamp: Date.now()
+      }
+
+      return { success: true, data: assessment }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get assessment'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Create a new assessment within a unit
+   */
+  async createAssessment(input: CreateAssessmentInput): Promise<ServiceResult<Assessment>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get unit folder ID
+      let unitFolderId: string | undefined
+      if (input.unitId) {
+        unitFolderId = this.folderCache.unitFolderIds[input.unitId] ?? input.unitId
+      } else {
+        return { success: false, error: 'Unit ID is required for creating assessments' }
+      }
+
+      // Ensure assessments folder exists
+      const assessmentsFolderId = await this.ensureSubfolder(unitFolderId, 'assessments')
+
+      // Generate unique assessment ID
+      const assessmentId = this.generateUniqueId(input.title)
+      const now = new Date().toISOString()
+
+      // Create assessment object
+      const assessment: Assessment = {
+        id: assessmentId,
+        courseId: input.courseId,
+        unitId: input.unitId,
+        type: input.type,
+        title: input.title,
+        description: input.description,
+        purpose: input.purpose,
+        questions: input.questions ?? [],
+        status: 'draft' as const,
+        createdAt: now,
+        updatedAt: now,
+        version: 1
+      }
+
+      // Save to Drive
+      const fileResponse = await drive.files.create({
+        requestBody: {
+          name: `${assessmentId}.json`,
+          mimeType: 'application/json',
+          parents: [assessmentsFolderId]
+        },
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(assessment, null, 2)
+        },
+        fields: 'id'
+      })
+
+      // Cache the file ID mapping
+      this.folderCache.assessmentFileIds[assessmentId] = fileResponse.data.id!
+
+      // Invalidate assessment count cache
+      this.invalidateAssessmentCache(assessmentId, unitFolderId)
+
+      return { success: true, data: assessment }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create assessment'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Update an existing assessment
+   */
+  async updateAssessment(input: UpdateAssessmentInput): Promise<ServiceResult<Assessment>> {
+    try {
+      // Get existing assessment
+      const existingResult = await this.getAssessment(input.id)
+      if (!existingResult.success) {
+        return { success: false, error: existingResult.error }
+      }
+
+      const existing = existingResult.data
+      const drive = await this.getDrive()
+
+      // Get file ID
+      const fileId = this.folderCache.assessmentFileIds[input.id]
+      if (!fileId) {
+        return { success: false, error: 'Assessment file not found in cache' }
+      }
+
+      const now = new Date().toISOString()
+
+      // Merge updates
+      const updated: Assessment = {
+        ...existing,
+        type: input.type ?? existing.type,
+        title: input.title ?? existing.title,
+        description: input.description ?? existing.description,
+        purpose: input.purpose ?? existing.purpose,
+        questions: input.questions ?? existing.questions,
+        status: input.status ?? existing.status,
+        updatedAt: now,
+        version: existing.version + 1,
+        publishedAt:
+          input.status === 'published' && existing.status !== 'published' ? now : existing.publishedAt
+      }
+
+      // Save to Drive
+      await drive.files.update({
+        fileId,
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(updated, null, 2)
+        }
+      })
+
+      // Invalidate cache
+      const unitFolderId = input.unitId
+        ? this.folderCache.unitFolderIds[input.unitId]
+        : undefined
+      this.invalidateAssessmentCache(input.id, unitFolderId)
+
+      return { success: true, data: updated }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update assessment'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Delete an assessment
+   */
+  async deleteAssessment(assessmentId: string, unitId: string): Promise<ServiceResult<void>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get file ID
+      const fileId = this.folderCache.assessmentFileIds[assessmentId]
+      if (!fileId) {
+        // Try to find it by listing assessments first
+        const listResult = await this.listAssessments(unitId)
+        if (!listResult.success) {
+          return { success: false, error: 'Failed to find assessment' }
+        }
+
+        const cachedFileId = this.folderCache.assessmentFileIds[assessmentId]
+        if (!cachedFileId) {
+          return { success: false, error: 'Assessment not found' }
+        }
+      }
+
+      const finalFileId = this.folderCache.assessmentFileIds[assessmentId]
+
+      // Move to trash
+      await drive.files.update({
+        fileId: finalFileId,
+        requestBody: { trashed: true }
+      })
+
+      // Get unit folder ID for cache invalidation
+      const unitFolderId = this.folderCache.unitFolderIds[unitId]
+
+      // Clear from caches
+      delete this.folderCache.assessmentFileIds[assessmentId]
+      this.invalidateAssessmentCache(assessmentId, unitFolderId)
+
+      return { success: true, data: undefined }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete assessment'
       return { success: false, error: message }
     }
   }

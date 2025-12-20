@@ -15,31 +15,36 @@ import AddIcon from '@mui/icons-material/Add'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import AssignmentIcon from '@mui/icons-material/Assignment'
-import { useUnitStore, useStandardsStore } from '../stores'
+import { useUnitStore, useStandardsStore, useAssessmentStore } from '../stores'
 import { ConfirmModal } from '../components/ui'
 import { UnitEditModal } from '../components/units'
-import type { CourseSummary, UnitSummary, Standard, StandardDomain, Standards } from '../../../shared/types'
+import { AssessmentCard, AssessmentCreationModal } from '../components/assessments'
+import type { CourseSummary, UnitSummary, AssessmentSummary, Standard, StandardDomain, Standards } from '../../../shared/types'
 
 interface UnitViewPageProps {
   course: CourseSummary
   unitSummary: UnitSummary
   onBack: () => void
   onDeleted: () => void
+  onAssessmentSelect?: (assessment: AssessmentSummary) => void
 }
 
-export function UnitViewPage({ course, unitSummary, onBack, onDeleted }: UnitViewPageProps): ReactElement {
+export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessmentSelect }: UnitViewPageProps): ReactElement {
   const { currentUnit, loading, error, getUnit, deleteUnit, clearError } = useUnitStore()
   const { allCollections, fetchAllCollections } = useStandardsStore()
+  const { assessments, fetchAssessments, loading: assessmentsLoading } = useAssessmentStore()
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isCreateAssessmentModalOpen, setIsCreateAssessmentModalOpen] = useState(false)
 
-  // Fetch full unit details and standards when component mounts
+  // Fetch full unit details, standards, and assessments when component mounts
   useEffect(() => {
     getUnit(course.id, unitSummary.id)
     fetchAllCollections(course.id)
-  }, [course.id, unitSummary.id, getUnit, fetchAllCollections])
+    fetchAssessments(unitSummary.id)
+  }, [course.id, unitSummary.id, getUnit, fetchAllCollections, fetchAssessments])
 
   const handleDelete = async (): Promise<void> => {
     setIsDeleting(true)
@@ -254,21 +259,45 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted }: UnitVie
             variant="contained"
             size="small"
             startIcon={<AddIcon />}
-            disabled
+            onClick={() => setIsCreateAssessmentModalOpen(true)}
           >
             Create Assessment
           </Button>
         </Box>
 
-        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-          <AssignmentIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
-          <Typography fontWeight={500} gutterBottom>
-            No assessments yet
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Assessments will be available in a future update.
-          </Typography>
-        </Paper>
+        {assessmentsLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress size={32} />
+          </Box>
+        ) : assessments.length === 0 ? (
+          <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
+            <AssignmentIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+            <Typography fontWeight={500} gutterBottom>
+              No assessments yet
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Create your first assessment to get started.
+            </Typography>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => setIsCreateAssessmentModalOpen(true)}
+            >
+              Create Assessment
+            </Button>
+          </Paper>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {assessments.map((assessment) => (
+              <AssessmentCard
+                key={assessment.id}
+                assessment={assessment}
+                onClick={() => onAssessmentSelect?.(assessment)}
+              />
+            ))}
+          </Box>
+        )}
       </Box>
 
       {/* Edit Modal */}
@@ -297,6 +326,34 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted }: UnitVie
         confirmText="Delete Unit"
         variant="danger"
         isLoading={isDeleting}
+      />
+
+      {/* Assessment Creation Modal */}
+      <AssessmentCreationModal
+        isOpen={isCreateAssessmentModalOpen}
+        onClose={() => setIsCreateAssessmentModalOpen(false)}
+        courseId={course.id}
+        unitId={unitSummary.id}
+        unitName={unitSummary.name}
+        onSuccess={(assessment) => {
+          setIsCreateAssessmentModalOpen(false)
+          // Refresh assessments list
+          fetchAssessments(unitSummary.id)
+          // Navigate to the new assessment - convert Assessment to AssessmentSummary
+          const summary: AssessmentSummary = {
+            id: assessment.id,
+            unitId: assessment.unitId,
+            type: assessment.type,
+            title: assessment.title,
+            purpose: assessment.purpose,
+            questionCount: assessment.questions.length,
+            totalPoints: assessment.questions.reduce((sum, q) => sum + q.points, 0),
+            status: assessment.status,
+            createdAt: assessment.createdAt,
+            updatedAt: assessment.updatedAt
+          }
+          onAssessmentSelect?.(summary)
+        }}
       />
     </Box>
   )

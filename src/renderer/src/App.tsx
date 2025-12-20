@@ -1,9 +1,9 @@
 import { useState, type ReactElement } from 'react'
 import { Layout, type NavItem } from './components/layout'
-import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, UnitViewPage, StandardsViewPage } from './pages'
+import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, UnitViewPage, StandardsViewPage, AssessmentViewPage } from './pages'
 import { CourseCreationModal } from './components/courses'
-import { useUIStore, useCourseStore, useSectionStore, useUnitStore } from './stores'
-import type { CourseSummary, SectionSummary, UnitSummary } from '../../shared/types'
+import { useUIStore, useCourseStore, useSectionStore, useUnitStore, useAssessmentStore } from './stores'
+import type { CourseSummary, SectionSummary, UnitSummary, AssessmentSummary } from '../../shared/types'
 
 const pageConfig: Record<NavItem, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Your teaching dashboard' },
@@ -24,12 +24,16 @@ function App(): ReactElement {
   const { currentCourse, setCurrentCourse } = useCourseStore()
   const { fetchSections } = useSectionStore()
   const { fetchUnits } = useUnitStore()
+  const { fetchAssessments } = useAssessmentStore()
 
   // State for current section view
   const [currentSection, setCurrentSection] = useState<SectionSummary | null>(null)
 
   // State for current unit view
   const [currentUnit, setCurrentUnit] = useState<UnitSummary | null>(null)
+
+  // State for current assessment view
+  const [currentAssessment, setCurrentAssessment] = useState<AssessmentSummary | null>(null)
 
   // State for standards view
   const [viewingStandards, setViewingStandards] = useState(false)
@@ -38,7 +42,7 @@ function App(): ReactElement {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   const handleNavigate = (nav: NavItem): void => {
-    // Clear current course, section, unit, and standards view when navigating away
+    // Clear current course, section, unit, assessment, and standards view when navigating away
     if (currentCourse) {
       setCurrentCourse(null)
     }
@@ -47,6 +51,9 @@ function App(): ReactElement {
     }
     if (currentUnit) {
       setCurrentUnit(null)
+    }
+    if (currentAssessment) {
+      setCurrentAssessment(null)
     }
     if (viewingStandards) {
       setViewingStandards(false)
@@ -58,6 +65,7 @@ function App(): ReactElement {
     setCurrentCourse(course)
     setCurrentSection(null)
     setCurrentUnit(null)
+    setCurrentAssessment(null)
     setViewingStandards(false)
     setActiveNav('dashboard')
     // Fetch sections and units for this course
@@ -87,6 +95,23 @@ function App(): ReactElement {
       )
     }
 
+    // Show assessment view if an assessment is selected
+    if (activeNav === 'dashboard' && currentAssessment && currentUnit && currentCourse) {
+      return (
+        <AssessmentViewPage
+          course={currentCourse}
+          unit={currentUnit}
+          assessmentSummary={currentAssessment}
+          onBack={() => setCurrentAssessment(null)}
+          onDeleted={() => {
+            setCurrentAssessment(null)
+            // Refresh assessments list
+            fetchAssessments(currentUnit.id)
+          }}
+        />
+      )
+    }
+
     // Show unit view if a unit is selected
     if (activeNav === 'dashboard' && currentUnit && currentCourse) {
       return (
@@ -99,6 +124,7 @@ function App(): ReactElement {
             // Refresh units list
             fetchUnits(currentCourse.id)
           }}
+          onAssessmentSelect={(assessment) => setCurrentAssessment(assessment)}
         />
       )
     }

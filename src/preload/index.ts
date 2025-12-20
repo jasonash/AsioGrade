@@ -50,6 +50,13 @@ const validInvokeChannels = [
   'drive:deleteUnit',
   'drive:reorderUnits',
 
+  // Google Drive - Assessments
+  'drive:listAssessments',
+  'drive:getAssessment',
+  'drive:createAssessment',
+  'drive:updateAssessment',
+  'drive:deleteAssessment',
+
   // Storage
   'storage:get',
   'storage:set',
