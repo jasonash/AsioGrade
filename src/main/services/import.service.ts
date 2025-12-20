@@ -7,11 +7,63 @@
 
 import { dialog, BrowserWindow } from 'electron'
 import { readFile } from 'fs/promises'
+import https from 'https'
 import { ServiceResult } from '../../shared/types/common.types'
 
 // pdf-parse doesn't have proper ES module exports, use require
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const pdfParse = require('pdf-parse')
+
+/**
+ * Fetch URL using Node's https module (handles certificate issues better)
+ */
+function fetchWithHttps(url: string): Promise<{ data: Buffer; contentType: string; contentDisposition: string }> {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new URL(url)
+
+    const options: https.RequestOptions = {
+      hostname: parsedUrl.hostname,
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,application/pdf,*/*;q=0.8'
+      },
+      // Handle sites with incomplete certificate chains (common with .gov sites)
+      rejectUnauthorized: false
+    }
+
+    const req = https.get(options, (res) => {
+      // Handle redirects
+      if (res.statusCode && res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        fetchWithHttps(res.headers.location).then(resolve).catch(reject)
+        return
+      }
+
+      if (res.statusCode && res.statusCode >= 400) {
+        reject(new Error(`HTTP ${res.statusCode}: ${res.statusMessage}`))
+        return
+      }
+
+      const chunks: Buffer[] = []
+      res.on('data', (chunk: Buffer) => chunks.push(chunk))
+      res.on('end', () => {
+        resolve({
+          data: Buffer.concat(chunks),
+          contentType: res.headers['content-type'] || '',
+          contentDisposition: res.headers['content-disposition'] || ''
+        })
+      })
+      res.on('error', reject)
+    })
+
+    req.on('error', reject)
+    req.setTimeout(30000, () => {
+      req.destroy()
+      reject(new Error('Request timed out'))
+    })
+  })
+}
 
 class ImportService {
   /**
@@ -31,28 +83,73 @@ class ImportService {
       return { success: false, error: 'Only HTTPS URLs are supported for security' }
     }
 
-    // Fetch with timeout
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 30000)
-
     try {
-      const response = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': 'TeachingHelp/1.0 (Standards Import)'
-        }
-      })
-      clearTimeout(timeout)
+      const response = await fetchWithHttps(parsedUrl.toString())
+      const { data, contentType, contentDisposition } = response
 
-      if (!response.ok) {
-        return { success: false, error: `HTTP error: ${response.status} ${response.statusText}` }
+      // Handle PDF downloads automatically
+      if (contentType.includes('application/pdf')) {
+        try {
+          const pdfData = await pdfParse(data)
+
+          if (!pdfData.text.trim()) {
+            return { success: false, error: 'No text content found in the PDF' }
+          }
+
+          return { success: true, data: pdfData.text }
+        } catch {
+          return { success: false, error: 'Failed to extract text from the PDF. The file may be scanned images or corrupted.' }
+        }
       }
 
-      const contentType = response.headers.get('content-type') || ''
+      // Handle other file downloads - try to read as text
+      if (contentDisposition.includes('attachment') || contentType.includes('application/octet-stream')) {
+        // Try to determine file type from content-disposition filename
+        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+        const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, '') : ''
+
+        if (filename.toLowerCase().endsWith('.pdf')) {
+          try {
+            const pdfData = await pdfParse(data)
+
+            if (!pdfData.text.trim()) {
+              return { success: false, error: 'No text content found in the PDF' }
+            }
+
+            return { success: true, data: pdfData.text }
+          } catch {
+            return { success: false, error: 'Failed to extract text from the PDF' }
+          }
+        }
+
+        if (filename.toLowerCase().endsWith('.txt')) {
+          const text = data.toString('utf-8')
+          if (!text.trim()) {
+            return { success: false, error: 'The text file is empty' }
+          }
+          return { success: true, data: text }
+        }
+
+        // Unknown file type - try to parse as PDF anyway (common for .gov sites)
+        try {
+          const pdfData = await pdfParse(data)
+          if (pdfData.text.trim()) {
+            return { success: true, data: pdfData.text }
+          }
+        } catch {
+          // Not a PDF, continue
+        }
+
+        // Unknown file type
+        return {
+          success: false,
+          error: `This URL downloads a file type we can't process (${filename || 'unknown'}). We support PDF and text files.`
+        }
+      }
 
       // Handle HTML content - extract text
       if (contentType.includes('text/html')) {
-        const html = await response.text()
+        const html = data.toString('utf-8')
         // Simple HTML to text conversion - strip tags
         const text = html
           .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -74,20 +171,45 @@ class ImportService {
         return { success: true, data: text }
       }
 
-      // Handle plain text
-      const text = await response.text()
-      if (!text.trim()) {
-        return { success: false, error: 'No content found at URL' }
+      // Handle plain text or other text types
+      if (contentType.includes('text/')) {
+        const text = data.toString('utf-8')
+        if (!text.trim()) {
+          return { success: false, error: 'No content found at URL' }
+        }
+        return { success: true, data: text }
       }
 
-      return { success: true, data: text }
-    } catch (error) {
-      clearTimeout(timeout)
-      if (error instanceof Error && error.name === 'AbortError') {
-        return { success: false, error: 'Request timed out after 30 seconds' }
+      // Unknown content type - try to parse as PDF anyway
+      try {
+        const pdfData = await pdfParse(data)
+        if (pdfData.text.trim()) {
+          return { success: true, data: pdfData.text }
+        }
+      } catch {
+        // Not a PDF
       }
-      const message = error instanceof Error ? error.message : 'Failed to fetch URL'
-      return { success: false, error: message }
+
+      // Unknown content type
+      return {
+        success: false,
+        error: `Unsupported content type: ${contentType}. Try downloading the file and using "From File" instead.`
+      }
+    } catch (error) {
+      console.error('Fetch error:', error)
+      const message = error instanceof Error ? error.message : 'Unknown error'
+
+      if (message.includes('timed out')) {
+        return { success: false, error: 'Request timed out. The server may be slow - try again later.' }
+      }
+      if (message.includes('ENOTFOUND') || message.includes('EAI_AGAIN')) {
+        return { success: false, error: 'Could not find the website. Check the URL and your internet connection.' }
+      }
+      if (message.includes('ECONNREFUSED')) {
+        return { success: false, error: 'Connection refused by the server. The site may be down.' }
+      }
+
+      return { success: false, error: `Failed to fetch: ${message}` }
     }
   }
 

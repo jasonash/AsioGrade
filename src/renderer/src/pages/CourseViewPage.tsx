@@ -24,9 +24,10 @@ import type { SectionSummary, UnitSummary } from '../../../shared/types'
 interface CourseViewPageProps {
   onSectionSelect?: (section: SectionSummary) => void
   onUnitSelect?: (unit: UnitSummary) => void
+  onStandardsSelect?: () => void
 }
 
-export function CourseViewPage({ onSectionSelect, onUnitSelect }: CourseViewPageProps): ReactElement {
+export function CourseViewPage({ onSectionSelect, onUnitSelect, onStandardsSelect }: CourseViewPageProps): ReactElement {
   const { currentCourse, setCurrentCourse } = useCourseStore()
   const { sections, loading, error, fetchSections, clearSections } = useSectionStore()
   const { summary: standardsSummary, fetchSummary: fetchStandardsSummary, clearStandards } = useStandardsStore()
@@ -215,7 +216,15 @@ export function CourseViewPage({ onSectionSelect, onUnitSelect }: CourseViewPage
 
         {/* Standards summary */}
         {standardsSummary && (
-          <Paper variant="outlined" sx={{ p: 2 }}>
+          <Paper
+            variant="outlined"
+            sx={{
+              p: 2,
+              cursor: 'pointer',
+              '&:hover': { borderColor: 'primary.main' }
+            }}
+            onClick={onStandardsSelect}
+          >
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <Box>
                 <Typography fontWeight={500}>
@@ -225,9 +234,14 @@ export function CourseViewPage({ onSectionSelect, onUnitSelect }: CourseViewPage
                   {standardsSummary.standardCount} standards across {standardsSummary.domainCount} domains
                 </Typography>
               </Box>
-              <Button size="small" onClick={() => setIsStandardsModalOpen(true)}>
-                Update
-              </Button>
+              <Box sx={{ display: 'flex', gap: 1 }} onClick={(e) => e.stopPropagation()}>
+                <Button size="small" onClick={() => setIsStandardsModalOpen(true)}>
+                  Re-import
+                </Button>
+                <Button size="small" variant="contained" onClick={onStandardsSelect}>
+                  View
+                </Button>
+              </Box>
             </Box>
           </Paper>
         )}

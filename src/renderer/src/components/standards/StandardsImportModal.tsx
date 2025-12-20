@@ -14,7 +14,6 @@ import AccordionDetails from '@mui/material/AccordionDetails'
 import Chip from '@mui/material/Chip'
 import MenuItem from '@mui/material/MenuItem'
 import Link from '@mui/material/Link'
-import Tooltip from '@mui/material/Tooltip'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import WarningIcon from '@mui/icons-material/Warning'
@@ -288,7 +287,79 @@ export function StandardsImportModal({
     }))
   }, [])
 
-  // Parse content with AI
+  // Parse a single chunk of content with AI
+  const parseChunkWithAI = useCallback(async (content: string): Promise<ParsedDomain[] | null> => {
+    const result = await window.electronAPI.invoke<ServiceResult<LLMResponse>>(
+      'llm:complete',
+      {
+        prompt: `Parse these teaching standards:\n\n${content}`,
+        systemPrompt: STANDARDS_PARSING_PROMPT,
+        temperature: 0.1,
+        maxTokens: 4000
+      }
+    )
+
+    if (!result.success) {
+      throw new Error(result.error || 'AI parsing failed')
+    }
+
+    // Extract JSON from response (handle potential markdown code blocks)
+    let jsonStr = result.data.content.trim()
+    const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
+    if (jsonMatch) {
+      jsonStr = jsonMatch[1].trim()
+    }
+
+    // Parse the JSON
+    let parsed: { domains?: Array<{ code: string; name: string; standards: Array<{ code: string; description: string }> }> }
+    try {
+      parsed = JSON.parse(jsonStr)
+    } catch {
+      return null // This chunk didn't parse, skip it
+    }
+
+    if (!parsed.domains || !Array.isArray(parsed.domains) || parsed.domains.length === 0) {
+      return null
+    }
+
+    // Convert to ParsedDomain format
+    return parsed.domains.map((d) => ({
+      code: d.code,
+      name: d.name,
+      standards: d.standards.map((s) => ({
+        code: s.code,
+        description: s.description,
+        valid: s.description.length > 10
+      }))
+    }))
+  }, [])
+
+  // Merge domains from multiple chunks, combining standards for matching domain codes
+  const mergeDomains = useCallback((allDomains: ParsedDomain[][]): ParsedDomain[] => {
+    const domainMap = new Map<string, ParsedDomain>()
+
+    for (const domains of allDomains) {
+      for (const domain of domains) {
+        const existing = domainMap.get(domain.code)
+        if (existing) {
+          // Merge standards, avoiding duplicates by code
+          const existingCodes = new Set(existing.standards.map((s) => s.code))
+          for (const standard of domain.standards) {
+            if (!existingCodes.has(standard.code)) {
+              existing.standards.push(standard)
+              existingCodes.add(standard.code)
+            }
+          }
+        } else {
+          domainMap.set(domain.code, { ...domain, standards: [...domain.standards] })
+        }
+      }
+    }
+
+    return Array.from(domainMap.values())
+  }, [])
+
+  // Parse content with AI (handles large documents by chunking)
   const parseWithAI = useCallback(async (content: string): Promise<void> => {
     if (!content.trim()) {
       setParseError('No content to parse')
@@ -299,65 +370,85 @@ export function StandardsImportModal({
     setParseError(null)
     setParsedDomains([])
 
+    // Chunk size - roughly 40K chars to stay well under token limits
+    const CHUNK_SIZE = 40000
+    const OVERLAP = 2000 // Small overlap to avoid splitting standards
+
     try {
-      const result = await window.electronAPI.invoke<ServiceResult<LLMResponse>>(
-        'llm:complete',
-        {
-          prompt: `Parse these teaching standards:\n\n${content}`,
-          systemPrompt: STANDARDS_PARSING_PROMPT,
-          temperature: 0.1,
-          maxTokens: 4000
+      const chunks: string[] = []
+
+      if (content.length <= CHUNK_SIZE) {
+        chunks.push(content)
+      } else {
+        // Split into chunks at paragraph boundaries
+        let start = 0
+        while (start < content.length) {
+          let end = Math.min(start + CHUNK_SIZE, content.length)
+
+          // Try to end at a paragraph boundary (only if not at the end)
+          if (end < content.length) {
+            const searchStart = start + Math.floor(CHUNK_SIZE * 0.7)
+            const lastParagraph = content.lastIndexOf('\n\n', end)
+            if (lastParagraph > searchStart) {
+              end = lastParagraph
+            }
+          }
+
+          chunks.push(content.substring(start, end))
+
+          // Move to next chunk, ensuring we always make forward progress
+          const nextStart = end - OVERLAP
+          start = Math.max(nextStart, start + 1)
+
+          // If we're near the end, break to avoid tiny trailing chunks
+          if (content.length - start < CHUNK_SIZE * 0.1) {
+            break
+          }
         }
-      )
-
-      if (!result.success) {
-        setParseError(result.error || 'AI parsing failed')
-        setIsParsingWithAI(false)
-        return
       }
 
-      // Extract JSON from response (handle potential markdown code blocks)
-      let jsonStr = result.data.content.trim()
-      const jsonMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
-      if (jsonMatch) {
-        jsonStr = jsonMatch[1].trim()
+      // Parse each chunk
+      const allResults: ParsedDomain[][] = []
+      for (let i = 0; i < chunks.length; i++) {
+        // Update status for multi-chunk processing
+        if (chunks.length > 1) {
+          setParseError(`Processing chunk ${i + 1} of ${chunks.length}...`)
+        }
+
+        const result = await parseChunkWithAI(chunks[i])
+        if (result && result.length > 0) {
+          allResults.push(result)
+        }
+
+        // Small delay between chunks to avoid rate limits
+        if (i < chunks.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+        }
       }
 
-      // Parse the JSON
-      let parsed: { domains?: Array<{ code: string; name: string; standards: Array<{ code: string; description: string }> }> }
-      try {
-        parsed = JSON.parse(jsonStr)
-      } catch {
-        setParseError('AI returned invalid JSON. Try again or use manual entry.')
-        setIsParsingWithAI(false)
-        return
-      }
+      setParseError(null)
 
-      if (!parsed.domains || !Array.isArray(parsed.domains) || parsed.domains.length === 0) {
+      if (allResults.length === 0) {
         setParseError('AI could not identify any standards. Try manual entry instead.')
         setIsParsingWithAI(false)
         return
       }
 
-      // Convert to ParsedDomain format
-      const domains: ParsedDomain[] = parsed.domains.map((d) => ({
-        code: d.code,
-        name: d.name,
-        standards: d.standards.map((s) => ({
-          code: s.code,
-          description: s.description,
-          valid: s.description.length > 10
-        }))
-      }))
+      // Merge all results
+      const mergedDomains = mergeDomains(allResults)
+      setParsedDomains(mergedDomains)
 
-      setParsedDomains(domains)
+      // Show info if processed in multiple chunks
+      if (chunks.length > 1) {
+        setParseError(`Processed ${chunks.length} sections. Review the results below.`)
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'AI parsing failed'
       setParseError(message)
     }
 
     setIsParsingWithAI(false)
-  }, [])
+  }, [parseChunkWithAI, mergeDomains])
 
   // Handle URL fetch and parse
   const handleFetchUrl = useCallback(async () => {
@@ -566,26 +657,34 @@ export function StandardsImportModal({
         {/* Import method tabs */}
         <Tabs
           value={activeTab}
-          onChange={(_, v) => setActiveTab(v)}
+          onChange={(_, v) => {
+            // Only allow switching to AI tabs if AI is configured
+            if ((v === 1 || v === 2) && !aiConfigured) return
+            setActiveTab(v)
+          }}
           sx={{ borderBottom: 1, borderColor: 'divider' }}
         >
           <Tab label="Manual Entry" />
-          <Tooltip
-            title={!aiConfigured && !checkingAi ? 'Requires AI provider. Configure in Settings.' : ''}
-            placement="top"
-          >
-            <span>
-              <Tab label="From URL" disabled={checkingAi || !aiConfigured} />
-            </span>
-          </Tooltip>
-          <Tooltip
-            title={!aiConfigured && !checkingAi ? 'Requires AI provider. Configure in Settings.' : ''}
-            placement="top"
-          >
-            <span>
-              <Tab label="From File" disabled={checkingAi || !aiConfigured} />
-            </span>
-          </Tooltip>
+          <Tab
+            label="From URL"
+            disabled={checkingAi || !aiConfigured}
+            sx={{
+              '&.Mui-disabled': {
+                cursor: 'not-allowed',
+                pointerEvents: 'auto'
+              }
+            }}
+          />
+          <Tab
+            label="From File"
+            disabled={checkingAi || !aiConfigured}
+            sx={{
+              '&.Mui-disabled': {
+                cursor: 'not-allowed',
+                pointerEvents: 'auto'
+              }
+            }}
+          />
         </Tabs>
 
         {/* AI not configured warning */}
@@ -868,7 +967,7 @@ ANOTHER-CODE-1: Standard description...`}
                       <CloudDownloadIcon />
                     )
                   }
-                  sx={{ minWidth: 140 }}
+                  sx={{ minWidth: 160, whiteSpace: 'nowrap', flexShrink: 0 }}
                 >
                   {isFetchingUrl
                     ? 'Fetching...'
@@ -1153,6 +1252,13 @@ ANOTHER-CODE-1: Standard description...`}
               </Box>
             )}
           </Box>
+        )}
+
+        {/* State required warning */}
+        {parsedDomains.length > 0 && !formData.state && (
+          <Alert severity="warning" sx={{ mt: 1 }}>
+            Please select a State before importing.
+          </Alert>
         )}
 
         {/* Actions */}

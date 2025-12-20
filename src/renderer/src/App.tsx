@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from 'react'
 import { Layout, type NavItem } from './components/layout'
-import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, UnitViewPage } from './pages'
+import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, UnitViewPage, StandardsViewPage } from './pages'
 import { CourseCreationModal } from './components/courses'
 import { useUIStore, useCourseStore, useSectionStore, useUnitStore } from './stores'
 import type { CourseSummary, SectionSummary, UnitSummary } from '../../shared/types'
@@ -31,11 +31,14 @@ function App(): ReactElement {
   // State for current unit view
   const [currentUnit, setCurrentUnit] = useState<UnitSummary | null>(null)
 
+  // State for standards view
+  const [viewingStandards, setViewingStandards] = useState(false)
+
   // State for course creation modal (can be triggered from sidebar)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   const handleNavigate = (nav: NavItem): void => {
-    // Clear current course, section, and unit when navigating away
+    // Clear current course, section, unit, and standards view when navigating away
     if (currentCourse) {
       setCurrentCourse(null)
     }
@@ -45,6 +48,9 @@ function App(): ReactElement {
     if (currentUnit) {
       setCurrentUnit(null)
     }
+    if (viewingStandards) {
+      setViewingStandards(false)
+    }
     setActiveNav(nav)
   }
 
@@ -52,6 +58,7 @@ function App(): ReactElement {
     setCurrentCourse(course)
     setCurrentSection(null)
     setCurrentUnit(null)
+    setViewingStandards(false)
     setActiveNav('dashboard')
     // Fetch sections and units for this course
     fetchSections(course.id)
@@ -70,6 +77,16 @@ function App(): ReactElement {
   }
 
   const renderPage = (): ReactElement => {
+    // Show standards view if viewing standards
+    if (activeNav === 'dashboard' && viewingStandards && currentCourse) {
+      return (
+        <StandardsViewPage
+          course={currentCourse}
+          onBack={() => setViewingStandards(false)}
+        />
+      )
+    }
+
     // Show unit view if a unit is selected
     if (activeNav === 'dashboard' && currentUnit && currentCourse) {
       return (
@@ -103,6 +120,7 @@ function App(): ReactElement {
         <CourseViewPage
           onSectionSelect={(section) => setCurrentSection(section)}
           onUnitSelect={(unit) => setCurrentUnit(unit)}
+          onStandardsSelect={() => setViewingStandards(true)}
         />
       )
     }
