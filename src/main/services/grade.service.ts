@@ -8,6 +8,7 @@ import { cv } from 'opencv-wasm'
 import sharp from 'sharp'
 import jsQR from 'jsqr'
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { createCanvas } from 'canvas'
 import { driveService } from './drive.service'
 import type {
   GradeProcessRequest,
@@ -169,29 +170,23 @@ class GradeService {
       const scale = 150 / 72 // 72 DPI is the PDF standard
       const viewport = page.getViewport({ scale })
 
-      // For Electron main process, we need node-canvas for proper PDF rendering
-      // For now, we'll use a simpler approach with sharp
-      // TODO: Implement proper PDF rendering with node-canvas or similar
-
-      // Create a placeholder image of the right size
+      // Create canvas using node-canvas
       const width = Math.floor(viewport.width)
       const height = Math.floor(viewport.height)
+      const canvas = createCanvas(width, height)
+      const context = canvas.getContext('2d')
 
-      // For actual implementation, we need node-canvas
-      // This is a placeholder that creates a blank image
-      // TODO: Implement proper PDF rendering with node-canvas or similar
-      const imageBuffer = await sharp({
-        create: {
-          width,
-          height,
-          channels: 4,
-          background: { r: 255, g: 255, b: 255, alpha: 1 }
-        }
-      })
-        .png()
-        .toBuffer()
+      // Render PDF page to canvas
+      const renderContext = {
+        canvasContext: context,
+        viewport
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await page.render(renderContext as any).promise
 
-      images.push(imageBuffer)
+      // Convert canvas to PNG buffer
+      const pngBuffer = canvas.toBuffer('image/png')
+      images.push(pngBuffer)
     }
 
     return images

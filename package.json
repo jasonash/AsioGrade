@@ -57,6 +57,7 @@
     "@mui/icons-material": "^7.3.6",
     "@mui/lab": "^7.0.1-beta.20",
     "@mui/material": "^7.3.6",
+    "canvas": "^3.2.0",
     "electron-store": "^11.0.2",
     "googleapis": "^169.0.0",
     "jsqr": "^1.4.0",
