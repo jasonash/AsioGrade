@@ -7,7 +7,7 @@
 import { cv } from 'opencv-wasm'
 import sharp from 'sharp'
 import jsQR from 'jsqr'
-import * as pdfjsLib from 'pdfjs-dist'
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { driveService } from './drive.service'
 import type {
   GradeProcessRequest,
