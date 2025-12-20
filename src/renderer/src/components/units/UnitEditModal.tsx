@@ -1,20 +1,15 @@
-import { type ReactElement, useState, useCallback, useEffect } from 'react'
+import { type ReactElement, useState, useCallback, useEffect, useMemo } from 'react'
 import Box from '@mui/material/Box'
 import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
 import Typography from '@mui/material/Typography'
 import CircularProgress from '@mui/material/CircularProgress'
-import Accordion from '@mui/material/Accordion'
-import AccordionSummary from '@mui/material/AccordionSummary'
-import AccordionDetails from '@mui/material/AccordionDetails'
-import Checkbox from '@mui/material/Checkbox'
-import FormControlLabel from '@mui/material/FormControlLabel'
 import Chip from '@mui/material/Chip'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import { Modal } from '../ui'
+import { StandardsSelector } from './StandardsSelector'
 import { useUnitStore, useStandardsStore } from '../../stores'
-import type { Unit, UpdateUnitInput, StandardRef, Standards, StandardDomain, Standard } from '../../../../shared/types'
+import type { Unit, UpdateUnitInput, StandardRef } from '../../../../shared/types'
 
 interface UnitEditModalProps {
   isOpen: boolean
@@ -70,7 +65,24 @@ export function UnitEditModal({
       // Fetch all standards collections for this course
       fetchAllCollections(courseId)
     }
-  }, [isOpen, unit, courseId, clearUnitError, fetchAllCollections])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
+  }, [isOpen, unit, courseId])
+
+  // Get domain codes that have selected standards (for default expansion)
+  const defaultExpandedDomains = useMemo(() => {
+    const domains: string[] = []
+    for (const collection of allCollections) {
+      for (const domain of collection.domains) {
+        const hasSelected = domain.standards.some((s) =>
+          formData.selectedStandards.includes(s.code)
+        )
+        if (hasSelected) {
+          domains.push(domain.code)
+        }
+      }
+    }
+    return domains
+  }, [allCollections, formData.selectedStandards])
 
   const handleChange = useCallback((field: keyof FormData, value: string | StandardRef[]) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -212,130 +224,14 @@ export function UnitEditModal({
             )}
           </Typography>
 
-          {standardsLoading && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2 }}>
-              <CircularProgress size={16} />
-              <Typography variant="body2" color="text.secondary">
-                Loading standards...
-              </Typography>
-            </Box>
-          )}
-
-          {!standardsLoading && allCollections.length === 0 && (
-            <Box
-              sx={{
-                p: 2,
-                borderRadius: 1,
-                bgcolor: 'action.hover',
-                textAlign: 'center'
-              }}
-            >
-              <Typography variant="body2" color="text.secondary">
-                No standards imported for this course.
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                You can import standards from the Course page.
-              </Typography>
-            </Box>
-          )}
-
-          {!standardsLoading && allCollections.length > 0 && (
-            <Box sx={{ maxHeight: 300, overflow: 'auto', border: 1, borderColor: 'divider', borderRadius: 1 }}>
-              {allCollections.map((collection: Standards) => (
-                <Box key={collection.id}>
-                  {/* Collection header */}
-                  <Box sx={{ px: 2, py: 1, bgcolor: 'action.hover', borderBottom: 1, borderColor: 'divider' }}>
-                    <Typography variant="subtitle2" fontWeight={600}>
-                      {collection.name}
-                    </Typography>
-                  </Box>
-                  {collection.domains.map((domain: StandardDomain) => {
-                    const domainStandardCodes = domain.standards.map((s: Standard) => s.code)
-                    const selectedInDomain = domainStandardCodes.filter((code: string) =>
-                      formData.selectedStandards.includes(code)
-                    )
-                    const allSelected = selectedInDomain.length === domainStandardCodes.length && domainStandardCodes.length > 0
-                    const someSelected = selectedInDomain.length > 0 && !allSelected
-
-                    return (
-                      <Accordion
-                        key={`${collection.id}-${domain.code}`}
-                        disableGutters
-                        defaultExpanded={selectedInDomain.length > 0}
-                        sx={{
-                          '&:before': { display: 'none' },
-                          boxShadow: 'none'
-                        }}
-                      >
-                        <AccordionSummary
-                          expandIcon={<ExpandMoreIcon />}
-                          sx={{ '&:hover': { bgcolor: 'action.hover' } }}
-                        >
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
-                            <Checkbox
-                              checked={allSelected}
-                              indeterminate={someSelected}
-                              onChange={() => handleSelectAllInDomain(domainStandardCodes, allSelected)}
-                              onClick={(e) => e.stopPropagation()}
-                              size="small"
-                            />
-                            <Chip label={domain.code} size="small" color="primary" variant="outlined" />
-                            <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
-                              {domain.name}
-                            </Typography>
-                            {selectedInDomain.length > 0 && (
-                              <Chip
-                                label={`${selectedInDomain.length}/${domain.standards.length}`}
-                                size="small"
-                                sx={{ mr: 1 }}
-                              />
-                            )}
-                          </Box>
-                        </AccordionSummary>
-                        <AccordionDetails sx={{ pt: 0, pl: 6 }}>
-                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                            {domain.standards.map((standard: Standard) => (
-                              <FormControlLabel
-                                key={standard.code}
-                                control={
-                                  <Checkbox
-                                    checked={formData.selectedStandards.includes(standard.code)}
-                                    onChange={() => handleStandardToggle(standard.code)}
-                                    size="small"
-                                  />
-                                }
-                                label={
-                                  <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                                    <Chip
-                                      label={standard.code}
-                                      size="small"
-                                      variant="outlined"
-                                      sx={{ flexShrink: 0, mt: 0.25 }}
-                                    />
-                                    <Typography variant="body2" color="text.secondary">
-                                      {standard.description}
-                                    </Typography>
-                                  </Box>
-                                }
-                                sx={{
-                                  alignItems: 'flex-start',
-                                  mx: 0,
-                                  py: 0.5,
-                                  borderBottom: 1,
-                                  borderColor: 'divider',
-                                  '&:last-child': { borderBottom: 0 }
-                                }}
-                              />
-                            ))}
-                          </Box>
-                        </AccordionDetails>
-                      </Accordion>
-                    )
-                  })}
-                </Box>
-              ))}
-            </Box>
-          )}
+          <StandardsSelector
+            allCollections={allCollections}
+            selectedStandards={formData.selectedStandards}
+            loading={standardsLoading}
+            onToggleStandard={handleStandardToggle}
+            onSelectAllInDomain={handleSelectAllInDomain}
+            defaultExpandedDomains={defaultExpandedDomains}
+          />
         </Box>
 
         {/* Actions */}
