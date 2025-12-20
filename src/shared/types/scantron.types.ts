@@ -14,6 +14,7 @@ export interface ScantronQRData {
   sid: string // Student ID
   secid: string // Section ID
   aid: string // Assignment ID
+  uid: string // Unit ID (needed to look up assessment)
   ver: VersionId // Version (always 'A' for now)
   var?: string // Variant ID (for future UDL support)
   dt: string // Date (ISO format)
@@ -36,6 +37,7 @@ export interface ScantronOptions {
 export interface ScantronGenerationRequest {
   assignmentId: string
   sectionId: string
+  unitId: string // Needed for QR code to enable automatic grading lookup
   options: ScantronOptions
 }
 

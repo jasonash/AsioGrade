@@ -666,6 +666,7 @@ function registerPDFHandlers(): void {
         students,
         request.assignmentId,
         request.sectionId,
+        request.unitId,
         assignment.questionCount,
         request.options
       )

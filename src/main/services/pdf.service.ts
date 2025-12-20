@@ -37,6 +37,7 @@ class PDFService {
     students: ScantronStudentInfo[],
     assignmentId: string,
     sectionId: string,
+    unitId: string,
     questionCount: number,
     options: ScantronOptions
   ): Promise<ScantronGenerationResult> {
@@ -75,6 +76,7 @@ class PDFService {
           sid: student.studentId,
           secid: sectionId,
           aid: assignmentId,
+          uid: unitId,
           ver: 'A',
           dt: date,
           qc: questionCount

@@ -220,6 +220,7 @@ export interface ParsedScantron {
 export interface GradeProcessRequest {
   assignmentId: string
   sectionId: string
+  unitId: string // Needed to look up the assessment
   pdfBase64: string // Base64 encoded PDF file
 }
 

@@ -2549,6 +2549,7 @@ class DriveService {
             id: assignment.id,
             sectionId: assignment.sectionId,
             assessmentId: assignment.assessmentId,
+            unitId: assignment.unitId,
             assessmentTitle: assignment.assessmentTitle,
             assessmentType: assignment.assessmentType,
             assessmentPurpose: assignment.assessmentPurpose,
@@ -2676,6 +2677,7 @@ class DriveService {
         id: assignmentId,
         sectionId: input.sectionId,
         assessmentId: input.assessmentId,
+        unitId: assessment.unitId || '', // Denormalized from assessment for grading lookup
         assessmentTitle: assessment.title,
         assessmentType: assessment.type,
         assessmentPurpose: assessment.purpose,

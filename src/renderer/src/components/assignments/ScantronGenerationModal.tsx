@@ -77,6 +77,7 @@ export function ScantronGenerationModal({
     const request: ScantronGenerationRequest = {
       assignmentId: assignment.id,
       sectionId: assignment.sectionId,
+      unitId: assignment.unitId,
       options
     }
 
