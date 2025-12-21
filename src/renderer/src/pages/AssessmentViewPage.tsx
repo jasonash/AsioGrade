@@ -17,7 +17,7 @@ import ScoreIcon from '@mui/icons-material/Score'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import { useAssessmentStore, useStandardsStore } from '../stores'
 import { ConfirmModal } from '../components/ui'
-import { AssessmentEditModal, QuestionList } from '../components/assessments'
+import { AssessmentEditModal, QuestionList, AIAssistantPanel } from '../components/assessments'
 import type {
   CourseSummary,
   UnitSummary,
@@ -118,6 +118,39 @@ export function AssessmentViewPage({
       courseId: currentAssessment.courseId,
       unitId: currentAssessment.unitId,
       questions
+    })
+  }
+
+  // Handler for accepting AI-generated questions
+  const handleQuestionsAccepted = async (
+    newQuestions: MultipleChoiceQuestion[]
+  ): Promise<void> => {
+    if (!currentAssessment) return
+
+    const updatedQuestions = [...currentAssessment.questions, ...newQuestions]
+    await updateAssessment({
+      id: currentAssessment.id,
+      courseId: currentAssessment.courseId,
+      unitId: currentAssessment.unitId,
+      questions: updatedQuestions
+    })
+  }
+
+  // Handler for refined questions
+  const handleQuestionRefined = async (
+    questionId: string,
+    refined: MultipleChoiceQuestion
+  ): Promise<void> => {
+    if (!currentAssessment) return
+
+    const updatedQuestions = currentAssessment.questions.map((q) =>
+      q.id === questionId ? refined : q
+    )
+    await updateAssessment({
+      id: currentAssessment.id,
+      courseId: currentAssessment.courseId,
+      unitId: currentAssessment.unitId,
+      questions: updatedQuestions
     })
   }
 
@@ -289,30 +322,51 @@ export function AssessmentViewPage({
 
       <Divider />
 
-      {/* Questions section */}
-      <Box>
-        <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-          Questions
-        </Typography>
-
-        <QuestionList
-          questions={(currentAssessment?.questions as MultipleChoiceQuestion[]) ?? []}
-          standards={allStandards}
-          onQuestionsChange={handleQuestionsChange}
-          readOnly={currentAssessment?.status === 'published'}
-        />
-
-        {currentAssessment?.status === 'published' && (
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ mt: 2, fontStyle: 'italic' }}
-          >
-            This assessment has been published and cannot be edited. Create a new version
-            if you need to make changes.
+      {/* Questions section with AI Assistant */}
+      <Grid container spacing={3}>
+        {/* Questions List */}
+        <Grid size={{ xs: 12, md: currentAssessment?.status === 'draft' ? 8 : 12 }}>
+          <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+            Questions
           </Typography>
+
+          <QuestionList
+            questions={(currentAssessment?.questions as MultipleChoiceQuestion[]) ?? []}
+            standards={allStandards}
+            onQuestionsChange={handleQuestionsChange}
+            readOnly={currentAssessment?.status === 'published'}
+          />
+
+          {currentAssessment?.status === 'published' && (
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 2, fontStyle: 'italic' }}
+            >
+              This assessment has been published and cannot be edited. Create a new version
+              if you need to make changes.
+            </Typography>
+          )}
+        </Grid>
+
+        {/* AI Assistant Panel - Only show for draft assessments */}
+        {currentAssessment?.status === 'draft' && (
+          <Grid size={{ xs: 12, md: 4 }}>
+            <AIAssistantPanel
+              courseId={course.id}
+              unitId={unit.id}
+              assessmentId={currentAssessment.id}
+              assessmentTitle={currentAssessment.title}
+              gradeLevel={course.gradeLevel}
+              subject={course.subject}
+              standards={allStandards}
+              existingQuestionCount={currentAssessment.questions.length}
+              onQuestionsAccepted={handleQuestionsAccepted}
+              onQuestionRefined={handleQuestionRefined}
+            />
+          </Grid>
         )}
-      </Box>
+      </Grid>
 
       {/* Edit Modal */}
       {currentAssessment && (

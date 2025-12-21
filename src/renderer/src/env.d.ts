@@ -73,6 +73,11 @@ type InvokeChannel =
   | 'llm:testConnection'
   | 'llm:getProviders'
   | 'llm:hasConfiguredProvider'
+  // AI Assessment Generation
+  | 'ai:generateQuestions'
+  | 'ai:generateQuestionsStream'
+  | 'ai:refineQuestion'
+  | 'ai:chat'
   // Import utilities
   | 'import:fetchUrl'
   | 'import:openFileDialog'
@@ -101,6 +106,7 @@ type EventChannel =
   | 'sync:complete'
   | 'llm:streamChunk'
   | 'grade:progress'
+  | 'ai:questionStream'
 
 interface ElectronAPI {
   platform: NodeJS.Platform

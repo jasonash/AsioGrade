@@ -18,6 +18,7 @@ export type * from './assessment.types'
 export type * from './assignment.types'
 export type * from './scantron.types'
 export type * from './grade.types'
+export type * from './ai.types'
 
 // LLM types has runtime values (const arrays, functions) so use regular export
 export * from './llm.types'

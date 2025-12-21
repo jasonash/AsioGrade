@@ -1,0 +1,259 @@
+/**
+ * AI Service for Assessment Generation and Refinement
+ *
+ * Orchestrates LLM calls for question generation, refinement,
+ * and conversational assistance.
+ */
+
+import { llmService } from '../llm/llm.service'
+import {
+  SYSTEM_PROMPTS,
+  buildQuestionGenerationPrompt,
+  buildRefinementPrompt,
+  buildChatContextPrompt
+} from './prompts'
+import { parseGeneratedQuestions, parseRefinedQuestion } from './parser'
+import type { ServiceResult } from '../../../shared/types/common.types'
+import type { LLMUsage } from '../../../shared/types/llm.types'
+import type {
+  QuestionGenerationRequest,
+  QuestionRefinementRequest,
+  QuestionRefinementResult,
+  GeneratedQuestion,
+  AIChatRequest,
+  AIChatResponse,
+  AIMessage,
+  QuestionStreamEvent
+} from '../../../shared/types/ai.types'
+
+class AIService {
+  /**
+   * Generate questions with streaming progress updates
+   * Sends events to renderer via IPC
+   */
+  async generateQuestionsWithStream(
+    request: QuestionGenerationRequest,
+    standardsText: string,
+    sender: Electron.WebContents
+  ): Promise<ServiceResult<GeneratedQuestion[]>> {
+    try {
+      // Send start event
+      const startEvent: QuestionStreamEvent = {
+        type: 'start',
+        totalExpected: request.questionCount
+      }
+      sender.send('ai:questionStream', startEvent)
+
+      // Build the prompt
+      const prompt = buildQuestionGenerationPrompt(request, standardsText)
+
+      // Stream the response
+      let fullContent = ''
+      let usage: LLMUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+
+      for await (const chunk of llmService.stream({
+        prompt,
+        systemPrompt: SYSTEM_PROMPTS.questionGeneration,
+        temperature: 0.4,
+        maxTokens: 4000
+      })) {
+        fullContent += chunk.content
+
+        // Send progress event periodically
+        if (fullContent.length % 200 === 0) {
+          const progressEvent: QuestionStreamEvent = {
+            type: 'progress',
+            message: `Generating questions... (${Math.floor(fullContent.length / 50)}% complete)`
+          }
+          sender.send('ai:questionStream', progressEvent)
+        }
+
+        if (chunk.usage) {
+          usage = chunk.usage
+        }
+      }
+
+      // Parse the complete response
+      const providerType = llmService.getDefaultProviderType()
+      const model = providerType ?? 'unknown'
+      const parseResult = parseGeneratedQuestions(fullContent, model)
+
+      if (!parseResult.success || !parseResult.questions) {
+        const errorMsg = parseResult.error ?? 'Failed to parse generated questions'
+        const errorEvent: QuestionStreamEvent = {
+          type: 'error',
+          message: errorMsg
+        }
+        sender.send('ai:questionStream', errorEvent)
+        return { success: false, error: errorMsg }
+      }
+
+      // Send individual question events
+      for (let i = 0; i < parseResult.questions.length; i++) {
+        const questionEvent: QuestionStreamEvent = {
+          type: 'question',
+          question: parseResult.questions[i],
+          index: i
+        }
+        sender.send('ai:questionStream', questionEvent)
+      }
+
+      // Send complete event
+      const completeEvent: QuestionStreamEvent = {
+        type: 'complete',
+        questions: parseResult.questions,
+        usage
+      }
+      sender.send('ai:questionStream', completeEvent)
+
+      return { success: true, data: parseResult.questions }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Question generation failed'
+      const errorEvent: QuestionStreamEvent = {
+        type: 'error',
+        message
+      }
+      sender.send('ai:questionStream', errorEvent)
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate questions without streaming (for non-interactive use)
+   */
+  async generateQuestions(
+    request: QuestionGenerationRequest,
+    standardsText: string
+  ): Promise<ServiceResult<GeneratedQuestion[]>> {
+    try {
+      const prompt = buildQuestionGenerationPrompt(request, standardsText)
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: SYSTEM_PROMPTS.questionGeneration,
+        temperature: 0.4,
+        maxTokens: 4000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseGeneratedQuestions(result.data.content, result.data.model)
+      if (!parseResult.success || !parseResult.questions) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse generated questions' }
+      }
+
+      return { success: true, data: parseResult.questions }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Question generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Refine a single question
+   */
+  async refineQuestion(
+    request: QuestionRefinementRequest
+  ): Promise<ServiceResult<QuestionRefinementResult>> {
+    try {
+      const prompt = buildRefinementPrompt(
+        request.question,
+        request.command,
+        request.gradeLevel,
+        request.standardRef
+      )
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: SYSTEM_PROMPTS.questionRefinement,
+        temperature: 0.3,
+        maxTokens: 2000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseRefinedQuestion(
+        result.data.content,
+        request.question,
+        result.data.model
+      )
+
+      if (!parseResult.success || !parseResult.question) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse refined question' }
+      }
+
+      return {
+        success: true,
+        data: {
+          original: request.question,
+          refined: parseResult.question,
+          explanation: parseResult.explanation ?? '',
+          usage: result.data.usage
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Question refinement failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Process a conversational chat message
+   * Handles natural language requests for generation/refinement
+   */
+  async chat(request: AIChatRequest): Promise<ServiceResult<AIChatResponse>> {
+    try {
+      // Build context-aware system prompt
+      const contextInfo = buildChatContextPrompt(
+        request.context.assessmentTitle,
+        request.context.subject,
+        request.context.gradeLevel,
+        request.context.standardRefs,
+        request.context.existingQuestionCount
+      )
+
+      const systemPrompt = `${SYSTEM_PROMPTS.conversationalAssistant}\n\n${contextInfo}`
+
+      const result = await llmService.complete({
+        prompt: request.message,
+        systemPrompt,
+        temperature: 0.7,
+        maxTokens: 3000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const message: AIMessage = {
+        id: `msg-${Date.now().toString(36)}`,
+        role: 'assistant',
+        content: result.data.content,
+        timestamp: new Date().toISOString(),
+        tokenUsage: result.data.usage
+      }
+
+      // Try to extract any generated questions from the response
+      const parseResult = parseGeneratedQuestions(result.data.content, result.data.model)
+
+      return {
+        success: true,
+        data: {
+          message,
+          generatedQuestions: parseResult.success ? parseResult.questions : undefined,
+          usage: result.data.usage
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Chat request failed'
+      return { success: false, error: message }
+    }
+  }
+}
+
+// Singleton instance
+export const aiService = new AIService()

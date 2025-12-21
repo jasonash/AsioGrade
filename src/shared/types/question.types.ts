@@ -21,6 +21,12 @@ export interface BaseQuestion {
   points: number
   createdAt: string
   // Future: dok?: 1 | 2 | 3 | 4  // Depth of Knowledge level
+
+  // AI generation tracking (optional)
+  aiGenerated?: boolean
+  aiModel?: string
+  aiGeneratedAt?: string
+  explanation?: string // Why the answer is correct
 }
 
 /**

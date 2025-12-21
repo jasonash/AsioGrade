@@ -84,6 +84,12 @@ const validInvokeChannels = [
   'llm:getProviders',
   'llm:hasConfiguredProvider',
 
+  // AI Assessment Generation
+  'ai:generateQuestions',
+  'ai:generateQuestionsStream',
+  'ai:refineQuestion',
+  'ai:chat',
+
   // Import utilities
   'import:fetchUrl',
   'import:openFileDialog',
@@ -115,7 +121,8 @@ const validEventChannels = [
   'sync:error',
   'sync:complete',
   'llm:streamChunk',
-  'grade:progress'
+  'grade:progress',
+  'ai:questionStream'
 ] as const
 
 type InvokeChannel = (typeof validInvokeChannels)[number]

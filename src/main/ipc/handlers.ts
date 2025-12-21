@@ -3,6 +3,7 @@ import { storageService } from '../services/storage.service'
 import { authService } from '../services/auth.service'
 import { driveService } from '../services/drive.service'
 import { llmService } from '../services/llm'
+import { aiService } from '../services/ai'
 import { importService } from '../services/import.service'
 import { pdfService } from '../services/pdf.service'
 import { gradeService } from '../services/grade.service'
@@ -31,6 +32,11 @@ import type {
   GradeOverride
 } from '../../shared/types'
 import type { LLMRequest, LLMProviderType } from '../../shared/types/llm.types'
+import type {
+  QuestionGenerationRequest,
+  QuestionRefinementRequest,
+  AIChatRequest
+} from '../../shared/types/ai.types'
 
 /**
  * Register all IPC handlers for the main process
@@ -57,6 +63,9 @@ export function registerIpcHandlers(): void {
 
   // Grade handlers
   registerGradeHandlers()
+
+  // AI handlers
+  registerAIHandlers()
 }
 
 function registerAuthHandlers(): void {
@@ -731,4 +740,86 @@ function registerGradeHandlers(): void {
       }
     }
   )
+}
+
+function registerAIHandlers(): void {
+  // ============================================================
+  // AI Assessment Generation
+  // ============================================================
+
+  // Generate questions (non-streaming)
+  ipcMain.handle(
+    'ai:generateQuestions',
+    async (_event, request: QuestionGenerationRequest) => {
+      try {
+        // Fetch standards text for the prompt
+        const standardsResult = await driveService.getAllStandardsForCourse(request.courseId)
+        if (!standardsResult.success) {
+          return { success: false, error: 'Failed to load standards' }
+        }
+
+        // Build standards text from selected refs
+        const standardsText = buildStandardsText(standardsResult.data, request.standardRefs)
+
+        return aiService.generateQuestions(request, standardsText)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Generation failed'
+        return { success: false, error: message }
+      }
+    }
+  )
+
+  // Generate questions with streaming
+  ipcMain.handle(
+    'ai:generateQuestionsStream',
+    async (event, request: QuestionGenerationRequest) => {
+      try {
+        const standardsResult = await driveService.getAllStandardsForCourse(request.courseId)
+        if (!standardsResult.success) {
+          return { success: false, error: 'Failed to load standards' }
+        }
+
+        const standardsText = buildStandardsText(standardsResult.data, request.standardRefs)
+
+        return aiService.generateQuestionsWithStream(request, standardsText, event.sender)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Generation failed'
+        return { success: false, error: message }
+      }
+    }
+  )
+
+  // Refine a question
+  ipcMain.handle('ai:refineQuestion', async (_event, request: QuestionRefinementRequest) => {
+    return aiService.refineQuestion(request)
+  })
+
+  // Conversational chat
+  ipcMain.handle('ai:chat', async (_event, request: AIChatRequest) => {
+    return aiService.chat(request)
+  })
+}
+
+/**
+ * Helper to build standards text from refs
+ */
+function buildStandardsText(
+  collections: import('../../shared/types').Standards[],
+  refs: string[]
+): string {
+  const matchedStandards: string[] = []
+
+  for (const collection of collections) {
+    for (const domain of collection.domains) {
+      for (const standard of domain.standards) {
+        if (refs.includes(standard.code)) {
+          matchedStandards.push(`${standard.code}: ${standard.description}`)
+        }
+      }
+    }
+  }
+
+  return matchedStandards.length > 0
+    ? matchedStandards.join('\n')
+    : 'No specific standards provided. Generate general assessment questions for the subject and grade level.'
 }
