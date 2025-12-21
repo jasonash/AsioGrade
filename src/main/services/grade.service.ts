@@ -90,6 +90,7 @@ console.log('[GradeService] cv.Mat:', typeof cv?.Mat)
 console.log('[GradeService] cv.CV_8UC1:', cv?.CV_8UC1)
 
 // Layout constants from pdf.service.ts (at 72 DPI)
+// NOTE: BUBBLE_GRID_Y_START measured from actual scans (335 at 150 DPI = 161 at 72 DPI)
 const LAYOUT = {
   MARGIN: 50,
   BUBBLE_RADIUS: 7,
@@ -98,7 +99,7 @@ const LAYOUT = {
   QUESTIONS_PER_COLUMN: 25,
   QR_SIZE: 80,
   QR_Y_START: 146, // Y position where QR code starts (header ends at 136, +10 offset)
-  BUBBLE_GRID_Y_START: 256, // Y position where bubble grid starts (QR ends at 236, +20 spacing)
+  BUBBLE_GRID_Y_START: 161, // Measured from actual scans - Q1 row starts here
   QUESTION_NUM_WIDTH: 30,
   CHOICE_LABELS: ['A', 'B', 'C', 'D'] as const,
   LETTER_WIDTH: 612,
@@ -733,11 +734,13 @@ class GradeService {
   // ============================================================
 
   // Layout constants for normalized image (at 150 DPI)
+  // NOTE: BUBBLE_GRID_Y_START was measured from actual scanned documents
+  // The original calculation (256pt × 150/72 = 533) was incorrect
   private static readonly NORMALIZED_LAYOUT = {
     WIDTH: 1275, // 8.5" × 150 DPI
     HEIGHT: 1650, // 11" × 150 DPI
     MARGIN: 104, // 50pt × 150/72
-    BUBBLE_GRID_Y_START: 533, // 256pt × 150/72 (header + QR + spacing)
+    BUBBLE_GRID_Y_START: 335, // Measured from actual scans - Q1 row starts here
     ROW_HEIGHT: 50, // 24pt × 150/72
     BUBBLE_SPACING: 46, // 22pt × 150/72
     BUBBLE_RADIUS: 15, // 7pt × 150/72
