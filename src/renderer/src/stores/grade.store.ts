@@ -7,7 +7,9 @@ import type {
   GradeProcessRequest,
   GradeProcessResult,
   SaveGradesInput,
-  UnidentifiedPage
+  UnidentifiedPage,
+  VersionId,
+  AnswerResult
 } from '../../../shared/types'
 import type { ServiceResult } from '../../../shared/types/common.types'
 
@@ -40,6 +42,7 @@ interface GradeState {
   setContext: (assignmentId: string, sectionId: string) => void
   clearGrades: () => void
   clearError: () => void
+  assignUnidentifiedPage: (pageNumber: number, studentId: string) => void
 }
 
 export const useGradeStore = create<GradeState>((set, get) => ({
@@ -218,5 +221,98 @@ export const useGradeStore = create<GradeState>((set, get) => ({
       set({ error: message, isSaving: false })
       return false
     }
+  },
+
+  assignUnidentifiedPage: (pageNumber: number, studentId: string) => {
+    const { currentGrades, unidentifiedPages, currentAssignmentId, parsedPages } = get()
+
+    if (!currentGrades || !currentAssignmentId) {
+      set({ error: 'No grades context available' })
+      return
+    }
+
+    // Find the unidentified page
+    const page = unidentifiedPages.find((p) => p.pageNumber === pageNumber)
+    if (!page) {
+      set({ error: `Unidentified page ${pageNumber} not found` })
+      return
+    }
+
+    // Find the parsed page data for answer details
+    const parsedPage = parsedPages.find((p) => p.pageNumber === pageNumber)
+
+    // Create answer results from detected answers
+    const answers: AnswerResult[] = page.detectedAnswers.map((bubble) => {
+      const maxConfidence = Math.max(...bubble.bubbles.map((b) => b.confidence))
+      return {
+        questionNumber: bubble.questionNumber,
+        questionId: '', // Will be filled by grading calculation
+        questionType: 'multiple_choice' as const,
+        selected: bubble.selected,
+        confidence: maxConfidence,
+        correct: false, // Will be recalculated when compared with answer key
+        multipleSelected: bubble.multipleDetected,
+        unclear: maxConfidence < 0.7
+      }
+    })
+
+    // Create a new grade record
+    const newRecord: GradeRecord = {
+      id: `${currentAssignmentId}-${studentId}`,
+      studentId,
+      assignmentId: currentAssignmentId,
+      versionId: 'A' as VersionId,
+      gradedAt: new Date().toISOString(),
+      scannedAt: new Date().toISOString(),
+      rawScore: 0, // Will be recalculated
+      totalQuestions: page.detectedAnswers.length,
+      percentage: 0, // Will be recalculated
+      points: 0, // Will be recalculated
+      maxPoints: page.detectedAnswers.length,
+      answers,
+      flags: [
+        {
+          type: 'qr_error',
+          message: 'QR code was unreadable - manually assigned'
+        }
+      ],
+      needsReview: true,
+      reviewNotes: `Manually assigned from page ${pageNumber}${page.ocrStudentName ? ` (OCR: "${page.ocrStudentName}")` : ''}`,
+      scantronPageNumber: pageNumber
+    }
+
+    // Update state: add record, remove from unidentified
+    const updatedRecords = [...currentGrades.records, newRecord]
+    const updatedUnidentified = unidentifiedPages.filter((p) => p.pageNumber !== pageNumber)
+
+    // Update parsed page to mark it as assigned
+    const updatedParsedPages = parsedPages.map((p) => {
+      if (p.pageNumber === pageNumber && parsedPage) {
+        return {
+          ...p,
+          qrData: { v: 1 as const, aid: currentAssignmentId, sid: studentId },
+          qrError: undefined,
+          success: true
+        }
+      }
+      return p
+    })
+
+    // Recalculate stats
+    const newStats = {
+      ...currentGrades.stats,
+      totalStudents: updatedRecords.length
+    }
+
+    set({
+      currentGrades: {
+        ...currentGrades,
+        records: updatedRecords,
+        stats: newStats
+      },
+      unidentifiedPages: updatedUnidentified,
+      parsedPages: updatedParsedPages,
+      flaggedRecords: updatedRecords.filter((r) => r.needsReview)
+    })
   }
 }))

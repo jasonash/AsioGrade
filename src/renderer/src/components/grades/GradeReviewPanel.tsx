@@ -10,18 +10,20 @@ import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Divider from '@mui/material/Divider'
 import CircularProgress from '@mui/material/CircularProgress'
-import List from '@mui/material/List'
-import ListItem from '@mui/material/ListItem'
-import ListItemIcon from '@mui/material/ListItemIcon'
-import ListItemText from '@mui/material/ListItemText'
+import Collapse from '@mui/material/Collapse'
+import IconButton from '@mui/material/IconButton'
 import SaveIcon from '@mui/icons-material/Save'
 import WarningIcon from '@mui/icons-material/Warning'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
-import DescriptionIcon from '@mui/icons-material/Description'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
+import PersonAddIcon from '@mui/icons-material/PersonAdd'
 import { StudentGradeRow } from './StudentGradeRow'
+import { ScantronPageOverview } from './ScantronPageOverview'
+import { UnidentifiedPageAssignmentModal } from './UnidentifiedPageAssignmentModal'
 import { useGradeStore } from '../../stores'
-import type { Student, GradeOverride } from '../../../../shared/types'
+import type { Student, GradeOverride, UnidentifiedPage } from '../../../../shared/types'
 
 interface GradeReviewPanelProps {
   students: Student[]
@@ -33,14 +35,19 @@ export function GradeReviewPanel({ students }: GradeReviewPanelProps): ReactElem
     flaggedRecords,
     unidentifiedPages,
     pendingOverrides,
+    parsedPages,
     isSaving,
     error,
     addOverride,
     saveGrades,
-    clearError
+    clearError,
+    assignUnidentifiedPage
   } = useGradeStore()
 
   const [showFlaggedOnly, setShowFlaggedOnly] = useState(false)
+  const [showPageOverview, setShowPageOverview] = useState(true)
+  const [assignmentModalOpen, setAssignmentModalOpen] = useState(false)
+  const [selectedUnidentifiedPage, setSelectedUnidentifiedPage] = useState<UnidentifiedPage | null>(null)
 
   const studentMap = useMemo(
     () => new Map(students.map((s) => [s.id, s])),
@@ -66,6 +73,29 @@ export function GradeReviewPanel({ students }: GradeReviewPanelProps): ReactElem
     clearError()
     await saveGrades()
   }, [saveGrades, clearError])
+
+  const handleOpenAssignmentModal = useCallback((page: UnidentifiedPage) => {
+    setSelectedUnidentifiedPage(page)
+    setAssignmentModalOpen(true)
+  }, [])
+
+  const handleCloseAssignmentModal = useCallback(() => {
+    setAssignmentModalOpen(false)
+    setSelectedUnidentifiedPage(null)
+  }, [])
+
+  const handleAssignPage = useCallback(
+    (pageNumber: number, studentId: string) => {
+      assignUnidentifiedPage(pageNumber, studentId)
+    },
+    [assignUnidentifiedPage]
+  )
+
+  // Get set of already-graded student IDs
+  const gradedStudentIds = useMemo(() => {
+    if (!currentGrades) return new Set<string>()
+    return new Set(currentGrades.records.map((r) => r.studentId))
+  }, [currentGrades])
 
   if (!currentGrades) {
     return (
@@ -98,53 +128,110 @@ export function GradeReviewPanel({ students }: GradeReviewPanelProps): ReactElem
             {unidentifiedPages.length} Unidentified Scantron{unidentifiedPages.length !== 1 ? 's' : ''}
           </AlertTitle>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            The following pages could not be matched to students. Their QR codes may be damaged or
-            unreadable. Please manually assign these scantrons to the correct students.
+            The following pages could not be matched to students. Click &ldquo;Assign&rdquo; to
+            manually assign each scantron to the correct student.
           </Typography>
-          <List dense disablePadding>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             {unidentifiedPages.map((page) => {
               // Find suggested student names
-              const suggestedNames = page.suggestedStudents?.map(id => {
-                const student = students.find(s => s.id === id)
+              const suggestedNames = page.suggestedStudents?.map((id) => {
+                const student = students.find((s) => s.id === id)
                 return student ? `${student.lastName}, ${student.firstName}` : id
               })
 
               return (
-                <ListItem key={page.pageNumber} disableGutters sx={{ py: 0.5, flexDirection: 'column', alignItems: 'flex-start' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                    <ListItemIcon sx={{ minWidth: 36 }}>
-                      <DescriptionIcon fontSize="small" color="warning" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={`Page ${page.pageNumber}`}
-                      secondary={page.qrError || 'QR code unreadable'}
-                      primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
-                      secondaryTypographyProps={{ variant: 'caption' }}
-                    />
-                  </Box>
-                  {page.ocrStudentName && (
-                    <Box sx={{ pl: 4.5, mt: 0.5 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Name detected: <strong>{page.ocrStudentName}</strong>
-                      </Typography>
-                      {suggestedNames && suggestedNames.length > 0 && (
-                        <Typography variant="caption" color="info.main" sx={{ display: 'block' }}>
-                          Suggested match: {suggestedNames[0]}
-                          {suggestedNames.length > 1 && ` (or ${suggestedNames.slice(1).join(', ')})`}
+                <Box
+                  key={page.pageNumber}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    p: 1,
+                    bgcolor: 'background.paper',
+                    borderRadius: 1,
+                    border: 1,
+                    borderColor: 'warning.light'
+                  }}
+                >
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body2" fontWeight={500}>
+                      Page {page.pageNumber}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {page.qrError || 'QR code unreadable'}
+                    </Typography>
+                    {page.ocrStudentName && (
+                      <Box sx={{ mt: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          OCR: <em>&ldquo;{page.ocrStudentName}&rdquo;</em>
                         </Typography>
-                      )}
-                    </Box>
-                  )}
-                </ListItem>
+                        {suggestedNames && suggestedNames.length > 0 && (
+                          <Typography variant="caption" color="info.main" sx={{ display: 'block' }}>
+                            Best match: {suggestedNames[0]}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
+                  </Box>
+                  <Button
+                    variant="contained"
+                    size="small"
+                    color="warning"
+                    startIcon={<PersonAddIcon />}
+                    onClick={() => handleOpenAssignmentModal(page)}
+                  >
+                    Assign
+                  </Button>
+                </Box>
               )
             })}
-          </List>
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-            Manual assignment feature coming soon. For now, please re-scan these pages or manually
-            enter grades.
-          </Typography>
+          </Box>
         </Alert>
       )}
+
+      {/* Page Overview Section */}
+      {parsedPages.length > 0 && (
+        <Card>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              p: 1.5,
+              cursor: 'pointer',
+              '&:hover': { bgcolor: 'action.hover' }
+            }}
+            onClick={() => setShowPageOverview(!showPageOverview)}
+          >
+            <Typography variant="subtitle1" fontWeight={500}>
+              Scanned Pages Overview
+            </Typography>
+            <IconButton size="small">
+              {showPageOverview ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          </Box>
+          <Collapse in={showPageOverview}>
+            <CardContent sx={{ pt: 0 }}>
+              <ScantronPageOverview
+                parsedPages={parsedPages}
+                unidentifiedPages={unidentifiedPages}
+                students={students}
+                onAssignPage={handleOpenAssignmentModal}
+              />
+            </CardContent>
+          </Collapse>
+        </Card>
+      )}
+
+      {/* Assignment Modal */}
+      <UnidentifiedPageAssignmentModal
+        isOpen={assignmentModalOpen}
+        onClose={handleCloseAssignmentModal}
+        page={selectedUnidentifiedPage}
+        students={students}
+        gradedStudentIds={gradedStudentIds}
+        onAssign={handleAssignPage}
+      />
 
       {/* Stats Cards */}
       <Box
