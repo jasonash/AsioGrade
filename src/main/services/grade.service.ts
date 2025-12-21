@@ -12,7 +12,8 @@ import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { driveService } from './drive.service'
-import { registrationService } from './registration.service'
+// Registration service not currently used - using simpler corner-based orientation detection
+// import { registrationService } from './registration.service'
 
 // Initialize zxing-wasm for Node.js environment
 // We need to load the WASM binary from the filesystem
@@ -95,8 +96,8 @@ const LAYOUT = {
   ROW_HEIGHT: 24,
   QUESTIONS_PER_COLUMN: 25,
   QR_SIZE: 80,
-  QR_Y_START: 110, // Approximate Y position where QR code starts
-  BUBBLE_GRID_Y_START: 210, // Approximate Y position where bubble grid starts
+  QR_Y_START: 146, // Y position where QR code starts (header ends at 136, +10 offset)
+  BUBBLE_GRID_Y_START: 256, // Y position where bubble grid starts (QR ends at 236, +20 spacing)
   QUESTION_NUM_WIDTH: 30,
   CHOICE_LABELS: ['A', 'B', 'C', 'D'] as const,
   LETTER_WIDTH: 612,
@@ -734,7 +735,7 @@ class GradeService {
     WIDTH: 1275, // 8.5" × 150 DPI
     HEIGHT: 1650, // 11" × 150 DPI
     MARGIN: 104, // 50pt × 150/72
-    BUBBLE_GRID_Y_START: 437, // ~210pt × 150/72
+    BUBBLE_GRID_Y_START: 533, // 256pt × 150/72 (header + QR + spacing)
     ROW_HEIGHT: 50, // 24pt × 150/72
     BUBBLE_SPACING: 46, // 22pt × 150/72
     BUBBLE_RADIUS: 15, // 7pt × 150/72
@@ -762,34 +763,28 @@ class GradeService {
 
     console.log(`[GradeService] Page ${pageNumber}: Starting V2 processing (${imageWidth}x${imageHeight})...`)
 
-    // Step 1: Detect registration marks
-    console.log(`[GradeService] Page ${pageNumber}: Detecting registration marks...`)
-    const registration = await registrationService.detectRegistrationMarks(imageBuffer)
+    // Step 1: Detect page orientation using corner marks
+    // The filled circle should be in the bottom-left. If it's in top-right, page is upside down.
+    const isUpsideDown = await this.detectPageOrientation(imageBuffer, imageWidth, imageHeight)
+    console.log(`[GradeService] Page ${pageNumber}: Orientation: ${isUpsideDown ? 'UPSIDE DOWN - rotating' : 'correct'}`)
 
-    if (!registration.found) {
-      console.log(`[GradeService] Page ${pageNumber}: Registration marks not found (${registration.detectedCount}/4)`)
-      flags.push('registration_marks_not_found')
-    } else {
-      console.log(`[GradeService] Page ${pageNumber}: Found ${registration.detectedCount}/4 registration marks (confidence: ${registration.confidence.toFixed(2)})`)
-    }
-
-    // Step 2: Normalize page image (if we have a transform)
+    // Step 2: Rotate if needed
     let processBuffer = imageBuffer
-    if (registration.transform) {
-      const normalized = await registrationService.normalizePageImage(imageBuffer, registration)
-      if (normalized) {
-        processBuffer = normalized
-        console.log(`[GradeService] Page ${pageNumber}: Page normalized successfully`)
-      }
+    if (isUpsideDown) {
+      processBuffer = await sharp(imageBuffer).rotate(180).toBuffer()
+      flags.push('rotated_180')
     }
 
-    // Step 3: Read QR code from (possibly normalized) image
+    // Step 3: Read QR code
     let qrData: ScantronQRData | null = null
     let qrError: string | undefined
 
+    // Calculate DPI scale for QR extraction
+    const dpiScale = imageWidth / LAYOUT.LETTER_WIDTH
+
     console.log(`[GradeService] Page ${pageNumber}: Reading QR code...`)
     try {
-      qrData = await this.extractQRCode(processBuffer, 1) // DPI scale is 1 for normalized image
+      qrData = await this.extractQRCode(processBuffer, dpiScale)
       if (!qrData) {
         qrError = 'QR code not found or unreadable'
         flags.push('qr_error')
@@ -808,11 +803,11 @@ class GradeService {
     const detectedBubbles = await this.detectBubblesPositionBased(
       processBuffer,
       expectedQuestionCount,
-      registration.found
+      true // Always treat as normalized after rotation correction
     )
 
     // Check for issues
-    let overallConfidence = registration.found ? registration.confidence : 0.5
+    let overallConfidence = 0.8 // Start with reasonable confidence
     for (const bubble of detectedBubbles) {
       if (bubble.multipleDetected) {
         flags.push(`multiple_bubbles_q${bubble.questionNumber}`)
@@ -830,16 +825,86 @@ class GradeService {
 
     return {
       pageNumber,
-      success: !qrError && flags.filter(f => !f.startsWith('no_answer')).length === 0,
+      success: !qrError && flags.filter(f => !f.startsWith('no_answer') && f !== 'rotated_180').length === 0,
       qrData,
       qrError,
       answers: detectedBubbles,
       confidence: overallConfidence,
       processingTimeMs,
       flags,
-      imageWidth: registration.normalizedWidth || imageWidth,
-      imageHeight: registration.normalizedHeight || imageHeight
+      imageWidth,
+      imageHeight
     }
+  }
+
+  /**
+   * Detect if page is upside down by checking corner marks
+   * The filled circle should be in bottom-left corner.
+   * If we find high darkness in top-right, the page is likely upside down.
+   */
+  private async detectPageOrientation(
+    imageBuffer: Buffer,
+    width: number,
+    height: number
+  ): Promise<boolean> {
+    const { data } = await sharp(imageBuffer)
+      .grayscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+
+    const dpiScale = width / LAYOUT.LETTER_WIDTH
+    const markSize = Math.floor(30 * dpiScale) // Sample region size
+    const markOffset = Math.floor(40 * dpiScale) // Distance from corner
+
+    // Sample the four corners
+    const topLeftDarkness = this.sampleCornerDarkness(data, width, height, markOffset, markOffset, markSize)
+    const topRightDarkness = this.sampleCornerDarkness(data, width, height, width - markOffset - markSize, markOffset, markSize)
+    const bottomLeftDarkness = this.sampleCornerDarkness(data, width, height, markOffset, height - markOffset - markSize, markSize)
+    const bottomRightDarkness = this.sampleCornerDarkness(data, width, height, width - markOffset - markSize, height - markOffset - markSize, markSize)
+
+    console.log(`[GradeService] Corner darkness: TL=${topLeftDarkness.toFixed(0)}, TR=${topRightDarkness.toFixed(0)}, BL=${bottomLeftDarkness.toFixed(0)}, BR=${bottomRightDarkness.toFixed(0)}`)
+
+    // The filled circle (most dark) should be in bottom-left when oriented correctly
+    // The L-shapes are lighter (not filled), and square is medium
+    // If top-right is the darkest (most filled), page is upside down
+
+    // Simple heuristic: if top-right has more darkness than bottom-left, it's upside down
+    // The circle is a solid filled shape, so it should be very dark
+    const isDarkTopRight = topRightDarkness > 30 // More than 30% dark pixels
+
+    // If top-right is dark and darker than bottom-left, page is upside down
+    if (isDarkTopRight && topRightDarkness > bottomLeftDarkness) {
+      return true
+    }
+
+    return false
+  }
+
+  /**
+   * Sample a corner region and return the percentage of dark pixels (0-100)
+   */
+  private sampleCornerDarkness(
+    data: Buffer,
+    width: number,
+    height: number,
+    startX: number,
+    startY: number,
+    size: number
+  ): number {
+    let darkPixels = 0
+    let totalPixels = 0
+
+    for (let y = startY; y < startY + size && y < height; y++) {
+      for (let x = startX; x < startX + size && x < width; x++) {
+        const idx = y * width + x
+        totalPixels++
+        if (data[idx] < 128) { // Dark pixel threshold
+          darkPixels++
+        }
+      }
+    }
+
+    return totalPixels > 0 ? (darkPixels / totalPixels) * 100 : 0
   }
 
   /**
@@ -1097,11 +1162,14 @@ class GradeService {
       // Handle pages without QR code
       if (!page.qrData) {
         // Still create an unidentified page record - DON'T skip!
-        if (pageType === 'unidentified_scantron' || pageType === 'valid_scantron') {
+        // IMPORTANT: Any page with a QR error should be reported
+        if (pageType === 'unidentified_scantron') {
           // Get list of students who haven't been graded yet
           const ungradedStudentIds = roster.students
             .filter((s) => !gradedStudentIds.has(s.id))
             .map((s) => s.id)
+
+          console.log(`[GradeService] Page ${page.pageNumber}: Unidentified scantron - QR error: ${page.qrError}`)
 
           unidentifiedPages.push({
             pageNumber: page.pageNumber,
@@ -1112,6 +1180,8 @@ class GradeService {
             qrError: page.qrError,
             possibleStudents: ungradedStudentIds
           })
+        } else {
+          console.log(`[GradeService] Page ${page.pageNumber}: Classified as ${pageType} - skipping`)
         }
         continue // Skip to next page - but we've recorded this one!
       }
@@ -1227,19 +1297,27 @@ class GradeService {
    * Classify a parsed page into a page type
    */
   private classifyPage(page: ParsedScantron): PageType {
-    const hasRegistrationMarks = !page.flags.includes('registration_marks_not_found')
     const hasQR = !!page.qrData
     const hasAnswers = page.answers.some((a) => a.selected !== null)
+    const hasQRError = page.flags.includes('qr_error')
 
-    if (hasRegistrationMarks && hasQR) {
+    // If QR was successfully read, it's a valid scantron
+    if (hasQR) {
       return 'valid_scantron'
     }
-    if (hasRegistrationMarks && !hasQR) {
+
+    // If we tried to read QR and failed, this is an unidentified scantron
+    // IMPORTANT: Always report these so teacher knows a student is missing!
+    if (hasQRError) {
       return 'unidentified_scantron'
     }
-    if (!hasRegistrationMarks && !hasAnswers) {
+
+    // If no QR error but also no answers, might be blank
+    if (!hasAnswers) {
       return 'blank_page'
     }
+
+    // Has answers but no QR or QR error - unusual, flag as unknown
     return 'unknown_document'
   }
 
