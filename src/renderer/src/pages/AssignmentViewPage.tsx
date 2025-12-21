@@ -83,7 +83,7 @@ export function AssignmentViewPage({
     clearError
   } = useAssignmentStore()
   const { roster, fetchRoster } = useRosterStore()
-  const { currentGrades, clearGrades, setContext } = useGradeStore()
+  const { currentGrades, isProcessing: isLoadingGrades, clearGrades, setContext, fetchGrades } = useGradeStore()
 
   const [isScantronModalOpen, setIsScantronModalOpen] = useState(false)
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false)
@@ -91,11 +91,13 @@ export function AssignmentViewPage({
   const [isDeleting, setIsDeleting] = useState(false)
   const [showGradeReview, setShowGradeReview] = useState(false)
 
-  // Fetch full assignment and roster when page loads
+  // Fetch full assignment, roster, and existing grades when page loads
   useEffect(() => {
     getAssignment(assignmentSummary.id)
     fetchRoster(section.id)
     setContext(assignmentSummary.id, section.id)
+    // Fetch any existing grades for this assignment
+    fetchGrades(assignmentSummary.id, section.id)
     return () => {
       setCurrentAssignment(null)
       clearError()
@@ -286,15 +288,25 @@ export function AssignmentViewPage({
       )}
 
       {/* Grade Review Panel */}
-      {(showGradeReview || currentGrades) && roster && (
+      {(showGradeReview || currentGrades || isLoadingGrades) && roster && (
         <>
           <Divider sx={{ my: 2 }} />
           <Paper variant="outlined" sx={{ p: 3 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant="h6" fontWeight={600}>
-                Grade Review
-              </Typography>
-              {!currentGrades && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <GradingIcon color="primary" />
+                <Typography variant="h6" fontWeight={600}>
+                  Grades
+                </Typography>
+                {currentGrades && (
+                  <Chip
+                    label={`${currentGrades.records.length} graded`}
+                    size="small"
+                    color="success"
+                  />
+                )}
+              </Box>
+              {!currentGrades && !isLoadingGrades && (
                 <Button
                   variant="outlined"
                   size="small"
@@ -304,7 +316,16 @@ export function AssignmentViewPage({
                 </Button>
               )}
             </Box>
-            <GradeReviewPanel students={roster.students} />
+            {isLoadingGrades && !currentGrades ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
+                <CircularProgress size={24} />
+                <Typography sx={{ ml: 2 }} color="text.secondary">
+                  Loading grades...
+                </Typography>
+              </Box>
+            ) : (
+              <GradeReviewPanel students={roster.students} />
+            )}
           </Paper>
         </>
       )}
