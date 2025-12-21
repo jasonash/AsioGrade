@@ -29,6 +29,10 @@ const ROW_HEIGHT = 24
 const CHOICE_LABELS = ['A', 'B', 'C', 'D']
 const QUESTIONS_PER_COLUMN = 25
 
+// Registration mark constants
+const REG_MARK_SIZE = 20  // Size of registration marks
+const REG_MARK_OFFSET = 25 // Distance from page edge
+
 class PDFService {
   /**
    * Generate scantron PDF for an assignment
@@ -36,14 +40,14 @@ class PDFService {
   async generateScantronPDF(
     students: ScantronStudentInfo[],
     assignmentId: string,
-    sectionId: string,
-    unitId: string,
+    _sectionId: string, // Kept for API compatibility but not stored in QR (looked up from assignment)
+    _unitId: string, // Kept for API compatibility but not stored in QR (looked up from assignment)
     questionCount: number,
     options: ScantronOptions
   ): Promise<ScantronGenerationResult> {
     try {
       const { width, height } = this.getPageDimensions(options.paperSize)
-      const date = new Date().toISOString().split('T')[0]
+      const dateStr = new Date().toISOString().split('T')[0]
 
       // Create PDF document
       const doc = new PDFDocument({
@@ -71,19 +75,15 @@ class PDFService {
         }
 
         // Build QR data for this student
+        // SIMPLIFIED: Only essential IDs - everything else looked up from assignment
         const qrData: ScantronQRData = {
           v: 1,
-          sid: student.studentId,
-          secid: sectionId,
           aid: assignmentId,
-          uid: unitId,
-          ver: 'A',
-          dt: date,
-          qc: questionCount
+          sid: student.studentId
         }
 
         // Generate the page
-        await this.generateStudentPage(doc, student, qrData, questionCount, options, width, height)
+        await this.generateStudentPage(doc, student, qrData, questionCount, options, width, height, dateStr)
       }
 
       // Finalize PDF
@@ -135,12 +135,16 @@ class PDFService {
     questionCount: number,
     options: ScantronOptions,
     pageWidth: number,
-    pageHeight: number
+    pageHeight: number,
+    date: string
   ): Promise<void> {
+    // Draw registration marks first (in corners)
+    this.drawRegistrationMarks(doc, pageWidth, pageHeight)
+
     let currentY = MARGIN
 
     // Draw header
-    currentY = this.drawHeader(doc, student, qrData.dt, currentY, pageWidth)
+    currentY = this.drawHeader(doc, student, date, currentY, pageWidth)
 
     // Draw QR code and instructions side by side
     currentY = await this.drawQRAndInstructions(
@@ -243,11 +247,12 @@ class PDFService {
     const qrY = startY + 10
 
     // Generate QR code as data URL
+    // Use highest error correction (H = 30% recovery) for maximum scan reliability
     const qrDataString = JSON.stringify(qrData)
     const qrDataUrl = await QRCode.toDataURL(qrDataString, {
       width: qrSize,
-      margin: 1,
-      errorCorrectionLevel: 'M'
+      margin: 2, // Larger quiet zone for better scanning
+      errorCorrectionLevel: 'H'
     })
 
     // Draw QR code
@@ -282,6 +287,49 @@ class PDFService {
   }
 
   /**
+   * Draw registration marks in all four corners
+   * These help with scan alignment and orientation detection
+   */
+  private drawRegistrationMarks(
+    doc: PDFKit.PDFDocument,
+    pageWidth: number,
+    pageHeight: number
+  ): void {
+    const size = REG_MARK_SIZE
+    const offset = REG_MARK_OFFSET
+    const lineWidth = 3
+
+    doc.lineWidth(lineWidth)
+
+    // Top-left: L-shape (normal orientation indicator)
+    doc
+      .moveTo(offset, offset + size)
+      .lineTo(offset, offset)
+      .lineTo(offset + size, offset)
+      .stroke('#000000')
+
+    // Top-right: Square (different shape to detect rotation)
+    doc
+      .rect(pageWidth - offset - size, offset, size, size)
+      .fill('#000000')
+
+    // Bottom-left: Filled circle
+    doc
+      .circle(offset + size / 2, pageHeight - offset - size / 2, size / 2)
+      .fill('#000000')
+
+    // Bottom-right: L-shape (rotated, to detect 180° rotation)
+    doc
+      .moveTo(pageWidth - offset - size, pageHeight - offset)
+      .lineTo(pageWidth - offset, pageHeight - offset)
+      .lineTo(pageWidth - offset, pageHeight - offset - size)
+      .stroke('#000000')
+
+    // Reset line width
+    doc.lineWidth(1)
+  }
+
+  /**
    * Draw the bubble grid for answers
    */
   private drawBubbleGrid(
@@ -306,10 +354,12 @@ class PDFService {
 
       const columnX = MARGIN + column * columnWidth
       const rowY = startY + row * ROW_HEIGHT
+      const bubbleCenterY = rowY + ROW_HEIGHT / 2
 
-      // Draw question number
-      doc.font('Helvetica').fontSize(10)
-      doc.text(`${q + 1}.`, columnX, rowY + 3, {
+      // Draw question number - vertically centered with bubbles
+      // Font size 10 is roughly 7pt tall, so offset by half to center
+      doc.font('Helvetica-Bold').fontSize(10)
+      doc.text(`${q + 1}.`, columnX, bubbleCenterY - 4, {
         width: questionNumWidth - 5,
         align: 'right'
       })
@@ -319,21 +369,20 @@ class PDFService {
 
       for (let c = 0; c < choicesPerQuestion; c++) {
         const bubbleX = bubbleStartX + c * BUBBLE_SPACING + BUBBLE_RADIUS
-        const bubbleY = rowY + ROW_HEIGHT / 2
 
         // Draw bubble outline
         if (bubbleStyle === 'oval') {
           // Oval shape (slightly taller than wide)
-          doc.ellipse(bubbleX, bubbleY, BUBBLE_RADIUS, BUBBLE_RADIUS * 1.2)
+          doc.ellipse(bubbleX, bubbleCenterY, BUBBLE_RADIUS, BUBBLE_RADIUS * 1.2)
         } else {
           // Circle shape
-          doc.circle(bubbleX, bubbleY, BUBBLE_RADIUS)
+          doc.circle(bubbleX, bubbleCenterY, BUBBLE_RADIUS)
         }
         doc.stroke()
 
         // Draw choice label below the bubble
-        doc.font('Helvetica').fontSize(8)
-        doc.text(CHOICE_LABELS[c], bubbleX - 4, bubbleY + BUBBLE_RADIUS + 2, {
+        doc.font('Helvetica').fontSize(7)
+        doc.text(CHOICE_LABELS[c], bubbleX - 4, bubbleCenterY + BUBBLE_RADIUS + 1, {
           width: 8,
           align: 'center'
         })

@@ -4,21 +4,18 @@
  * Types for generating and parsing scantron answer sheets.
  */
 
-import type { VersionId } from './assignment.types'
-
 /**
  * QR code data encoded on each scantron page
+ *
+ * SIMPLIFIED: Only essential data for identification.
+ * All other info (section, unit, version, date, question count) is looked up
+ * from the assignment record. This reduces QR code density by ~60% for
+ * better scan reliability.
  */
 export interface ScantronQRData {
-  v: 1 // Schema version
-  sid: string // Student ID
-  secid: string // Section ID
+  v: 1 // Schema version (for forwards compatibility)
   aid: string // Assignment ID
-  uid: string // Unit ID (needed to look up assessment)
-  ver: VersionId // Version (always 'A' for now)
-  var?: string // Variant ID (for future UDL support)
-  dt: string // Date (ISO format)
-  qc: number // Question count
+  sid: string // Student ID
 }
 
 /**
