@@ -76,7 +76,9 @@ import type {
   Assignment,
   Assessment,
   Roster,
-  VersionId
+  VersionId,
+  UnidentifiedPage,
+  PageType
 } from '../../shared/types'
 
 // Log OpenCV load status at module initialization
@@ -182,13 +184,33 @@ class GradeService {
         parsedPages.push(parsed)
       }
 
-      // Calculate grades
-      const grades = this.calculateGrades(parsedPages, assignment, assessment, roster)
+      // Calculate grades and identify unidentified pages
+      const { grades, unidentifiedPages } = this.calculateGradesWithUnidentified(
+        parsedPages,
+        assignment,
+        assessment,
+        roster
+      )
 
       // Identify flagged records
       const flaggedRecords = grades.records.filter((r) => r.needsReview)
 
+      // Calculate summary statistics
+      const totalPages = parsedPages.length
+      const identifiedPages = grades.records.length
+      const unidentifiedCount = unidentifiedPages.length
+      const blankPages = parsedPages.filter((p) => this.isBlankPage(p)).length
+      const unknownDocuments = totalPages - identifiedPages - unidentifiedCount - blankPages
+
       const processingTimeMs = performance.now() - startTime
+
+      console.log(`[GradeService] Processing complete:
+        - Total pages: ${totalPages}
+        - Identified: ${identifiedPages}
+        - Unidentified: ${unidentifiedCount}
+        - Blank: ${blankPages}
+        - Unknown: ${unknownDocuments}
+        - Time: ${processingTimeMs.toFixed(0)}ms`)
 
       return {
         success: true,
@@ -197,7 +219,15 @@ class GradeService {
           parsedPages,
           grades,
           flaggedRecords,
-          processingTimeMs
+          unidentifiedPages,
+          processingTimeMs,
+          summary: {
+            totalPages,
+            identifiedPages,
+            unidentifiedPages: unidentifiedCount,
+            blankPages,
+            unknownDocuments
+          }
         }
       }
     } catch (error) {
@@ -1034,16 +1064,19 @@ class GradeService {
   }
 
   /**
-   * Calculate grades from parsed scantrons
+   * Calculate grades from parsed scantrons, also returning unidentified pages
+   * IMPORTANT: This method never skips pages - unidentified pages are returned separately
    */
-  private calculateGrades(
+  private calculateGradesWithUnidentified(
     parsedPages: ParsedScantron[],
     assignment: Assignment,
     assessment: Assessment,
     roster: Roster
-  ): AssignmentGrades {
+  ): { grades: AssignmentGrades; unidentifiedPages: UnidentifiedPage[] } {
     const records: GradeRecord[] = []
+    const unidentifiedPages: UnidentifiedPage[] = []
     const studentMap = new Map(roster.students.map((s) => [s.id, s]))
+    const gradedStudentIds = new Set<string>()
 
     // Build answer key from assessment
     const answerKey = new Map<number, string>()
@@ -1058,15 +1091,33 @@ class GradeService {
       const flags: GradeFlag[] = []
       let needsReview = false
 
-      // Handle QR errors
+      // Classify the page
+      const pageType = this.classifyPage(page)
+
+      // Handle pages without QR code
       if (!page.qrData) {
-        flags.push({
-          type: 'qr_error',
-          message: page.qrError || 'QR code not found'
-        })
-        needsReview = true
-        continue // Skip this page - can't identify student
+        // Still create an unidentified page record - DON'T skip!
+        if (pageType === 'unidentified_scantron' || pageType === 'valid_scantron') {
+          // Get list of students who haven't been graded yet
+          const ungradedStudentIds = roster.students
+            .filter((s) => !gradedStudentIds.has(s.id))
+            .map((s) => s.id)
+
+          unidentifiedPages.push({
+            pageNumber: page.pageNumber,
+            pageType,
+            confidence: page.confidence,
+            detectedAnswers: page.answers,
+            registrationMarkCount: this.countRegistrationMarks(page),
+            qrError: page.qrError,
+            possibleStudents: ungradedStudentIds
+          })
+        }
+        continue // Skip to next page - but we've recorded this one!
       }
+
+      // Mark this student as graded
+      gradedStudentIds.add(page.qrData.sid)
 
       // Check if student exists
       const student = studentMap.get(page.qrData.sid)
@@ -1140,13 +1191,13 @@ class GradeService {
         id: `${assignment.id}-${page.qrData.sid}`,
         studentId: page.qrData.sid,
         assignmentId: assignment.id,
-        versionId: 'A' as VersionId, // All students get version 'A' for now (A/B/C/D randomization deferred)
+        versionId: 'A' as VersionId, // All students get version 'A' for now
         gradedAt: new Date().toISOString(),
         scannedAt: new Date().toISOString(),
         rawScore,
         totalQuestions: page.answers.length,
         percentage,
-        points: rawScore, // 1 point per question for now
+        points: rawScore,
         maxPoints: totalPoints,
         answers,
         flags,
@@ -1160,7 +1211,7 @@ class GradeService {
     // Calculate statistics
     const stats = this.calculateStats(records, assessment)
 
-    return {
+    const grades: AssignmentGrades = {
       assignmentId: assignment.id,
       sectionId: assignment.sectionId,
       assessmentId: assessment.id,
@@ -1168,6 +1219,44 @@ class GradeService {
       records,
       stats
     }
+
+    return { grades, unidentifiedPages }
+  }
+
+  /**
+   * Classify a parsed page into a page type
+   */
+  private classifyPage(page: ParsedScantron): PageType {
+    const hasRegistrationMarks = !page.flags.includes('registration_marks_not_found')
+    const hasQR = !!page.qrData
+    const hasAnswers = page.answers.some((a) => a.selected !== null)
+
+    if (hasRegistrationMarks && hasQR) {
+      return 'valid_scantron'
+    }
+    if (hasRegistrationMarks && !hasQR) {
+      return 'unidentified_scantron'
+    }
+    if (!hasRegistrationMarks && !hasAnswers) {
+      return 'blank_page'
+    }
+    return 'unknown_document'
+  }
+
+  /**
+   * Check if a page appears to be blank
+   */
+  private isBlankPage(page: ParsedScantron): boolean {
+    return this.classifyPage(page) === 'blank_page'
+  }
+
+  /**
+   * Count registration marks detected on a page (for debugging/confidence)
+   */
+  private countRegistrationMarks(page: ParsedScantron): number {
+    // If registration marks weren't found, return 0
+    // Otherwise we assume 4 (we don't have detailed tracking yet)
+    return page.flags.includes('registration_marks_not_found') ? 0 : 4
   }
 
   /**

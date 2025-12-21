@@ -211,6 +211,35 @@ export interface ParsedScantron {
 }
 
 // ============================================================
+// Page Classification Types (Phase 4: Never skip pages)
+// ============================================================
+
+/**
+ * Classification of a scanned page
+ */
+export type PageType =
+  | 'valid_scantron' // Has registration marks + readable QR
+  | 'unidentified_scantron' // Has registration marks, QR unreadable
+  | 'blank_page' // No marks, no content
+  | 'unknown_document' // Has content but not a scantron
+
+/**
+ * An unidentified scantron page that needs manual student assignment
+ * These are pages where the QR code couldn't be read but the page
+ * appears to be a valid scantron (has registration marks and bubbles)
+ */
+export interface UnidentifiedPage {
+  pageNumber: number
+  pageType: PageType
+  confidence: number
+  detectedAnswers: DetectedBubble[] // We still try to read the answers
+  registrationMarkCount: number
+  imageDataBase64?: string // Optional: image preview for review UI
+  possibleStudents?: string[] // Optional: list of student IDs who haven't been graded yet
+  qrError?: string
+}
+
+// ============================================================
 // IPC Request/Response Types
 // ============================================================
 
@@ -233,7 +262,15 @@ export interface GradeProcessResult {
   parsedPages: ParsedScantron[]
   grades?: AssignmentGrades
   flaggedRecords: GradeRecord[]
+  unidentifiedPages: UnidentifiedPage[] // IMPORTANT: Never skip pages - include them here
   processingTimeMs: number
+  summary: {
+    totalPages: number
+    identifiedPages: number
+    unidentifiedPages: number
+    blankPages: number
+    unknownDocuments: number
+  }
 }
 
 /**
