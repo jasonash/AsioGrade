@@ -3,6 +3,7 @@ import type {
   AssignmentGrades,
   GradeRecord,
   GradeOverride,
+  GradeStats,
   ParsedScantron,
   GradeProcessRequest,
   GradeProcessResult,
@@ -13,6 +14,75 @@ import type {
   AnswerKeyEntry
 } from '../../../shared/types'
 import type { ServiceResult } from '../../../shared/types/common.types'
+
+/**
+ * Calculate stats for merged grade records
+ */
+function calculateMergedStats(records: GradeRecord[]): GradeStats {
+  if (records.length === 0) {
+    return {
+      totalStudents: 0,
+      averageScore: 0,
+      medianScore: 0,
+      highScore: 0,
+      lowScore: 0,
+      standardDeviation: 0,
+      byVariant: {},
+      byQuestion: {},
+      byStandard: {}
+    }
+  }
+
+  const percentages = records.map((r) => r.percentage)
+  const sorted = [...percentages].sort((a, b) => a - b)
+
+  const sum = percentages.reduce((a, b) => a + b, 0)
+  const average = sum / percentages.length
+  const median =
+    sorted.length % 2 === 0
+      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+      : sorted[Math.floor(sorted.length / 2)]
+
+  const squaredDiffs = percentages.map((p) => Math.pow(p - average, 2))
+  const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / percentages.length
+  const stdDev = Math.sqrt(avgSquaredDiff)
+
+  // Calculate by-question stats
+  const byQuestion: Record<string, { correctCount: number; incorrectCount: number; skippedCount: number; percentCorrect: number }> = {}
+  for (const record of records) {
+    for (const answer of record.answers) {
+      const qNum = String(answer.questionNumber)
+      if (!byQuestion[qNum]) {
+        byQuestion[qNum] = { correctCount: 0, incorrectCount: 0, skippedCount: 0, percentCorrect: 0 }
+      }
+      if (answer.selected === null) {
+        byQuestion[qNum].skippedCount++
+      } else if (answer.correct) {
+        byQuestion[qNum].correctCount++
+      } else {
+        byQuestion[qNum].incorrectCount++
+      }
+    }
+  }
+  // Calculate percentCorrect for each question
+  for (const qNum of Object.keys(byQuestion)) {
+    const q = byQuestion[qNum]
+    const total = q.correctCount + q.incorrectCount + q.skippedCount
+    q.percentCorrect = total > 0 ? (q.correctCount / total) * 100 : 0
+  }
+
+  return {
+    totalStudents: records.length,
+    averageScore: Math.round(average * 100) / 100,
+    medianScore: Math.round(median * 100) / 100,
+    highScore: Math.max(...percentages),
+    lowScore: Math.min(...percentages),
+    standardDeviation: Math.round(stdDev * 100) / 100,
+    byVariant: {},
+    byQuestion,
+    byStandard: {}
+  }
+}
 
 interface GradeState {
   // State
@@ -125,10 +195,54 @@ export const useGradeStore = create<GradeState>((set, get) => ({
         return null
       }
 
+      // Fetch existing grades to merge with new ones
+      const existingResult = await window.electronAPI.invoke<ServiceResult<AssignmentGrades | null>>(
+        'grade:getGrades',
+        request.assignmentId,
+        request.sectionId
+      )
+
+      let mergedGrades = result.data.grades
+      let mergedFlagged = result.data.flaggedRecords
+
+      // If we have existing grades and new grades, merge them
+      if (existingResult.success && existingResult.data && result.data.grades) {
+        const existingRecords = existingResult.data.records
+        const newRecords = result.data.grades.records
+
+        // Create a map of existing records by studentId for quick lookup
+        const recordMap = new Map<string, GradeRecord>()
+
+        // Add all existing records to the map
+        for (const record of existingRecords) {
+          recordMap.set(record.studentId, record)
+        }
+
+        // Overwrite/add with new records (new scans take priority)
+        for (const record of newRecords) {
+          recordMap.set(record.studentId, record)
+        }
+
+        // Convert map back to array
+        const mergedRecords = Array.from(recordMap.values())
+
+        // Recalculate stats for merged records
+        const stats = calculateMergedStats(mergedRecords)
+
+        mergedGrades = {
+          ...result.data.grades,
+          records: mergedRecords,
+          stats
+        }
+
+        // Update flagged records from the merged set
+        mergedFlagged = mergedRecords.filter((r) => r.needsReview)
+      }
+
       set({
-        currentGrades: result.data.grades || null,
+        currentGrades: mergedGrades || null,
         parsedPages: result.data.parsedPages,
-        flaggedRecords: result.data.flaggedRecords,
+        flaggedRecords: mergedFlagged,
         unidentifiedPages: result.data.unidentifiedPages || [],
         answerKey: result.data.answerKey || [],
         isProcessing: false,
