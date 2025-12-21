@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { driveService } from './drive.service'
-import { registrationService } from './registration.service'
+// Note: registrationService removed - phone scan deskewing is not reliably supported
 
 // Initialize zxing-wasm for Node.js environment
 // We need to load the WASM binary from the filesystem
@@ -752,8 +752,13 @@ class GradeService {
   }
 
   /**
-   * Parse a scantron page using registration marks and position-based bubble detection
-   * This is the new improved method that doesn't rely on HoughCircles
+   * Parse a scantron page using position-based bubble detection
+   *
+   * IMPORTANT: Only flatbed scans are reliably supported. Phone scans have
+   * variable aspect ratios, perspective distortion, and cropping that make
+   * accurate bubble detection unreliable.
+   *
+   * Expected dimensions at 150 DPI: 1275 x 1650 (US Letter)
    */
   async parseScantronPageV2(
     imageBuffer: Buffer,
@@ -765,22 +770,47 @@ class GradeService {
 
     // Get image dimensions
     const metadata = await sharp(imageBuffer).metadata()
-    let imageWidth = metadata.width || 0
-    let imageHeight = metadata.height || 0
+    const imageWidth = metadata.width || 0
+    const imageHeight = metadata.height || 0
 
     console.log(`[GradeService] Page ${pageNumber}: Starting V2 processing (${imageWidth}x${imageHeight})...`)
 
-    // Check if image is already at expected dimensions (flatbed scan at 150 DPI)
-    // If so, skip registration-based transformation to avoid introducing errors
-    const isAlreadyNormalized =
-      Math.abs(imageWidth - GradeService.NORMALIZED_LAYOUT.WIDTH) < 10 &&
-      Math.abs(imageHeight - GradeService.NORMALIZED_LAYOUT.HEIGHT) < 10
+    // Check if image matches expected flatbed scan dimensions (150 DPI US Letter)
+    // Allow small tolerance for rounding differences
+    const widthDiff = Math.abs(imageWidth - GradeService.NORMALIZED_LAYOUT.WIDTH)
+    const heightDiff = Math.abs(imageHeight - GradeService.NORMALIZED_LAYOUT.HEIGHT)
+    const isValidFlatbedScan = widthDiff < 20 && heightDiff < 20
 
     let processBuffer = imageBuffer
 
-    if (isAlreadyNormalized) {
-      // Image is already at correct dimensions - just check orientation
-      console.log(`[GradeService] Page ${pageNumber}: Image already normalized, checking orientation only...`)
+    if (!isValidFlatbedScan) {
+      // Non-standard dimensions detected - likely a phone scan
+      // Phone scans are not reliably supported due to aspect ratio and distortion issues
+      const aspectRatio = imageWidth / imageHeight
+      const letterRatio = 1275 / 1650 // 0.773
+      const a4Ratio = 1240 / 1754 // 0.707
+
+      const isLikelyA4 = Math.abs(aspectRatio - a4Ratio) < Math.abs(aspectRatio - letterRatio)
+
+      console.warn(`[GradeService] Page ${pageNumber}: NON-STANDARD DIMENSIONS DETECTED`)
+      console.warn(`[GradeService]   Actual: ${imageWidth}x${imageHeight} (ratio: ${aspectRatio.toFixed(3)})`)
+      console.warn(`[GradeService]   Expected: 1275x1650 (ratio: 0.773)`)
+      console.warn(`[GradeService]   Detected format: ${isLikelyA4 ? 'A4 (phone scan?)' : 'Unknown'}`)
+      console.warn(`[GradeService]   Phone scans are NOT reliably supported. Use a flatbed scanner for accurate results.`)
+
+      flags.push('non_standard_dimensions')
+      flags.push('low_confidence')
+
+      // Still attempt processing but mark as unreliable
+      // Check orientation and continue with degraded accuracy
+      const isUpsideDown = await this.detectPageOrientation(imageBuffer, imageWidth, imageHeight)
+      if (isUpsideDown) {
+        processBuffer = await sharp(imageBuffer).rotate(180).toBuffer()
+        flags.push('rotated_180')
+      }
+    } else {
+      // Valid flatbed scan - just check orientation
+      console.log(`[GradeService] Page ${pageNumber}: Valid flatbed scan dimensions, checking orientation...`)
 
       const isUpsideDown = await this.detectPageOrientation(imageBuffer, imageWidth, imageHeight)
       console.log(`[GradeService] Page ${pageNumber}: Orientation: ${isUpsideDown ? 'UPSIDE DOWN - rotating' : 'correct'}`)
@@ -788,60 +818,6 @@ class GradeService {
       if (isUpsideDown) {
         processBuffer = await sharp(imageBuffer).rotate(180).toBuffer()
         flags.push('rotated_180')
-      }
-    } else {
-      // Image dimensions don't match - try registration-based deskewing
-      console.log(`[GradeService] Page ${pageNumber}: Non-standard dimensions, detecting registration marks for deskewing...`)
-
-      try {
-        const registration = await registrationService.detectRegistrationMarks(imageBuffer)
-        console.log(`[GradeService] Page ${pageNumber}: Registration marks found: ${registration.detectedCount}/4, confidence: ${(registration.confidence * 100).toFixed(0)}%`)
-
-        if (registration.found && registration.transform) {
-          // Apply perspective correction
-          const normalizedBuffer = await registrationService.normalizePageImage(imageBuffer, registration)
-          if (normalizedBuffer) {
-            processBuffer = normalizedBuffer
-            imageWidth = registration.normalizedWidth
-            imageHeight = registration.normalizedHeight
-            flags.push('deskewed')
-            console.log(`[GradeService] Page ${pageNumber}: Page deskewed successfully (${imageWidth}x${imageHeight})`)
-
-            // Check if page was detected as upside down during registration
-            if (registration.isUpsideDown) {
-              processBuffer = await sharp(processBuffer).rotate(180).toBuffer()
-              flags.push('rotated_180')
-              console.log(`[GradeService] Page ${pageNumber}: Page was upside down - rotated 180°`)
-            }
-          } else {
-            console.log(`[GradeService] Page ${pageNumber}: Failed to normalize page, continuing without deskew`)
-            // Fallback orientation detection
-            const isUpsideDown = await this.detectPageOrientation(imageBuffer, imageWidth, imageHeight)
-            if (isUpsideDown) {
-              processBuffer = await sharp(imageBuffer).rotate(180).toBuffer()
-              flags.push('rotated_180')
-            }
-          }
-        } else {
-          console.log(`[GradeService] Page ${pageNumber}: Not enough registration marks found, using fallback orientation detection`)
-
-          // Fallback: Use simple corner-based orientation detection
-          const isUpsideDown = await this.detectPageOrientation(imageBuffer, imageWidth, imageHeight)
-          console.log(`[GradeService] Page ${pageNumber}: Fallback orientation: ${isUpsideDown ? 'UPSIDE DOWN - rotating' : 'correct'}`)
-
-          if (isUpsideDown) {
-            processBuffer = await sharp(imageBuffer).rotate(180).toBuffer()
-            flags.push('rotated_180')
-          }
-        }
-      } catch (error) {
-        console.error(`[GradeService] Page ${pageNumber}: Registration detection error:`, error)
-        // Fallback to simple orientation detection
-        const isUpsideDown = await this.detectPageOrientation(imageBuffer, imageWidth, imageHeight)
-        if (isUpsideDown) {
-          processBuffer = await sharp(imageBuffer).rotate(180).toBuffer()
-          flags.push('rotated_180')
-        }
       }
     }
 
