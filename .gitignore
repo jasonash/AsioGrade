@@ -36,4 +36,8 @@ npm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Development/test files
 prototypes/
+docs/*.pdf
+*.traineddata
