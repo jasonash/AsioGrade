@@ -5,14 +5,14 @@
  * Supports Gemini Pro, Gemini 1.5 Pro, and Gemini 1.5 Flash models.
  */
 
-import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 import { AbstractLLMProvider } from './base.provider'
-import {
+import { GOOGLE_MODELS } from '../../../../shared/types/llm.types'
+import type {
   LLMRequest,
   LLMResponse,
   LLMStreamChunk,
   LLMConnectionTestResult,
-  GOOGLE_MODELS,
   LLMModelInfo
 } from '../../../../shared/types/llm.types'
 

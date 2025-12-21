@@ -8,7 +8,7 @@
 import { dialog, BrowserWindow } from 'electron'
 import { readFile } from 'fs/promises'
 import https from 'https'
-import { ServiceResult } from '../../shared/types/common.types'
+import type { ServiceResult } from '../../shared/types/common.types'
 
 // pdf-parse doesn't have proper ES module exports, use require
 // eslint-disable-next-line @typescript-eslint/no-var-requires

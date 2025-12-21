@@ -4,7 +4,7 @@
  * and aligned to units and assessments
  */
 
-import { Versioned } from './common.types'
+import type { Versioned } from './common.types'
 
 /**
  * Source information for where standards were imported from

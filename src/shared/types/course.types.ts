@@ -3,7 +3,7 @@
  * A Course represents curriculum - what you teach
  */
 
-import { Entity } from './common.types'
+import type { Entity } from './common.types'
 
 export interface Course extends Entity {
   name: string // "Earth/Space Science"

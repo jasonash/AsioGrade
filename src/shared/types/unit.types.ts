@@ -4,8 +4,8 @@
  * Units serve as the organizational backbone for assessments and standards alignment
  */
 
-import { Entity } from './common.types'
-import { StandardRef } from './standards.types'
+import type { Entity } from './common.types'
+import type { StandardRef } from './standards.types'
 
 /**
  * A curriculum unit within a course

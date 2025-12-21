@@ -7,12 +7,12 @@
 
 import OpenAI from 'openai'
 import { AbstractLLMProvider } from './base.provider'
-import {
+import { OPENAI_MODELS } from '../../../../shared/types/llm.types'
+import type {
   LLMRequest,
   LLMResponse,
   LLMStreamChunk,
   LLMConnectionTestResult,
-  OPENAI_MODELS,
   LLMModelInfo
 } from '../../../../shared/types/llm.types'
 

@@ -5,8 +5,8 @@
  * They can later be assigned to sections as assignments.
  */
 
-import { Entity, AssessmentType, AssessmentPurpose } from './common.types'
-import { Question } from './question.types'
+import type { Entity, AssessmentType, AssessmentPurpose } from './common.types'
+import type { Question } from './question.types'
 
 // Assessment status
 export type AssessmentStatus = 'draft' | 'published'
@@ -75,4 +75,4 @@ export interface UpdateAssessmentInput {
 }
 
 // Re-export common types for convenience
-export { AssessmentType, AssessmentPurpose } from './common.types'
+export type { AssessmentType, AssessmentPurpose } from './common.types'

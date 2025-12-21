@@ -3,7 +3,7 @@
  * A Section represents a group of students - who you teach
  */
 
-import { Entity } from './common.types'
+import type { Entity } from './common.types'
 
 export interface Section extends Entity {
   courseId: string // Links to parent course

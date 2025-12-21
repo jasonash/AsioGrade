@@ -7,12 +7,12 @@
 
 import Anthropic from '@anthropic-ai/sdk'
 import { AbstractLLMProvider } from './base.provider'
-import {
+import { ANTHROPIC_MODELS } from '../../../../shared/types/llm.types'
+import type {
   LLMRequest,
   LLMResponse,
   LLMStreamChunk,
   LLMConnectionTestResult,
-  ANTHROPIC_MODELS,
   LLMModelInfo
 } from '../../../../shared/types/llm.types'
 

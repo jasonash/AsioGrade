@@ -1,7 +1,7 @@
-import { google, drive_v3 } from 'googleapis'
+import { google } from 'googleapis'
 import { authService } from './auth.service'
 import { storageService } from './storage.service'
-import {
+import type {
   Course,
   CourseSummary,
   CreateCourseInput,

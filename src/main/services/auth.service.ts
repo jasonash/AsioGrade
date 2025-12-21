@@ -5,7 +5,8 @@ import * as http from 'http'
 import * as fs from 'fs'
 import * as path from 'path'
 import { URL } from 'url'
-import { storageService, UserInfo, OAuthTokens } from './storage.service'
+import { storageService } from './storage.service'
+import type { UserInfo, OAuthTokens } from './storage.service'
 
 // OAuth configuration interface
 interface OAuthConfig {

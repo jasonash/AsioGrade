@@ -3,7 +3,7 @@
  * Students can only be in one section per course
  */
 
-import { Timestamps } from './common.types'
+import type { Timestamps } from './common.types'
 
 export interface Student extends Timestamps {
   id: string

@@ -4,7 +4,9 @@ import { authService } from '../services/auth.service'
 import { driveService } from '../services/drive.service'
 import { llmService } from '../services/llm'
 import { importService } from '../services/import.service'
-import {
+import { pdfService } from '../services/pdf.service'
+import { gradeService } from '../services/grade.service'
+import type {
   CreateCourseInput,
   UpdateCourseInput,
   CreateSectionInput,
@@ -22,12 +24,13 @@ import {
   CreateAssignmentInput,
   UpdateAssignmentInput,
   ScantronGenerationRequest,
-  ScantronStudentInfo
+  ScantronStudentInfo,
+  GradeProcessRequest,
+  SaveGradesInput,
+  AssignmentGrades,
+  GradeOverride
 } from '../../shared/types'
-import { pdfService } from '../services/pdf.service'
-import { gradeService } from '../services/grade.service'
-import { LLMRequest, LLMProviderType } from '../../shared/types/llm.types'
-import { GradeProcessRequest, SaveGradesInput, AssignmentGrades, GradeOverride } from '../../shared/types'
+import type { LLMRequest, LLMProviderType } from '../../shared/types/llm.types'
 
 /**
  * Register all IPC handlers for the main process

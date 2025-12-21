@@ -7,22 +7,24 @@
  */
 
 import { storageService } from '../storage.service'
-import { BaseLLMProvider } from './providers/base.provider'
+import type { BaseLLMProvider } from './providers/base.provider'
 import { OpenAIProvider } from './providers/openai.provider'
 import { AnthropicProvider } from './providers/anthropic.provider'
 import { GoogleProvider } from './providers/google.provider'
 import {
+  getModelsForProvider,
+  getProviderName
+} from '../../../shared/types/llm.types'
+import type {
   LLMProviderType,
   LLMRequest,
   LLMResponse,
   LLMStreamChunk,
   LLMConnectionTestResult,
   LLMProviderStatus,
-  LLMError,
-  getModelsForProvider,
-  getProviderName
+  LLMError
 } from '../../../shared/types/llm.types'
-import { ServiceResult } from '../../../shared/types/common.types'
+import type { ServiceResult } from '../../../shared/types/common.types'
 
 class LLMService {
   private providers: Map<LLMProviderType, BaseLLMProvider> = new Map()

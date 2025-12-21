@@ -5,7 +5,7 @@
  * consistent behavior across OpenAI, Anthropic, and Google.
  */
 
-import {
+import type {
   LLMProviderType,
   LLMRequest,
   LLMResponse,
