@@ -1708,13 +1708,29 @@ class GradeService {
         grades = this.applyOverrides(grades, input.overrides)
       }
 
-      // Save to Drive (this would be implemented in DriveService)
-      // For now, return the grades directly
-      // TODO: Implement grade storage in DriveService
+      // Update the gradedAt timestamp
+      grades = {
+        ...grades,
+        gradedAt: new Date().toISOString()
+      }
+
+      // Save to Drive
+      const result = await driveService.saveGrades(
+        input.assignmentId,
+        input.sectionId,
+        grades
+      )
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Failed to save grades to Drive'
+        }
+      }
 
       return {
         success: true,
-        data: grades
+        data: result.data
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to save grades'
@@ -1729,14 +1745,22 @@ class GradeService {
    * Get existing grades for an assignment
    */
   async getGrades(
-    _assignmentId: string,
-    _sectionId: string
+    assignmentId: string,
+    sectionId: string
   ): Promise<ServiceResult<AssignmentGrades | null>> {
     try {
-      // TODO: Implement grade retrieval from DriveService
+      const result = await driveService.getGrades(assignmentId, sectionId)
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Failed to get grades from Drive'
+        }
+      }
+
       return {
         success: true,
-        data: null
+        data: result.data
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to get grades'

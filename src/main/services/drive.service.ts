@@ -32,6 +32,7 @@ import {
   CreateAssignmentInput,
   UpdateAssignmentInput,
   StudentAssignment,
+  AssignmentGrades,
   ServiceResult
 } from '../../shared/types'
 
@@ -55,6 +56,7 @@ interface FolderCache {
   unitFolderIds: Record<string, string> // unitId -> folderId
   assessmentFileIds: Record<string, string> // assessmentId -> fileId
   assignmentFileIds: Record<string, string> // assignmentId -> fileId
+  gradeFileIds: Record<string, string> // assignmentId -> grade file ID
 }
 
 // Metadata cache with TTL for performance
@@ -69,6 +71,7 @@ interface MetadataCache {
   units: Record<string, CacheEntry<Unit>>
   assessments: Record<string, CacheEntry<Assessment>> // assessmentId -> assessment
   assignments: Record<string, CacheEntry<Assignment>> // assignmentId -> assignment
+  grades: Record<string, CacheEntry<AssignmentGrades>> // assignmentId -> grades
   standardsCollections: Record<string, CacheEntry<Standards>> // standardsId -> standards collection
   standardsSummaries: Record<string, CacheEntry<StandardsSummary[]>> // courseFolderId -> list of summaries
   sectionCounts: Record<string, CacheEntry<number>> // courseFolderId -> section count
@@ -88,7 +91,8 @@ class DriveService {
     sectionFolderIds: {},
     unitFolderIds: {},
     assessmentFileIds: {},
-    assignmentFileIds: {}
+    assignmentFileIds: {},
+    gradeFileIds: {}
   }
   private metadataCache: MetadataCache = {
     courses: {},
@@ -96,6 +100,7 @@ class DriveService {
     units: {},
     assessments: {},
     assignments: {},
+    grades: {},
     standardsCollections: {},
     standardsSummaries: {},
     sectionCounts: {},
@@ -129,7 +134,8 @@ class DriveService {
       sectionFolderIds: {},
       unitFolderIds: {},
       assessmentFileIds: {},
-      assignmentFileIds: {}
+      assignmentFileIds: {},
+      gradeFileIds: {}
     }
     this.metadataCache = {
       courses: {},
@@ -137,6 +143,7 @@ class DriveService {
       units: {},
       assessments: {},
       assignments: {},
+      grades: {},
       standardsCollections: {},
       standardsSummaries: {},
       sectionCounts: {},
@@ -2810,6 +2817,255 @@ class DriveService {
       const message = error instanceof Error ? error.message : 'Failed to delete assignment'
       return { success: false, error: message }
     }
+  }
+
+  // ============================================================
+  // Grade Operations
+  // ============================================================
+
+  /**
+   * Save grades for an assignment
+   * Stored in: sections/{sectionId}/grades/{assignmentId}-grades.json
+   */
+  async saveGrades(
+    assignmentId: string,
+    sectionId: string,
+    grades: AssignmentGrades
+  ): Promise<ServiceResult<AssignmentGrades>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get section to find folder ID
+      const sectionResult = await this.getSection(sectionId)
+      if (!sectionResult.success) {
+        return { success: false, error: sectionResult.error }
+      }
+
+      const sectionFolderId = sectionResult.data.driveFolderId
+      if (!sectionFolderId) {
+        return { success: false, error: 'Section folder not found' }
+      }
+
+      // Ensure grades folder exists
+      const gradesFolderId = await this.ensureSubfolder(sectionFolderId, 'grades')
+
+      // Check if grades file already exists (update) or is new (create)
+      const existingFileId = this.folderCache.gradeFileIds[assignmentId]
+
+      if (existingFileId) {
+        // Update existing file
+        await drive.files.update({
+          fileId: existingFileId,
+          media: {
+            mimeType: 'application/json',
+            body: JSON.stringify(grades, null, 2)
+          }
+        })
+      } else {
+        // Check if file exists on Drive (may not be in cache)
+        const searchResponse = await drive.files.list({
+          q: `'${gradesFolderId}' in parents and name = '${assignmentId}-grades.json' and trashed = false`,
+          fields: 'files(id)',
+          spaces: 'drive'
+        })
+
+        if (searchResponse.data.files && searchResponse.data.files.length > 0) {
+          // File exists but wasn't in cache - update it
+          const fileId = searchResponse.data.files[0].id!
+          this.folderCache.gradeFileIds[assignmentId] = fileId
+
+          await drive.files.update({
+            fileId,
+            media: {
+              mimeType: 'application/json',
+              body: JSON.stringify(grades, null, 2)
+            }
+          })
+        } else {
+          // Create new file
+          const fileResponse = await drive.files.create({
+            requestBody: {
+              name: `${assignmentId}-grades.json`,
+              mimeType: 'application/json',
+              parents: [gradesFolderId]
+            },
+            media: {
+              mimeType: 'application/json',
+              body: JSON.stringify(grades, null, 2)
+            },
+            fields: 'id'
+          })
+
+          this.folderCache.gradeFileIds[assignmentId] = fileResponse.data.id!
+        }
+      }
+
+      // Update metadata cache
+      this.metadataCache.grades[assignmentId] = {
+        data: grades,
+        timestamp: Date.now()
+      }
+
+      return { success: true, data: grades }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to save grades'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Get grades for an assignment
+   */
+  async getGrades(
+    assignmentId: string,
+    sectionId: string
+  ): Promise<ServiceResult<AssignmentGrades | null>> {
+    try {
+      // Check metadata cache first
+      if (this.isCacheValid(this.metadataCache.grades[assignmentId])) {
+        return { success: true, data: this.metadataCache.grades[assignmentId].data }
+      }
+
+      const drive = await this.getDrive()
+
+      // Try to get file ID from cache or search
+      let fileId = this.folderCache.gradeFileIds[assignmentId]
+
+      if (!fileId) {
+        // Get section folder
+        const sectionResult = await this.getSection(sectionId)
+        if (!sectionResult.success) {
+          return { success: false, error: sectionResult.error }
+        }
+
+        const sectionFolderId = sectionResult.data.driveFolderId
+        if (!sectionFolderId) {
+          return { success: true, data: null } // No section folder = no grades
+        }
+
+        // Check if grades folder exists
+        const gradesResponse = await drive.files.list({
+          q: `'${sectionFolderId}' in parents and name = 'grades' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+          fields: 'files(id)',
+          spaces: 'drive'
+        })
+
+        if (!gradesResponse.data.files || gradesResponse.data.files.length === 0) {
+          return { success: true, data: null } // No grades folder = no grades
+        }
+
+        const gradesFolderId = gradesResponse.data.files[0].id!
+
+        // Search for the grades file
+        const fileResponse = await drive.files.list({
+          q: `'${gradesFolderId}' in parents and name = '${assignmentId}-grades.json' and trashed = false`,
+          fields: 'files(id)',
+          spaces: 'drive'
+        })
+
+        if (!fileResponse.data.files || fileResponse.data.files.length === 0) {
+          return { success: true, data: null } // No grades file for this assignment
+        }
+
+        fileId = fileResponse.data.files[0].id!
+        this.folderCache.gradeFileIds[assignmentId] = fileId
+      }
+
+      // Read the file content
+      const contentResponse = await drive.files.get({
+        fileId,
+        alt: 'media'
+      })
+
+      const grades = contentResponse.data as AssignmentGrades
+
+      // Cache the grades
+      this.metadataCache.grades[assignmentId] = {
+        data: grades,
+        timestamp: Date.now()
+      }
+
+      return { success: true, data: grades }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get grades'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Delete grades for an assignment
+   */
+  async deleteGrades(
+    assignmentId: string,
+    sectionId: string
+  ): Promise<ServiceResult<void>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Try to get file ID from cache
+      let fileId = this.folderCache.gradeFileIds[assignmentId]
+
+      if (!fileId) {
+        // Search for the file
+        const sectionResult = await this.getSection(sectionId)
+        if (!sectionResult.success) {
+          return { success: false, error: sectionResult.error }
+        }
+
+        const sectionFolderId = sectionResult.data.driveFolderId
+        if (!sectionFolderId) {
+          return { success: true, data: undefined } // No section folder = nothing to delete
+        }
+
+        // Check if grades folder exists
+        const gradesResponse = await drive.files.list({
+          q: `'${sectionFolderId}' in parents and name = 'grades' and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+          fields: 'files(id)',
+          spaces: 'drive'
+        })
+
+        if (!gradesResponse.data.files || gradesResponse.data.files.length === 0) {
+          return { success: true, data: undefined } // No grades folder = nothing to delete
+        }
+
+        const gradesFolderId = gradesResponse.data.files[0].id!
+
+        // Search for the grades file
+        const fileResponse = await drive.files.list({
+          q: `'${gradesFolderId}' in parents and name = '${assignmentId}-grades.json' and trashed = false`,
+          fields: 'files(id)',
+          spaces: 'drive'
+        })
+
+        if (!fileResponse.data.files || fileResponse.data.files.length === 0) {
+          return { success: true, data: undefined } // No grades file = nothing to delete
+        }
+
+        fileId = fileResponse.data.files[0].id!
+      }
+
+      // Move to trash
+      await drive.files.update({
+        fileId,
+        requestBody: { trashed: true }
+      })
+
+      // Clear from caches
+      delete this.folderCache.gradeFileIds[assignmentId]
+      delete this.metadataCache.grades[assignmentId]
+
+      return { success: true, data: undefined }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete grades'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Invalidate grade cache for an assignment
+   */
+  invalidateGradeCache(assignmentId: string): void {
+    delete this.metadataCache.grades[assignmentId]
   }
 
   // ============================================================
