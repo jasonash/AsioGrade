@@ -1091,9 +1091,10 @@ class GradeService {
     // Set threshold in the middle of the gap
     const fillThreshold = (filledMax + emptyMin) / 2
 
-    // If there's no clear gap, use default thresholds
+    // If there's no clear gap, use more lenient default thresholds
+    // This handles cases where bubbles are lightly filled
     if (emptyMin - filledMax < 20) {
-      return { fillThreshold: 120, emptyThreshold: 180 }
+      return { fillThreshold: 180, emptyThreshold: 220 }
     }
 
     return {
