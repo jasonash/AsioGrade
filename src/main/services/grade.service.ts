@@ -13,8 +13,7 @@ import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { driveService } from './drive.service'
-// Registration service not currently used - using simpler corner-based orientation detection
-// import { registrationService } from './registration.service'
+import { registrationService } from './registration.service'
 
 // Initialize zxing-wasm for Node.js environment
 // We need to load the WASM binary from the filesystem
@@ -761,21 +760,59 @@ class GradeService {
 
     // Get image dimensions
     const metadata = await sharp(imageBuffer).metadata()
-    const imageWidth = metadata.width || 0
-    const imageHeight = metadata.height || 0
+    let imageWidth = metadata.width || 0
+    let imageHeight = metadata.height || 0
 
     console.log(`[GradeService] Page ${pageNumber}: Starting V2 processing (${imageWidth}x${imageHeight})...`)
 
-    // Step 1: Detect page orientation using corner marks
-    // The filled circle should be in the bottom-left. If it's in top-right, page is upside down.
-    const isUpsideDown = await this.detectPageOrientation(imageBuffer, imageWidth, imageHeight)
-    console.log(`[GradeService] Page ${pageNumber}: Orientation: ${isUpsideDown ? 'UPSIDE DOWN - rotating' : 'correct'}`)
-
-    // Step 2: Rotate if needed
+    // Step 0: Detect registration marks and apply perspective correction (deskewing)
+    // This handles phone scans that may have rotation, skew, or perspective distortion
     let processBuffer = imageBuffer
-    if (isUpsideDown) {
-      processBuffer = await sharp(imageBuffer).rotate(180).toBuffer()
-      flags.push('rotated_180')
+    console.log(`[GradeService] Page ${pageNumber}: Detecting registration marks for deskewing...`)
+
+    try {
+      const registration = await registrationService.detectRegistrationMarks(imageBuffer)
+      console.log(`[GradeService] Page ${pageNumber}: Registration marks found: ${registration.detectedCount}/4, confidence: ${(registration.confidence * 100).toFixed(0)}%`)
+
+      if (registration.found && registration.transform) {
+        // Apply perspective correction
+        const normalizedBuffer = await registrationService.normalizePageImage(imageBuffer, registration)
+        if (normalizedBuffer) {
+          processBuffer = normalizedBuffer
+          imageWidth = registration.normalizedWidth
+          imageHeight = registration.normalizedHeight
+          flags.push('deskewed')
+          console.log(`[GradeService] Page ${pageNumber}: Page deskewed successfully (${imageWidth}x${imageHeight})`)
+
+          // Check if page was detected as upside down during registration
+          if (registration.isUpsideDown) {
+            processBuffer = await sharp(processBuffer).rotate(180).toBuffer()
+            flags.push('rotated_180')
+            console.log(`[GradeService] Page ${pageNumber}: Page was upside down - rotated 180°`)
+          }
+        } else {
+          console.log(`[GradeService] Page ${pageNumber}: Failed to normalize page, continuing without deskew`)
+        }
+      } else {
+        console.log(`[GradeService] Page ${pageNumber}: Not enough registration marks found, using fallback orientation detection`)
+
+        // Fallback: Use simple corner-based orientation detection
+        const isUpsideDown = await this.detectPageOrientation(imageBuffer, imageWidth, imageHeight)
+        console.log(`[GradeService] Page ${pageNumber}: Fallback orientation: ${isUpsideDown ? 'UPSIDE DOWN - rotating' : 'correct'}`)
+
+        if (isUpsideDown) {
+          processBuffer = await sharp(imageBuffer).rotate(180).toBuffer()
+          flags.push('rotated_180')
+        }
+      }
+    } catch (error) {
+      console.error(`[GradeService] Page ${pageNumber}: Registration detection error:`, error)
+      // Fallback to simple orientation detection
+      const isUpsideDown = await this.detectPageOrientation(imageBuffer, imageWidth, imageHeight)
+      if (isUpsideDown) {
+        processBuffer = await sharp(imageBuffer).rotate(180).toBuffer()
+        flags.push('rotated_180')
+      }
     }
 
     // Step 3: Read QR code
