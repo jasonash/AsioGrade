@@ -736,15 +736,17 @@ class GradeService {
 
   // Layout constants for normalized image (at 150 DPI)
   // All values are 72 DPI constants × (150/72) = × 2.083
+  // IMPORTANT: FIRST_BUBBLE_X is empirically adjusted to account for registration
+  // mark centroid offset (blob detection finds centroid, not corner of L-shapes)
   private static readonly NORMALIZED_LAYOUT = {
     WIDTH: 1275, // 8.5" × 150 DPI
     HEIGHT: 1650, // 11" × 150 DPI
     MARGIN: 104, // 50pt × 150/72
-    BUBBLE_GRID_Y_START: 533, // FIXED: 256pt × 150/72 = 533 at 150 DPI
+    BUBBLE_GRID_Y_START: 533, // 256pt × 150/72 = 533 at 150 DPI
     ROW_HEIGHT: 50, // 24pt × 150/72
     BUBBLE_SPACING: 46, // 22pt × 150/72
     BUBBLE_RADIUS: 15, // 7pt × 150/72
-    QUESTION_NUM_WIDTH: 63, // 30pt × 150/72
+    FIRST_BUBBLE_X: 181, // ADJUSTED: Empirically measured (was 187 calculated)
     QUESTIONS_PER_COLUMN: 25,
     SAMPLE_SIZE: 20 // Size of square sample region
   }
@@ -1185,7 +1187,8 @@ class GradeService {
 
     const columnCount = Math.ceil(questionCount / layout.QUESTIONS_PER_COLUMN)
     const columnWidth = Math.floor((layout.WIDTH - 2 * layout.MARGIN) / columnCount * scale)
-    const bubbleStartOffset = Math.floor((layout.QUESTION_NUM_WIDTH + 5) * scale)
+    // Use empirically adjusted FIRST_BUBBLE_X instead of calculated offset
+    const firstBubbleOffset = Math.floor((layout.FIRST_BUBBLE_X - layout.MARGIN) * scale)
 
     // Collect all bubble intensities for adaptive thresholding
     const allIntensities: { questionNumber: number; choice: number; intensity: number }[] = []
@@ -1199,7 +1202,8 @@ class GradeService {
       const rowY = gridStartY + row * rowHeight + Math.floor(rowHeight / 2)
 
       for (let c = 0; c < LAYOUT.CHOICE_LABELS.length; c++) {
-        const bubbleX = columnX + bubbleStartOffset + c * bubbleSpacing + Math.floor(layout.BUBBLE_RADIUS * scale)
+        // FIRST_BUBBLE_X is already the center of bubble A, so no radius offset needed
+        const bubbleX = columnX + firstBubbleOffset + c * bubbleSpacing
         const bubbleY = rowY
 
         // Sample rectangular region centered on bubble
@@ -1232,7 +1236,7 @@ class GradeService {
       const bubbleDetections: BubbleDetection[] = []
 
       for (let c = 0; c < LAYOUT.CHOICE_LABELS.length; c++) {
-        const bubbleX = columnX + bubbleStartOffset + c * bubbleSpacing + Math.floor(layout.BUBBLE_RADIUS * scale)
+        const bubbleX = columnX + firstBubbleOffset + c * bubbleSpacing
         const bubbleY = rowY
 
         // Find the intensity we already calculated
