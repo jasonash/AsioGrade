@@ -12,6 +12,7 @@ import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { driveService } from './drive.service'
+import { registrationService } from './registration.service'
 
 // Initialize zxing-wasm for Node.js environment
 // We need to load the WASM binary from the filesystem
@@ -169,11 +170,11 @@ class GradeService {
       const pageImages = await this.extractPagesAsImages(pdfBuffer)
       console.log('[GradeService] Extracted', pageImages.length, 'pages')
 
-      // Parse each page
+      // Parse each page using the new V2 method (registration marks + position-based detection)
       const parsedPages: ParsedScantron[] = []
       for (let i = 0; i < pageImages.length; i++) {
         console.log(`[GradeService] Parsing page ${i + 1}/${pageImages.length}...`)
-        const parsed = await this.parseScantronPage(
+        const parsed = await this.parseScantronPageV2(
           pageImages[i],
           i + 1,
           assessment.questions.length
@@ -692,6 +693,344 @@ class GradeService {
     }
 
     return bubbles
+  }
+
+  // ============================================================
+  // NEW: Position-Based Bubble Detection (Replaces HoughCircles)
+  // ============================================================
+
+  // Layout constants for normalized image (at 150 DPI)
+  private static readonly NORMALIZED_LAYOUT = {
+    WIDTH: 1275, // 8.5" × 150 DPI
+    HEIGHT: 1650, // 11" × 150 DPI
+    MARGIN: 104, // 50pt × 150/72
+    BUBBLE_GRID_Y_START: 437, // ~210pt × 150/72
+    ROW_HEIGHT: 50, // 24pt × 150/72
+    BUBBLE_SPACING: 46, // 22pt × 150/72
+    BUBBLE_RADIUS: 15, // 7pt × 150/72
+    QUESTION_NUM_WIDTH: 63, // 30pt × 150/72
+    QUESTIONS_PER_COLUMN: 25,
+    SAMPLE_SIZE: 20 // Size of square sample region
+  }
+
+  /**
+   * Parse a scantron page using registration marks and position-based bubble detection
+   * This is the new improved method that doesn't rely on HoughCircles
+   */
+  async parseScantronPageV2(
+    imageBuffer: Buffer,
+    pageNumber: number,
+    expectedQuestionCount: number
+  ): Promise<ParsedScantron> {
+    const startTime = performance.now()
+    const flags: string[] = []
+
+    // Get image dimensions
+    const metadata = await sharp(imageBuffer).metadata()
+    const imageWidth = metadata.width || 0
+    const imageHeight = metadata.height || 0
+
+    console.log(`[GradeService] Page ${pageNumber}: Starting V2 processing (${imageWidth}x${imageHeight})...`)
+
+    // Step 1: Detect registration marks
+    console.log(`[GradeService] Page ${pageNumber}: Detecting registration marks...`)
+    const registration = await registrationService.detectRegistrationMarks(imageBuffer)
+
+    if (!registration.found) {
+      console.log(`[GradeService] Page ${pageNumber}: Registration marks not found (${registration.detectedCount}/4)`)
+      flags.push('registration_marks_not_found')
+    } else {
+      console.log(`[GradeService] Page ${pageNumber}: Found ${registration.detectedCount}/4 registration marks (confidence: ${registration.confidence.toFixed(2)})`)
+    }
+
+    // Step 2: Normalize page image (if we have a transform)
+    let processBuffer = imageBuffer
+    if (registration.transform) {
+      const normalized = await registrationService.normalizePageImage(imageBuffer, registration)
+      if (normalized) {
+        processBuffer = normalized
+        console.log(`[GradeService] Page ${pageNumber}: Page normalized successfully`)
+      }
+    }
+
+    // Step 3: Read QR code from (possibly normalized) image
+    let qrData: ScantronQRData | null = null
+    let qrError: string | undefined
+
+    console.log(`[GradeService] Page ${pageNumber}: Reading QR code...`)
+    try {
+      qrData = await this.extractQRCode(processBuffer, 1) // DPI scale is 1 for normalized image
+      if (!qrData) {
+        qrError = 'QR code not found or unreadable'
+        flags.push('qr_error')
+        console.log(`[GradeService] Page ${pageNumber}: QR code not found`)
+      } else {
+        console.log(`[GradeService] Page ${pageNumber}: QR code found - student: ${qrData.sid}`)
+      }
+    } catch (error) {
+      qrError = error instanceof Error ? error.message : 'QR code read error'
+      flags.push('qr_error')
+      console.log(`[GradeService] Page ${pageNumber}: QR code error:`, error)
+    }
+
+    // Step 4: Detect bubbles using position-based sampling
+    console.log(`[GradeService] Page ${pageNumber}: Detecting bubbles (position-based)...`)
+    const detectedBubbles = await this.detectBubblesPositionBased(
+      processBuffer,
+      expectedQuestionCount,
+      registration.found
+    )
+
+    // Check for issues
+    let overallConfidence = registration.found ? registration.confidence : 0.5
+    for (const bubble of detectedBubbles) {
+      if (bubble.multipleDetected) {
+        flags.push(`multiple_bubbles_q${bubble.questionNumber}`)
+        overallConfidence = Math.min(overallConfidence, 0.5)
+      }
+      if (bubble.selected === null) {
+        flags.push(`no_answer_q${bubble.questionNumber}`)
+      }
+      const maxConfidence = Math.max(...bubble.bubbles.map((b) => b.confidence))
+      overallConfidence = Math.min(overallConfidence, maxConfidence)
+    }
+
+    const processingTimeMs = performance.now() - startTime
+    console.log(`[GradeService] Page ${pageNumber}: Completed in ${processingTimeMs.toFixed(0)}ms`)
+
+    return {
+      pageNumber,
+      success: !qrError && flags.filter(f => !f.startsWith('no_answer')).length === 0,
+      qrData,
+      qrError,
+      answers: detectedBubbles,
+      confidence: overallConfidence,
+      processingTimeMs,
+      flags,
+      imageWidth: registration.normalizedWidth || imageWidth,
+      imageHeight: registration.normalizedHeight || imageHeight
+    }
+  }
+
+  /**
+   * Detect bubbles using position-based region sampling (no HoughCircles)
+   * This method samples rectangular regions at known bubble positions and measures intensity
+   */
+  private async detectBubblesPositionBased(
+    imageBuffer: Buffer,
+    questionCount: number,
+    isNormalized: boolean
+  ): Promise<DetectedBubble[]> {
+    const layout = GradeService.NORMALIZED_LAYOUT
+
+    // Load image as grayscale
+    const { data, info } = await sharp(imageBuffer)
+      .grayscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+
+    // Calculate scale factor if image isn't normalized
+    const scaleX = info.width / layout.WIDTH
+    const scaleY = info.height / layout.HEIGHT
+    const scale = isNormalized ? 1 : Math.min(scaleX, scaleY)
+
+    // Scaled layout values
+    const gridStartY = Math.floor(layout.BUBBLE_GRID_Y_START * scale)
+    const rowHeight = Math.floor(layout.ROW_HEIGHT * scale)
+    const bubbleSpacing = Math.floor(layout.BUBBLE_SPACING * scale)
+    const sampleSize = Math.floor(layout.SAMPLE_SIZE * scale)
+    const halfSample = Math.floor(sampleSize / 2)
+
+    const columnCount = Math.ceil(questionCount / layout.QUESTIONS_PER_COLUMN)
+    const columnWidth = Math.floor((layout.WIDTH - 2 * layout.MARGIN) / columnCount * scale)
+    const bubbleStartOffset = Math.floor((layout.QUESTION_NUM_WIDTH + 5) * scale)
+
+    // Collect all bubble intensities for adaptive thresholding
+    const allIntensities: { questionNumber: number; choice: number; intensity: number }[] = []
+
+    // First pass: sample all bubble positions
+    for (let q = 0; q < questionCount; q++) {
+      const column = Math.floor(q / layout.QUESTIONS_PER_COLUMN)
+      const row = q % layout.QUESTIONS_PER_COLUMN
+
+      const columnX = Math.floor(layout.MARGIN * scale) + column * columnWidth
+      const rowY = gridStartY + row * rowHeight + Math.floor(rowHeight / 2)
+
+      for (let c = 0; c < LAYOUT.CHOICE_LABELS.length; c++) {
+        const bubbleX = columnX + bubbleStartOffset + c * bubbleSpacing + Math.floor(layout.BUBBLE_RADIUS * scale)
+        const bubbleY = rowY
+
+        // Sample rectangular region centered on bubble
+        const intensity = this.sampleRegionIntensity(
+          data,
+          info.width,
+          info.height,
+          bubbleX,
+          bubbleY,
+          halfSample
+        )
+
+        allIntensities.push({ questionNumber: q + 1, choice: c, intensity })
+      }
+    }
+
+    // Calculate adaptive threshold
+    const threshold = this.calculateAdaptiveThreshold(allIntensities, questionCount)
+
+    // Second pass: classify bubbles based on threshold
+    const bubbles: DetectedBubble[] = []
+
+    for (let q = 0; q < questionCount; q++) {
+      const column = Math.floor(q / layout.QUESTIONS_PER_COLUMN)
+      const row = q % layout.QUESTIONS_PER_COLUMN
+
+      const columnX = Math.floor(layout.MARGIN * scale) + column * columnWidth
+      const rowY = gridStartY + row * rowHeight + Math.floor(rowHeight / 2)
+
+      const bubbleDetections: BubbleDetection[] = []
+
+      for (let c = 0; c < LAYOUT.CHOICE_LABELS.length; c++) {
+        const bubbleX = columnX + bubbleStartOffset + c * bubbleSpacing + Math.floor(layout.BUBBLE_RADIUS * scale)
+        const bubbleY = rowY
+
+        // Find the intensity we already calculated
+        const intensityData = allIntensities.find(
+          (d) => d.questionNumber === q + 1 && d.choice === c
+        )
+        const intensity = intensityData?.intensity ?? 255
+
+        // Classify: lower intensity = darker = filled
+        const filled = intensity < threshold.fillThreshold
+        const confidence = this.calculateBubbleConfidence(intensity, threshold)
+
+        bubbleDetections.push({
+          id: LAYOUT.CHOICE_LABELS[c],
+          filled,
+          confidence,
+          x: bubbleX,
+          y: bubbleY,
+          radius: Math.floor(layout.BUBBLE_RADIUS * scale),
+          fillPercentage: 1 - intensity / 255 // Convert to fill percentage
+        })
+      }
+
+      // Determine selected answer
+      const filledBubbles = bubbleDetections.filter((b) => b.filled)
+      let selected: string | null = null
+      let multipleDetected = false
+
+      if (filledBubbles.length === 1) {
+        selected = filledBubbles[0].id
+      } else if (filledBubbles.length > 1) {
+        // Multiple bubbles filled - pick the darkest one but flag it
+        const darkest = filledBubbles.reduce((a, b) =>
+          a.fillPercentage > b.fillPercentage ? a : b
+        )
+        selected = darkest.id
+        multipleDetected = true
+      }
+
+      bubbles.push({
+        questionNumber: q + 1,
+        row,
+        column,
+        bubbles: bubbleDetections,
+        selected,
+        multipleDetected
+      })
+    }
+
+    return bubbles
+  }
+
+  /**
+   * Sample the mean intensity of a rectangular region
+   */
+  private sampleRegionIntensity(
+    data: Buffer,
+    width: number,
+    height: number,
+    centerX: number,
+    centerY: number,
+    halfSize: number
+  ): number {
+    let sum = 0
+    let count = 0
+
+    const x1 = Math.max(0, centerX - halfSize)
+    const x2 = Math.min(width - 1, centerX + halfSize)
+    const y1 = Math.max(0, centerY - halfSize)
+    const y2 = Math.min(height - 1, centerY + halfSize)
+
+    for (let y = y1; y <= y2; y++) {
+      for (let x = x1; x <= x2; x++) {
+        const idx = y * width + x
+        sum += data[idx]
+        count++
+      }
+    }
+
+    return count > 0 ? sum / count : 255
+  }
+
+  /**
+   * Calculate adaptive threshold based on distribution of intensities
+   */
+  private calculateAdaptiveThreshold(
+    intensities: { questionNumber: number; choice: number; intensity: number }[],
+    questionCount: number
+  ): { fillThreshold: number; emptyThreshold: number } {
+    // Sort by intensity (darkest first)
+    const sorted = [...intensities].sort((a, b) => a.intensity - b.intensity)
+
+    // For a typical test, expect ~questionCount filled bubbles (one per question)
+    // and ~3*questionCount empty bubbles
+    const expectedFilled = questionCount
+    // const expectedEmpty = questionCount * 3  // Not used currently but kept for reference
+
+    // The threshold should be between the darkest expected filled and lightest expected empty
+    // Use the gap between expectedFilled and expectedFilled+1 positions
+    const filledMax = sorted[Math.min(expectedFilled - 1, sorted.length - 1)]?.intensity ?? 100
+    const emptyMin = sorted[Math.min(expectedFilled, sorted.length - 1)]?.intensity ?? 180
+
+    // Set threshold in the middle of the gap
+    const fillThreshold = (filledMax + emptyMin) / 2
+
+    // If there's no clear gap, use default thresholds
+    if (emptyMin - filledMax < 20) {
+      return { fillThreshold: 120, emptyThreshold: 180 }
+    }
+
+    return {
+      fillThreshold,
+      emptyThreshold: Math.min(emptyMin + 20, 220)
+    }
+  }
+
+  /**
+   * Calculate confidence score for a bubble based on its intensity and thresholds
+   */
+  private calculateBubbleConfidence(
+    intensity: number,
+    threshold: { fillThreshold: number; emptyThreshold: number }
+  ): number {
+    // Very dark (< 60): filled, high confidence
+    if (intensity < 60) return 0.95
+
+    // Clearly filled (below threshold with margin)
+    if (intensity < threshold.fillThreshold - 20) return 0.9
+
+    // Near threshold (unclear)
+    if (intensity >= threshold.fillThreshold - 20 && intensity <= threshold.fillThreshold + 20) {
+      // Low confidence in the uncertain zone
+      return 0.5
+    }
+
+    // Clearly empty (above threshold with margin)
+    if (intensity > threshold.emptyThreshold) return 0.95
+
+    // Light but not clearly empty
+    return 0.8
   }
 
   /**
