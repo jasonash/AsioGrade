@@ -3,6 +3,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
 import Typography from '@mui/material/Typography'
+import LinearProgress from '@mui/material/LinearProgress'
 import CloudUploadIcon from '@mui/icons-material/CloudUpload'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
 import { Modal } from '../ui'
@@ -22,7 +23,7 @@ export function ScantronUploadModal({
   assignment,
   onProcessingComplete
 }: ScantronUploadModalProps): ReactElement {
-  const { processScantron, isProcessing, error: storeError, clearError, clearGrades } = useGradeStore()
+  const { processScantron, isProcessing, progressEvent, error: storeError, clearError, clearGrades } = useGradeStore()
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -183,10 +184,38 @@ export function ScantronUploadModal({
         </Box>
 
         {/* Instructions */}
-        <Alert severity="info" sx={{ '& .MuiAlert-message': { fontSize: '0.875rem' } }}>
-          Upload a PDF file containing scanned scantron answer sheets. Each page should contain one
-          student&apos;s scantron with a visible QR code.
-        </Alert>
+        {!isProcessing && (
+          <Alert severity="info" sx={{ '& .MuiAlert-message': { fontSize: '0.875rem' } }}>
+            Upload a PDF file containing scanned scantron answer sheets. Each page should contain one
+            student&apos;s scantron with a visible QR code.
+          </Alert>
+        )}
+
+        {/* Processing Progress */}
+        {isProcessing && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ flex: 1 }}>
+                <LinearProgress
+                  variant={progressEvent?.totalPages ? 'determinate' : 'indeterminate'}
+                  value={progressEvent?.totalPages
+                    ? (progressEvent.currentPage / progressEvent.totalPages) * 100
+                    : undefined
+                  }
+                  sx={{ height: 8, borderRadius: 1 }}
+                />
+              </Box>
+              {progressEvent?.totalPages ? (
+                <Typography variant="body2" color="text.secondary" sx={{ minWidth: 50 }}>
+                  {Math.round((progressEvent.currentPage / progressEvent.totalPages) * 100)}%
+                </Typography>
+              ) : null}
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center' }}>
+              {progressEvent?.message || 'Initializing...'}
+            </Typography>
+          </Box>
+        )}
 
         {/* Actions */}
         <Box

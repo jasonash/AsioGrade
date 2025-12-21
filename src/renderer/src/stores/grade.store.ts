@@ -11,7 +11,8 @@ import type {
   UnidentifiedPage,
   VersionId,
   AnswerResult,
-  AnswerKeyEntry
+  AnswerKeyEntry,
+  GradeProgressEvent
 } from '../../../shared/types'
 import type { ServiceResult } from '../../../shared/types/common.types'
 
@@ -92,6 +93,7 @@ interface GradeState {
   unidentifiedPages: UnidentifiedPage[]
   answerKey: AnswerKeyEntry[] // Answer key for grading manually assigned pages
   processingProgress: number
+  progressEvent: GradeProgressEvent | null
   isProcessing: boolean
   isSaving: boolean
   error: string | null
@@ -125,6 +127,7 @@ export const useGradeStore = create<GradeState>((set, get) => ({
   unidentifiedPages: [],
   answerKey: [],
   processingProgress: 0,
+  progressEvent: null,
   isProcessing: false,
   isSaving: false,
   error: null,
@@ -151,6 +154,7 @@ export const useGradeStore = create<GradeState>((set, get) => ({
       answerKey: [],
       pendingOverrides: [],
       processingProgress: 0,
+      progressEvent: null,
       error: null
     }),
 
@@ -176,8 +180,15 @@ export const useGradeStore = create<GradeState>((set, get) => ({
       isProcessing: true,
       error: null,
       processingProgress: 0,
+      progressEvent: null,
       currentAssignmentId: request.assignmentId,
       currentSectionId: request.sectionId
+    })
+
+    // Subscribe to progress events
+    const unsubscribe = window.electronAPI.on('grade:progress', (event: unknown) => {
+      const progress = event as GradeProgressEvent
+      set({ progressEvent: progress })
     })
 
     try {
@@ -251,8 +262,11 @@ export const useGradeStore = create<GradeState>((set, get) => ({
       return result.data
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to process scantron'
-      set({ error: message, isProcessing: false, processingProgress: 0 })
+      set({ error: message, isProcessing: false, processingProgress: 0, progressEvent: null })
       return null
+    } finally {
+      // Always unsubscribe from progress events
+      unsubscribe()
     }
   },
 

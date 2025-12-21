@@ -12,7 +12,9 @@ import * as mupdf from 'mupdf'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { BrowserWindow } from 'electron'
 import { driveService } from './drive.service'
+import type { GradeProgressEvent } from '../../shared/types'
 // Note: registrationService removed - phone scan deskewing is not reliably supported
 
 // Initialize zxing-wasm for Node.js environment
@@ -127,6 +129,16 @@ interface CircleData {
 
 class GradeService {
   /**
+   * Broadcast progress to all renderer windows
+   */
+  private broadcastProgress(progress: GradeProgressEvent): void {
+    const windows = BrowserWindow.getAllWindows()
+    for (const win of windows) {
+      win.webContents.send('grade:progress', progress)
+    }
+  }
+
+  /**
    * Main entry point: Process a scantron PDF and extract grades
    */
   async processScantronPDF(request: GradeProcessRequest): Promise<ServiceResult<GradeProcessResult>> {
@@ -173,6 +185,12 @@ class GradeService {
 
       // Extract pages as images
       console.log('[GradeService] Extracting pages as images...')
+      this.broadcastProgress({
+        stage: 'extracting',
+        currentPage: 0,
+        totalPages: 0,
+        message: 'Extracting pages from PDF...'
+      })
       const pageImages = await this.extractPagesAsImages(pdfBuffer)
       console.log('[GradeService] Extracted', pageImages.length, 'pages')
 
@@ -180,6 +198,12 @@ class GradeService {
       const parsedPages: ParsedScantron[] = []
       for (let i = 0; i < pageImages.length; i++) {
         console.log(`[GradeService] Parsing page ${i + 1}/${pageImages.length}...`)
+        this.broadcastProgress({
+          stage: 'parsing',
+          currentPage: i + 1,
+          totalPages: pageImages.length,
+          message: `Grading test ${i + 1} of ${pageImages.length}...`
+        })
         const parsed = await this.parseScantronPageV2(
           pageImages[i],
           i + 1,
@@ -187,6 +211,14 @@ class GradeService {
         )
         parsedPages.push(parsed)
       }
+
+      // Broadcast grading stage
+      this.broadcastProgress({
+        stage: 'grading',
+        currentPage: pageImages.length,
+        totalPages: pageImages.length,
+        message: 'Calculating grades...'
+      })
 
       // Calculate grades and identify unidentified pages
       const { grades, unidentifiedPages, answerKey } = this.calculateGradesWithUnidentified(
@@ -215,6 +247,14 @@ class GradeService {
         - Blank: ${blankPages}
         - Unknown: ${unknownDocuments}
         - Time: ${processingTimeMs.toFixed(0)}ms`)
+
+      // Broadcast completion
+      this.broadcastProgress({
+        stage: 'complete',
+        currentPage: totalPages,
+        totalPages,
+        message: `Grading complete: ${identifiedPages} graded, ${unidentifiedCount} need review`
+      })
 
       return {
         success: true,

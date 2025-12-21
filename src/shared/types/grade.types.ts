@@ -243,6 +243,20 @@ export interface UnidentifiedPage {
 }
 
 // ============================================================
+// Progress Event Types
+// ============================================================
+
+/**
+ * Progress event sent during scantron processing
+ */
+export interface GradeProgressEvent {
+  stage: 'extracting' | 'parsing' | 'grading' | 'complete'
+  currentPage: number
+  totalPages: number
+  message: string
+}
+
+// ============================================================
 // IPC Request/Response Types
 // ============================================================
 
