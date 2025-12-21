@@ -1728,6 +1728,13 @@ class GradeService {
         }
       }
 
+      // Update assignment status to 'graded'
+      await driveService.updateAssignment({
+        id: input.assignmentId,
+        sectionId: input.sectionId,
+        status: 'graded'
+      })
+
       return {
         success: true,
         data: result.data
