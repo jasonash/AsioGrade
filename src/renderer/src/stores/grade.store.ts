@@ -6,7 +6,8 @@ import type {
   ParsedScantron,
   GradeProcessRequest,
   GradeProcessResult,
-  SaveGradesInput
+  SaveGradesInput,
+  UnidentifiedPage
 } from '../../../shared/types'
 import type { ServiceResult } from '../../../shared/types/common.types'
 
@@ -15,6 +16,7 @@ interface GradeState {
   currentGrades: AssignmentGrades | null
   parsedPages: ParsedScantron[]
   flaggedRecords: GradeRecord[]
+  unidentifiedPages: UnidentifiedPage[]
   processingProgress: number
   isProcessing: boolean
   isSaving: boolean
@@ -45,6 +47,7 @@ export const useGradeStore = create<GradeState>((set, get) => ({
   currentGrades: null,
   parsedPages: [],
   flaggedRecords: [],
+  unidentifiedPages: [],
   processingProgress: 0,
   isProcessing: false,
   isSaving: false,
@@ -68,6 +71,7 @@ export const useGradeStore = create<GradeState>((set, get) => ({
       currentGrades: null,
       parsedPages: [],
       flaggedRecords: [],
+      unidentifiedPages: [],
       pendingOverrides: [],
       processingProgress: 0,
       error: null
@@ -118,6 +122,7 @@ export const useGradeStore = create<GradeState>((set, get) => ({
         currentGrades: result.data.grades || null,
         parsedPages: result.data.parsedPages,
         flaggedRecords: result.data.flaggedRecords,
+        unidentifiedPages: result.data.unidentifiedPages || [],
         isProcessing: false,
         processingProgress: 100
       })

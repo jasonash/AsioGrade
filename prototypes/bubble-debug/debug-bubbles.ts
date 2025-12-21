@@ -77,19 +77,25 @@ async function main() {
     let height = metadata.height!
     console.log(`Image dimensions: ${width}x${height}`)
 
-    // Check orientation by sampling corners
+    // Check orientation by sampling corners - using same constants as grade.service.ts
     const { data: cornerData } = await sharp(pngBuffer).grayscale().raw().toBuffer({ resolveWithObject: true })
-    const cornerSize = 60
-    const cornerOffset = 80
+    const REG_MARK_SIZE = 20
+    const REG_MARK_OFFSET = 25
+    const dpiScale = width / LAYOUT_72DPI.LETTER_WIDTH
+    const markSize = Math.floor(REG_MARK_SIZE * dpiScale)
+    const offset = Math.floor(REG_MARK_OFFSET * dpiScale)
 
-    const topLeftDark = sampleCornerDarkness(cornerData, width, height, cornerOffset, cornerOffset, cornerSize)
-    const topRightDark = sampleCornerDarkness(cornerData, width, height, width - cornerOffset - cornerSize, cornerOffset, cornerSize)
-    const bottomLeftDark = sampleCornerDarkness(cornerData, width, height, cornerOffset, height - cornerOffset - cornerSize, cornerSize)
-    const bottomRightDark = sampleCornerDarkness(cornerData, width, height, width - cornerOffset - cornerSize, height - cornerOffset - cornerSize, cornerSize)
+    const topLeftDark = sampleCornerDarkness(cornerData, width, height, offset, offset, markSize)
+    const topRightDark = sampleCornerDarkness(cornerData, width, height, width - offset - markSize, offset, markSize)
+    const bottomLeftDark = sampleCornerDarkness(cornerData, width, height, offset, height - offset - markSize, markSize)
+    const bottomRightDark = sampleCornerDarkness(cornerData, width, height, width - offset - markSize, height - offset - markSize, markSize)
 
     console.log(`Corner darkness: TL=${topLeftDark.toFixed(0)}%, TR=${topRightDark.toFixed(0)}%, BL=${bottomLeftDark.toFixed(0)}%, BR=${bottomRightDark.toFixed(0)}%`)
 
-    const isUpsideDown = topRightDark > 30 && topRightDark > bottomLeftDark
+    // When correct: TR (square ~75%) > BL (circle ~65%)
+    // When upside down: BL (square ~75%) > TR (circle ~65%)
+    const bothHaveFilledShapes = topRightDark > 40 && bottomLeftDark > 40
+    const isUpsideDown = bothHaveFilledShapes && bottomLeftDark > topRightDark + 5
     console.log(`Orientation: ${isUpsideDown ? 'UPSIDE DOWN - rotating' : 'correct'}`)
 
     if (isUpsideDown) {
@@ -108,8 +114,7 @@ async function main() {
       .raw()
       .toBuffer({ resolveWithObject: true })
 
-    // Calculate DPI scale
-    const dpiScale = width / LAYOUT_72DPI.LETTER_WIDTH
+    // DPI scale already calculated above for corner detection
     console.log(`DPI scale factor: ${dpiScale.toFixed(3)}`)
 
     // Analyze bubble positions for 7 questions (single column)

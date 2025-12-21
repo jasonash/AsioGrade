@@ -202,6 +202,7 @@ export interface ParsedScantron {
   success: boolean
   qrData: ScantronQRData | null
   qrError?: string
+  ocrStudentName?: string // OCR-extracted student name (used when QR fails)
   answers: DetectedBubble[]
   confidence: number
   processingTimeMs: number
@@ -236,6 +237,8 @@ export interface UnidentifiedPage {
   registrationMarkCount: number
   imageDataBase64?: string // Optional: image preview for review UI
   possibleStudents?: string[] // Optional: list of student IDs who haven't been graded yet
+  suggestedStudents?: string[] // OCR-matched student IDs (best matches first)
+  ocrStudentName?: string // Raw OCR text from the name field
   qrError?: string
 }
 

@@ -7,6 +7,7 @@
 import { cv } from 'opencv-wasm'
 import sharp from 'sharp'
 import { readBarcodesFromImageData, prepareZXingModule, type ReaderOptions } from 'zxing-wasm/reader'
+import Tesseract from 'tesseract.js'
 import * as mupdf from 'mupdf'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -798,7 +799,20 @@ class GradeService {
       console.log(`[GradeService] Page ${pageNumber}: QR code error:`, error)
     }
 
-    // Step 4: Detect bubbles using position-based sampling
+    // Step 4: If QR failed, try OCR to extract student name
+    let ocrStudentName: string | undefined
+    if (!qrData) {
+      console.log(`[GradeService] Page ${pageNumber}: Attempting OCR to extract student name...`)
+      const ocrResult = await this.extractStudentNameOCR(processBuffer)
+      if (ocrResult) {
+        ocrStudentName = ocrResult
+        console.log(`[GradeService] Page ${pageNumber}: OCR extracted name: "${ocrStudentName}"`)
+      } else {
+        console.log(`[GradeService] Page ${pageNumber}: OCR could not extract student name`)
+      }
+    }
+
+    // Step 5: Detect bubbles using position-based sampling
     console.log(`[GradeService] Page ${pageNumber}: Detecting bubbles (position-based)...`)
     const detectedBubbles = await this.detectBubblesPositionBased(
       processBuffer,
@@ -828,6 +842,7 @@ class GradeService {
       success: !qrError && flags.filter(f => !f.startsWith('no_answer') && f !== 'rotated_180').length === 0,
       qrData,
       qrError,
+      ocrStudentName,
       answers: detectedBubbles,
       confidence: overallConfidence,
       processingTimeMs,
@@ -839,8 +854,23 @@ class GradeService {
 
   /**
    * Detect if page is upside down by checking corner marks
-   * The filled circle should be in bottom-left corner.
-   * If we find high darkness in top-right, the page is likely upside down.
+   *
+   * Registration mark positions at 72 DPI:
+   * - Top-left: L-shape (not filled) at (25, 25)
+   * - Top-right: Filled SQUARE at (567, 25), size 20x20
+   * - Bottom-left: Filled CIRCLE center at (35, 757), radius 10
+   * - Bottom-right: L-shape (not filled)
+   *
+   * When page is UPSIDE DOWN:
+   * - The filled CIRCLE appears in TOP-RIGHT
+   * - The filled SQUARE appears in BOTTOM-LEFT
+   *
+   * Key insight for detection:
+   * - Filled square samples at ~70-80% darkness (fills entire region)
+   * - Filled circle samples at ~60-65% darkness (circle fills π/4 ≈ 78.5% of bounding box)
+   *
+   * When CORRECT: TR (square ~75%) > BL (circle ~65%)
+   * When UPSIDE DOWN: TR (circle ~65%) < BL (square ~75%)
    */
   private async detectPageOrientation(
     imageBuffer: Buffer,
@@ -853,31 +883,74 @@ class GradeService {
       .toBuffer({ resolveWithObject: true })
 
     const dpiScale = width / LAYOUT.LETTER_WIDTH
-    const markSize = Math.floor(30 * dpiScale) // Sample region size
-    const markOffset = Math.floor(40 * dpiScale) // Distance from corner
 
-    // Sample the four corners
-    const topLeftDarkness = this.sampleCornerDarkness(data, width, height, markOffset, markOffset, markSize)
-    const topRightDarkness = this.sampleCornerDarkness(data, width, height, width - markOffset - markSize, markOffset, markSize)
-    const bottomLeftDarkness = this.sampleCornerDarkness(data, width, height, markOffset, height - markOffset - markSize, markSize)
-    const bottomRightDarkness = this.sampleCornerDarkness(data, width, height, width - markOffset - markSize, height - markOffset - markSize, markSize)
+    // Registration mark constants from pdf.service.ts
+    const REG_MARK_SIZE = 20
+    const REG_MARK_OFFSET = 25
 
-    console.log(`[GradeService] Corner darkness: TL=${topLeftDarkness.toFixed(0)}, TR=${topRightDarkness.toFixed(0)}, BL=${bottomLeftDarkness.toFixed(0)}, BR=${bottomRightDarkness.toFixed(0)}`)
+    // Calculate positions at current DPI
+    const markSize = Math.floor(REG_MARK_SIZE * dpiScale)
+    const offset = Math.floor(REG_MARK_OFFSET * dpiScale)
 
-    // The filled circle (most dark) should be in bottom-left when oriented correctly
-    // The L-shapes are lighter (not filled), and square is medium
-    // If top-right is the darkest (most filled), page is upside down
+    // Top-right position (square when correct, circle when upside down)
+    const topRightX = width - offset - markSize
+    const topRightY = offset
 
-    // Simple heuristic: if top-right has more darkness than bottom-left, it's upside down
-    // The circle is a solid filled shape, so it should be very dark
-    const isDarkTopRight = topRightDarkness > 30 // More than 30% dark pixels
+    // Bottom-left position (circle when correct, square when upside down)
+    const bottomLeftX = offset
+    const bottomLeftY = height - offset - markSize
 
-    // If top-right is dark and darker than bottom-left, page is upside down
-    if (isDarkTopRight && topRightDarkness > bottomLeftDarkness) {
+    // Sample the filled shapes
+    const topRightDarkness = this.sampleCornerDarkness(data, width, height, topRightX, topRightY, markSize)
+    const bottomLeftDarkness = this.sampleCornerDarkness(data, width, height, bottomLeftX, bottomLeftY, markSize)
+
+    // Also sample all corners for debugging
+    const topLeftDarkness = this.sampleCornerDarkness(data, width, height, offset, offset, markSize)
+    const bottomRightDarkness = this.sampleCornerDarkness(data, width, height, width - offset - markSize, height - offset - markSize, markSize)
+
+    console.log(`[GradeService] Corner darkness: TL=${topLeftDarkness.toFixed(0)}%, TR=${topRightDarkness.toFixed(0)}%, BL=${bottomLeftDarkness.toFixed(0)}%, BR=${bottomRightDarkness.toFixed(0)}%`)
+
+    // Both TR and BL should have high darkness (filled shapes in both orientations)
+    // The key difference is WHICH shape is where:
+    // - Square samples ~70-80% (fills entire region)
+    // - Circle samples ~60-65% (only fills π/4 of bounding box)
+    //
+    // When CORRECT: TR has square (higher), BL has circle (lower) → TR > BL
+    // When UPSIDE DOWN: TR has circle (lower), BL has square (higher) → BL > TR
+
+    const bothHaveFilledShapes = topRightDarkness > 40 && bottomLeftDarkness > 40
+
+    if (bothHaveFilledShapes) {
+      // Compare which corner has the denser shape (square vs circle)
+      // If BL is significantly darker than TR, the square is in BL → upside down
+      const isUpsideDown = bottomLeftDarkness > topRightDarkness + 5 // 5% threshold
+
+      console.log(`[GradeService] Shape comparison: TR=${topRightDarkness.toFixed(0)}% vs BL=${bottomLeftDarkness.toFixed(0)}% → ${isUpsideDown ? 'UPSIDE DOWN' : 'correct'}`)
+      return isUpsideDown
+    }
+
+    // Fallback: if we don't detect both filled shapes, check for unexpected darkness
+    // If neither TR nor BL has marks, but TL and BR do, page is upside down
+    if (topLeftDarkness > 40 && bottomRightDarkness > 40 && topRightDarkness < 30 && bottomLeftDarkness < 30) {
+      console.log(`[GradeService] Fallback detection: marks in TL/BR instead of TR/BL → UPSIDE DOWN`)
       return true
     }
 
+    console.log(`[GradeService] Could not reliably detect orientation, assuming correct`)
     return false
+  }
+
+  // Name region layout constants at 72 DPI (for OCR extraction)
+  // The name is printed after "Name: " label at approximately:
+  // - X starts at MARGIN (50) + "Name: " label width (~35pt) = ~85pt
+  // - Y is at header line 3: MARGIN + title(25) + divider(15) = 90pt
+  // - Width extends to about pageWidth/2 (306pt) minus some margin = ~220pt
+  // - Height is about 1.5x the font size (11pt) = ~16pt
+  private static readonly NAME_REGION_72DPI = {
+    X: 85,        // After "Name: " label
+    Y: 88,        // Header row with student info
+    WIDTH: 220,   // Wide enough for long names like "Bartholomew-Richardson, Alexandria"
+    HEIGHT: 18    // Tall enough for the text
   }
 
   /**
@@ -905,6 +978,113 @@ class GradeService {
     }
 
     return totalPixels > 0 ? (darkPixels / totalPixels) * 100 : 0
+  }
+
+  /**
+   * Extract student name from scantron image using OCR
+   * Returns the detected name or null if OCR fails
+   */
+  private async extractStudentNameOCR(imageBuffer: Buffer): Promise<string | null> {
+    try {
+      const metadata = await sharp(imageBuffer).metadata()
+      const imageWidth = metadata.width || 1275
+
+      // Calculate DPI scale (image is rendered at 150 DPI, layout is at 72 DPI)
+      const dpiScale = imageWidth / LAYOUT.LETTER_WIDTH
+
+      // Calculate name region in current image coordinates
+      const region = GradeService.NAME_REGION_72DPI
+      const cropX = Math.floor(region.X * dpiScale)
+      const cropY = Math.floor(region.Y * dpiScale)
+      const cropWidth = Math.floor(region.WIDTH * dpiScale)
+      const cropHeight = Math.floor(region.HEIGHT * dpiScale)
+
+      console.log(`[GradeService] OCR: Extracting name region (${cropX}, ${cropY}, ${cropWidth}x${cropHeight})`)
+
+      // Crop the name region and enhance for OCR
+      const nameRegion = await sharp(imageBuffer)
+        .extract({ left: cropX, top: cropY, width: cropWidth, height: cropHeight })
+        .resize({ width: cropWidth * 2 }) // Upscale 2x for better OCR
+        .normalize() // Enhance contrast
+        .sharpen() // Sharpen text edges
+        .png()
+        .toBuffer()
+
+      // Run OCR on the cropped region
+      const result = await Tesseract.recognize(nameRegion, 'eng', {
+        logger: () => {} // Suppress progress logs
+      })
+
+      const text = result.data.text.trim()
+      console.log(`[GradeService] OCR result: "${text}" (confidence: ${result.data.confidence.toFixed(0)}%)`)
+
+      // Only return if we have reasonable confidence
+      if (result.data.confidence > 50 && text.length > 2) {
+        return text
+      }
+
+      return null
+    } catch (error) {
+      console.log('[GradeService] OCR failed:', error)
+      return null
+    }
+  }
+
+  /**
+   * Find students whose names match the OCR text using fuzzy matching
+   * Returns array of student IDs sorted by match quality
+   */
+  private findMatchingStudents(
+    ocrText: string,
+    availableStudentIds: string[],
+    roster: { students: Array<{ id: string; firstName: string; lastName: string }> }
+  ): string[] {
+    if (!ocrText || availableStudentIds.length === 0) return []
+
+    const normalizedOcr = ocrText.toLowerCase().replace(/[^a-z]/g, '')
+
+    const matches: Array<{ id: string; score: number }> = []
+
+    for (const studentId of availableStudentIds) {
+      const student = roster.students.find(s => s.id === studentId)
+      if (!student) continue
+
+      // Create normalized versions of names to compare
+      const fullName = `${student.lastName}${student.firstName}`.toLowerCase().replace(/[^a-z]/g, '')
+      const reverseName = `${student.firstName}${student.lastName}`.toLowerCase().replace(/[^a-z]/g, '')
+
+      // Calculate similarity score (simple substring matching)
+      let score = 0
+
+      // Check if OCR text contains significant parts of the name
+      if (normalizedOcr.includes(student.lastName.toLowerCase().replace(/[^a-z]/g, ''))) {
+        score += 50
+      }
+      if (normalizedOcr.includes(student.firstName.toLowerCase().replace(/[^a-z]/g, ''))) {
+        score += 30
+      }
+
+      // Check reverse - if name contains OCR text
+      if (fullName.includes(normalizedOcr) || reverseName.includes(normalizedOcr)) {
+        score += 20
+      }
+
+      // Levenshtein-like bonus for close matches
+      const minLen = Math.min(normalizedOcr.length, fullName.length)
+      let matchingChars = 0
+      for (let i = 0; i < minLen; i++) {
+        if (normalizedOcr[i] === fullName[i]) matchingChars++
+      }
+      score += (matchingChars / minLen) * 20
+
+      if (score > 20) {
+        matches.push({ id: studentId, score })
+      }
+    }
+
+    // Sort by score descending and return top 3
+    matches.sort((a, b) => b.score - a.score)
+    return matches.slice(0, 3).map(m => m.id)
   }
 
   /**
@@ -1172,6 +1352,19 @@ class GradeService {
 
           console.log(`[GradeService] Page ${page.pageNumber}: Unidentified scantron - QR error: ${page.qrError}`)
 
+          // Use OCR name to suggest matching students
+          let suggestedStudents: string[] | undefined
+          if (page.ocrStudentName) {
+            suggestedStudents = this.findMatchingStudents(page.ocrStudentName, ungradedStudentIds, roster)
+            if (suggestedStudents.length > 0) {
+              const suggestedNames = suggestedStudents.map(id => {
+                const s = roster.students.find(st => st.id === id)
+                return s ? `${s.lastName}, ${s.firstName}` : id
+              })
+              console.log(`[GradeService] Page ${page.pageNumber}: OCR suggests: ${suggestedNames.join(', ')}`)
+            }
+          }
+
           unidentifiedPages.push({
             pageNumber: page.pageNumber,
             pageType,
@@ -1179,6 +1372,8 @@ class GradeService {
             detectedAnswers: page.answers,
             registrationMarkCount: this.countRegistrationMarks(page),
             qrError: page.qrError,
+            ocrStudentName: page.ocrStudentName,
+            suggestedStudents,
             possibleStudents: ungradedStudentIds
           })
         } else {

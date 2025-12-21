@@ -3,15 +3,22 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
+import AlertTitle from '@mui/material/AlertTitle'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Divider from '@mui/material/Divider'
 import CircularProgress from '@mui/material/CircularProgress'
+import List from '@mui/material/List'
+import ListItem from '@mui/material/ListItem'
+import ListItemIcon from '@mui/material/ListItemIcon'
+import ListItemText from '@mui/material/ListItemText'
 import SaveIcon from '@mui/icons-material/Save'
 import WarningIcon from '@mui/icons-material/Warning'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline'
+import DescriptionIcon from '@mui/icons-material/Description'
 import { StudentGradeRow } from './StudentGradeRow'
 import { useGradeStore } from '../../stores'
 import type { Student, GradeOverride } from '../../../../shared/types'
@@ -24,6 +31,7 @@ export function GradeReviewPanel({ students }: GradeReviewPanelProps): ReactElem
   const {
     currentGrades,
     flaggedRecords,
+    unidentifiedPages,
     pendingOverrides,
     isSaving,
     error,
@@ -76,6 +84,65 @@ export function GradeReviewPanel({ students }: GradeReviewPanelProps): ReactElem
       {error && (
         <Alert severity="error" onClose={clearError}>
           {error}
+        </Alert>
+      )}
+
+      {/* Unidentified Pages Warning */}
+      {unidentifiedPages.length > 0 && (
+        <Alert
+          severity="warning"
+          icon={<ErrorOutlineIcon />}
+          sx={{ '& .MuiAlert-message': { width: '100%' } }}
+        >
+          <AlertTitle sx={{ fontWeight: 600 }}>
+            {unidentifiedPages.length} Unidentified Scantron{unidentifiedPages.length !== 1 ? 's' : ''}
+          </AlertTitle>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            The following pages could not be matched to students. Their QR codes may be damaged or
+            unreadable. Please manually assign these scantrons to the correct students.
+          </Typography>
+          <List dense disablePadding>
+            {unidentifiedPages.map((page) => {
+              // Find suggested student names
+              const suggestedNames = page.suggestedStudents?.map(id => {
+                const student = students.find(s => s.id === id)
+                return student ? `${student.lastName}, ${student.firstName}` : id
+              })
+
+              return (
+                <ListItem key={page.pageNumber} disableGutters sx={{ py: 0.5, flexDirection: 'column', alignItems: 'flex-start' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                    <ListItemIcon sx={{ minWidth: 36 }}>
+                      <DescriptionIcon fontSize="small" color="warning" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={`Page ${page.pageNumber}`}
+                      secondary={page.qrError || 'QR code unreadable'}
+                      primaryTypographyProps={{ variant: 'body2', fontWeight: 500 }}
+                      secondaryTypographyProps={{ variant: 'caption' }}
+                    />
+                  </Box>
+                  {page.ocrStudentName && (
+                    <Box sx={{ pl: 4.5, mt: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Name detected: <strong>{page.ocrStudentName}</strong>
+                      </Typography>
+                      {suggestedNames && suggestedNames.length > 0 && (
+                        <Typography variant="caption" color="info.main" sx={{ display: 'block' }}>
+                          Suggested match: {suggestedNames[0]}
+                          {suggestedNames.length > 1 && ` (or ${suggestedNames.slice(1).join(', ')})`}
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+                </ListItem>
+              )
+            })}
+          </List>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+            Manual assignment feature coming soon. For now, please re-scan these pages or manually
+            enter grades.
+          </Typography>
         </Alert>
       )}
 
