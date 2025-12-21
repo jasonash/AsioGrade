@@ -80,7 +80,8 @@ import type {
   Roster,
   VersionId,
   UnidentifiedPage,
-  PageType
+  PageType,
+  AnswerKeyEntry
 } from '../../shared/types'
 
 // Log OpenCV load status at module initialization
@@ -187,7 +188,7 @@ class GradeService {
       }
 
       // Calculate grades and identify unidentified pages
-      const { grades, unidentifiedPages } = this.calculateGradesWithUnidentified(
+      const { grades, unidentifiedPages, answerKey } = this.calculateGradesWithUnidentified(
         parsedPages,
         assignment,
         assessment,
@@ -222,6 +223,7 @@ class GradeService {
           grades,
           flaggedRecords,
           unidentifiedPages,
+          answerKey,
           processingTimeMs,
           summary: {
             totalPages,
@@ -1318,17 +1320,25 @@ class GradeService {
     assignment: Assignment,
     assessment: Assessment,
     roster: Roster
-  ): { grades: AssignmentGrades; unidentifiedPages: UnidentifiedPage[] } {
+  ): { grades: AssignmentGrades; unidentifiedPages: UnidentifiedPage[]; answerKey: AnswerKeyEntry[] } {
     const records: GradeRecord[] = []
     const unidentifiedPages: UnidentifiedPage[] = []
     const studentMap = new Map(roster.students.map((s) => [s.id, s]))
     const gradedStudentIds = new Set<string>()
 
-    // Build answer key from assessment
-    const answerKey = new Map<number, string>()
+    // Build answer key from assessment (both Map for internal use and array for export)
+    const answerKeyMap = new Map<number, string>()
+    const answerKeyArray: AnswerKeyEntry[] = []
     assessment.questions.forEach((q, index) => {
       if (q.type === 'multiple_choice') {
-        answerKey.set(index + 1, q.correctAnswer.toUpperCase())
+        const questionNumber = index + 1
+        answerKeyMap.set(questionNumber, q.correctAnswer.toUpperCase())
+        answerKeyArray.push({
+          questionNumber,
+          questionId: q.id,
+          correctAnswer: q.correctAnswer.toUpperCase(),
+          points: q.points
+        })
       }
     })
 
@@ -1402,7 +1412,7 @@ class GradeService {
 
       for (const bubble of page.answers) {
         const question = assessment.questions[bubble.questionNumber - 1]
-        const correctAnswer = answerKey.get(bubble.questionNumber)
+        const correctAnswer = answerKeyMap.get(bubble.questionNumber)
         const isCorrect = bubble.selected?.toUpperCase() === correctAnswer
 
         if (isCorrect) {
@@ -1486,7 +1496,7 @@ class GradeService {
       stats
     }
 
-    return { grades, unidentifiedPages }
+    return { grades, unidentifiedPages, answerKey: answerKeyArray }
   }
 
   /**

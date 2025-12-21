@@ -9,7 +9,8 @@ import type {
   SaveGradesInput,
   UnidentifiedPage,
   VersionId,
-  AnswerResult
+  AnswerResult,
+  AnswerKeyEntry
 } from '../../../shared/types'
 import type { ServiceResult } from '../../../shared/types/common.types'
 
@@ -19,6 +20,7 @@ interface GradeState {
   parsedPages: ParsedScantron[]
   flaggedRecords: GradeRecord[]
   unidentifiedPages: UnidentifiedPage[]
+  answerKey: AnswerKeyEntry[] // Answer key for grading manually assigned pages
   processingProgress: number
   isProcessing: boolean
   isSaving: boolean
@@ -51,6 +53,7 @@ export const useGradeStore = create<GradeState>((set, get) => ({
   parsedPages: [],
   flaggedRecords: [],
   unidentifiedPages: [],
+  answerKey: [],
   processingProgress: 0,
   isProcessing: false,
   isSaving: false,
@@ -75,6 +78,7 @@ export const useGradeStore = create<GradeState>((set, get) => ({
       parsedPages: [],
       flaggedRecords: [],
       unidentifiedPages: [],
+      answerKey: [],
       pendingOverrides: [],
       processingProgress: 0,
       error: null
@@ -126,6 +130,7 @@ export const useGradeStore = create<GradeState>((set, get) => ({
         parsedPages: result.data.parsedPages,
         flaggedRecords: result.data.flaggedRecords,
         unidentifiedPages: result.data.unidentifiedPages || [],
+        answerKey: result.data.answerKey || [],
         isProcessing: false,
         processingProgress: 100
       })
@@ -224,7 +229,7 @@ export const useGradeStore = create<GradeState>((set, get) => ({
   },
 
   assignUnidentifiedPage: (pageNumber: number, studentId: string) => {
-    const { currentGrades, unidentifiedPages, currentAssignmentId, parsedPages } = get()
+    const { currentGrades, unidentifiedPages, currentAssignmentId, parsedPages, answerKey } = get()
 
     if (!currentGrades || !currentAssignmentId) {
       set({ error: 'No grades context available' })
@@ -241,22 +246,44 @@ export const useGradeStore = create<GradeState>((set, get) => ({
     // Find the parsed page data for answer details
     const parsedPage = parsedPages.find((p) => p.pageNumber === pageNumber)
 
-    // Create answer results from detected answers
+    // Build a lookup map from the answer key for efficient grading
+    const answerKeyMap = new Map(
+      answerKey.map((entry) => [entry.questionNumber, entry])
+    )
+
+    // Create answer results from detected answers and grade them
+    let rawScore = 0
+    let totalPoints = 0
     const answers: AnswerResult[] = page.detectedAnswers.map((bubble) => {
       const maxConfidence = Math.max(...bubble.bubbles.map((b) => b.confidence))
+      const keyEntry = answerKeyMap.get(bubble.questionNumber)
+      const correctAnswer = keyEntry?.correctAnswer?.toUpperCase()
+      const selectedAnswer = bubble.selected?.toUpperCase() ?? null
+      const isCorrect = selectedAnswer === correctAnswer
+
+      // Accumulate score
+      if (isCorrect) {
+        rawScore++
+      }
+      totalPoints += keyEntry?.points || 1
+
       return {
         questionNumber: bubble.questionNumber,
-        questionId: '', // Will be filled by grading calculation
+        questionId: keyEntry?.questionId || '',
         questionType: 'multiple_choice' as const,
         selected: bubble.selected,
         confidence: maxConfidence,
-        correct: false, // Will be recalculated when compared with answer key
+        correct: isCorrect,
         multipleSelected: bubble.multipleDetected,
         unclear: maxConfidence < 0.7
       }
     })
 
-    // Create a new grade record
+    // Calculate percentage
+    const totalQuestions = page.detectedAnswers.length
+    const percentage = totalQuestions > 0 ? (rawScore / totalQuestions) * 100 : 0
+
+    // Create a new grade record with actual scores
     const newRecord: GradeRecord = {
       id: `${currentAssignmentId}-${studentId}`,
       studentId,
@@ -264,11 +291,11 @@ export const useGradeStore = create<GradeState>((set, get) => ({
       versionId: 'A' as VersionId,
       gradedAt: new Date().toISOString(),
       scannedAt: new Date().toISOString(),
-      rawScore: 0, // Will be recalculated
-      totalQuestions: page.detectedAnswers.length,
-      percentage: 0, // Will be recalculated
-      points: 0, // Will be recalculated
-      maxPoints: page.detectedAnswers.length,
+      rawScore,
+      totalQuestions,
+      percentage,
+      points: rawScore,
+      maxPoints: totalPoints,
       answers,
       flags: [
         {

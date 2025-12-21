@@ -257,6 +257,16 @@ export interface GradeProcessRequest {
 }
 
 /**
+ * Answer key entry for grading
+ */
+export interface AnswerKeyEntry {
+  questionNumber: number
+  questionId: string
+  correctAnswer: string
+  points: number
+}
+
+/**
  * Result of processing a scantron PDF
  */
 export interface GradeProcessResult {
@@ -266,6 +276,7 @@ export interface GradeProcessResult {
   grades?: AssignmentGrades
   flaggedRecords: GradeRecord[]
   unidentifiedPages: UnidentifiedPage[] // IMPORTANT: Never skip pages - include them here
+  answerKey: AnswerKeyEntry[] // Answer key for grading manually assigned pages
   processingTimeMs: number
   summary: {
     totalPages: number
