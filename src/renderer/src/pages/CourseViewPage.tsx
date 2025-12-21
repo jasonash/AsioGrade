@@ -232,16 +232,11 @@ export function CourseViewPage({ onSectionSelect, onUnitSelect, onStandardsSelec
                 }}
                 onClick={onStandardsSelect}
               >
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <Box>
-                    <Typography fontWeight={500}>{summary.name}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {summary.framework} - {summary.state} | {summary.standardCount} standards across {summary.domainCount} domains
-                    </Typography>
-                  </Box>
-                  <Button size="small" variant="contained" onClick={(e) => { e.stopPropagation(); onStandardsSelect?.(); }}>
-                    View
-                  </Button>
+                <Box>
+                  <Typography fontWeight={500}>{summary.name}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {summary.framework} - {summary.state} | {summary.standardCount} standards across {summary.domainCount} domains
+                  </Typography>
                 </Box>
               </Paper>
             ))}
@@ -360,36 +355,35 @@ function SectionCard({ section, onView }: SectionCardProps): ReactElement {
   return (
     <Paper
       variant="outlined"
+      onClick={onView}
       sx={{
         p: 2,
+        cursor: 'pointer',
         '&:hover': {
           borderColor: 'primary.main'
         }
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box>
-          <Typography fontWeight={500}>{section.name}</Typography>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
-              <PeopleIcon sx={{ fontSize: 14 }} />
-              <Typography variant="body2">{section.studentCount} students</Typography>
-            </Box>
-            {section.schedule && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
-                <ScheduleIcon sx={{ fontSize: 14 }} />
-                <Typography variant="body2">{section.schedule}</Typography>
-              </Box>
-            )}
-            {section.room && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
-                <RoomIcon sx={{ fontSize: 14 }} />
-                <Typography variant="body2">{section.room}</Typography>
-              </Box>
-            )}
+      <Box>
+        <Typography fontWeight={500}>{section.name}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+            <PeopleIcon sx={{ fontSize: 14 }} />
+            <Typography variant="body2">{section.studentCount} students</Typography>
           </Box>
+          {section.schedule && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+              <ScheduleIcon sx={{ fontSize: 14 }} />
+              <Typography variant="body2">{section.schedule}</Typography>
+            </Box>
+          )}
+          {section.room && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+              <RoomIcon sx={{ fontSize: 14 }} />
+              <Typography variant="body2">{section.room}</Typography>
+            </Box>
+          )}
         </Box>
-        <Button size="small" onClick={onView}>View</Button>
       </Box>
     </Paper>
   )
@@ -404,40 +398,39 @@ function UnitCard({ unit, onView }: UnitCardProps): ReactElement {
   return (
     <Paper
       variant="outlined"
+      onClick={onView}
       sx={{
         p: 2,
+        cursor: 'pointer',
         '&:hover': {
           borderColor: 'primary.main'
         }
       }}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box sx={{ flex: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Chip
-              label={`Unit ${unit.order}`}
-              size="small"
-              color="primary"
-              variant="outlined"
-            />
-            <Typography fontWeight={500}>{unit.name}</Typography>
+      <Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Chip
+            label={`Unit ${unit.order}`}
+            size="small"
+            color="primary"
+            variant="outlined"
+          />
+          <Typography fontWeight={500}>{unit.name}</Typography>
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+            <MenuBookIcon sx={{ fontSize: 14 }} />
+            <Typography variant="body2">
+              {unit.standardCount} {unit.standardCount === 1 ? 'standard' : 'standards'}
+            </Typography>
           </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 0.5 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
-              <MenuBookIcon sx={{ fontSize: 14 }} />
-              <Typography variant="body2">
-                {unit.standardCount} {unit.standardCount === 1 ? 'standard' : 'standards'}
-              </Typography>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
-              <AssignmentIcon sx={{ fontSize: 14 }} />
-              <Typography variant="body2">
-                {unit.assessmentCount} {unit.assessmentCount === 1 ? 'assessment' : 'assessments'}
-              </Typography>
-            </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+            <AssignmentIcon sx={{ fontSize: 14 }} />
+            <Typography variant="body2">
+              {unit.assessmentCount} {unit.assessmentCount === 1 ? 'assessment' : 'assessments'}
+            </Typography>
           </Box>
         </Box>
-        <Button size="small" onClick={onView}>View</Button>
       </Box>
     </Paper>
   )
