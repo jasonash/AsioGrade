@@ -61,7 +61,9 @@ export function StudentGradeRow({
         borderColor: record.needsReview ? 'warning.main' : 'divider',
         borderRadius: 1,
         overflow: 'hidden',
-        bgcolor: record.needsReview ? 'warning.light' : 'transparent',
+        bgcolor: 'background.paper',
+        borderLeft: record.needsReview ? 4 : 1,
+        borderLeftColor: record.needsReview ? 'warning.main' : 'divider',
         mb: 1
       }}
     >
@@ -168,7 +170,9 @@ export function StudentGradeRow({
                     gap: 1,
                     p: 0.75,
                     borderRadius: 1,
-                    bgcolor: needsAttention ? 'warning.light' : 'action.hover'
+                    bgcolor: 'action.hover',
+                    border: needsAttention ? 2 : 0,
+                    borderColor: needsAttention ? 'warning.main' : 'transparent'
                   }}
                 >
                   {/* Question Number */}
