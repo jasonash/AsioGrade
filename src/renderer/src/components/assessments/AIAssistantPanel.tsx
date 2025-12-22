@@ -27,7 +27,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { useAIStore } from '../../stores'
 import { GeneratedQuestionCard } from './GeneratedQuestionCard'
 import { QuestionGenerationModal } from './QuestionGenerationModal'
-import { MaterialImportModal } from './MaterialImportModal'
+import { QuestionImportModal } from './QuestionImportModal'
 import { CoverageAnalysis } from './CoverageAnalysis'
 import type { Standard, MultipleChoiceQuestion } from '../../../../shared/types'
 import type { AIAssessmentContext, QuestionGenerationRequest } from '../../../../shared/types/ai.types'
@@ -386,8 +386,8 @@ export function AIAssistantPanel({
         otherStandards={otherStandards}
       />
 
-      {/* Material Import Modal */}
-      <MaterialImportModal
+      {/* Question Import Modal */}
+      <QuestionImportModal
         isOpen={showImportModal}
         onClose={() => setShowImportModal(false)}
         gradeLevel={gradeLevel}

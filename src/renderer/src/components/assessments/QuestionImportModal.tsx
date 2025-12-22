@@ -1,8 +1,11 @@
 /**
- * MaterialImportModal Component
+ * QuestionImportModal Component
  *
- * Modal for importing questions from existing documents (PDF, DOCX, TXT).
- * Uses AI to extract and structure questions from uploaded content.
+ * Modal for importing existing questions from old tests, worksheets, or question banks.
+ * Upload a PDF, DOCX, or TXT containing questions and AI will extract and structure them.
+ *
+ * Note: This is for importing EXISTING QUESTIONS, not teaching materials.
+ * Teaching materials for AI context will be a separate unit-level feature.
  */
 
 import { type ReactElement, useState } from 'react'
@@ -31,7 +34,7 @@ import type {
 } from '../../../../shared/types/ai.types'
 import type { MultipleChoiceQuestion, Choice } from '../../../../shared/types/question.types'
 
-interface MaterialImportModalProps {
+interface QuestionImportModalProps {
   isOpen: boolean
   onClose: () => void
   gradeLevel: string
@@ -41,13 +44,13 @@ interface MaterialImportModalProps {
 
 type ImportStep = 'upload' | 'extracting' | 'review'
 
-export function MaterialImportModal({
+export function QuestionImportModal({
   isOpen,
   onClose,
   gradeLevel,
   subject,
   onQuestionsImported
-}: MaterialImportModalProps): ReactElement {
+}: QuestionImportModalProps): ReactElement {
   const [step, setStep] = useState<ImportStep>('upload')
   const [fileName, setFileName] = useState<string | null>(null)
   const [extractedText, setExtractedText] = useState<string | null>(null)
@@ -245,11 +248,11 @@ export function MaterialImportModal({
   const renderUploadStep = (): ReactElement => (
     <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, py: 4 }}>
       <UploadFileIcon sx={{ fontSize: 64, color: 'text.secondary' }} />
-      <Typography variant="h6">Upload a Document</Typography>
+      <Typography variant="h6">Import Existing Questions</Typography>
       <Typography variant="body2" color="text.secondary" textAlign="center">
-        Upload a PDF, Word document, or text file containing questions.
+        Upload an old test, quiz, or question bank document.
         <br />
-        AI will extract and format the questions for you.
+        AI will extract the questions and format them for this assessment.
       </Typography>
       <Button variant="contained" onClick={handleSelectFile} startIcon={<UploadFileIcon />}>
         Select File
@@ -396,12 +399,12 @@ export function MaterialImportModal({
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Import from Document"
+      title="Import Existing Questions"
       description={
         step === 'upload'
-          ? 'Upload a document containing questions'
+          ? 'Upload an old test, quiz, or question bank'
           : step === 'extracting'
-            ? 'Processing document...'
+            ? 'Extracting questions...'
             : 'Review extracted questions'
       }
       size="lg"
