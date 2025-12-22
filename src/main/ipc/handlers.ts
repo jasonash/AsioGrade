@@ -37,7 +37,8 @@ import type {
   QuestionRefinementRequest,
   AIChatRequest,
   MaterialImportRequest,
-  VariantGenerationRequest
+  VariantGenerationRequest,
+  FillInBlankConversionRequest
 } from '../../shared/types/ai.types'
 
 /**
@@ -832,6 +833,14 @@ function registerAIHandlers(): void {
     'ai:generateVariant',
     async (_event, request: VariantGenerationRequest) => {
       return aiService.generateVariant(request)
+    }
+  )
+
+  // Convert fill-in-the-blank questions to multiple choice
+  ipcMain.handle(
+    'ai:convertFillInBlank',
+    async (_event, request: FillInBlankConversionRequest) => {
+      return aiService.convertFillInBlankToMultipleChoice(request)
     }
   )
 }

@@ -34,6 +34,12 @@ export interface ParsedVariantResult {
   error?: string
 }
 
+export interface ParsedFillInBlankConversionResult {
+  success: boolean
+  questions?: ExtractedQuestion[]
+  error?: string
+}
+
 /**
  * Fisher-Yates shuffle algorithm for randomizing array
  */
@@ -294,6 +300,8 @@ export function parseMaterialImport(
             type = 'multiple_choice'
           } else if (typeStr.includes('true') || typeStr.includes('false')) {
             type = 'true_false'
+          } else if (typeStr.includes('fill') || typeStr.includes('blank')) {
+            type = 'fill_in_blank'
           } else if (typeStr.includes('short') || typeStr.includes('answer')) {
             type = 'short_answer'
           }
@@ -433,6 +441,85 @@ export function parseVariantQuestion(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to parse variant question'
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Parse converted fill-in-the-blank questions from LLM response
+ */
+export function parseFillInBlankConversion(
+  content: string,
+  usage: LLMUsage
+): ParsedFillInBlankConversionResult {
+  try {
+    // Try to extract JSON array from the response
+    const jsonMatch = content.match(/\[[\s\S]*\]/)
+    if (!jsonMatch) {
+      return { success: false, error: 'No JSON array found in response' }
+    }
+
+    const parsed: unknown = JSON.parse(jsonMatch[0])
+    if (!Array.isArray(parsed)) {
+      return { success: false, error: 'Response is not an array' }
+    }
+
+    const questions: ExtractedQuestion[] = []
+
+    for (let index = 0; index < parsed.length; index++) {
+      const q = parsed[index] as Record<string, unknown>
+
+      // Skip if no text
+      if (typeof q.text !== 'string' || !q.text.trim()) {
+        continue
+      }
+
+      // Parse choices - required for conversion
+      if (!Array.isArray(q.choices) || q.choices.length < 2) {
+        continue
+      }
+
+      const choices = q.choices.map((c: unknown, ci: number) => {
+        const choice = c as Record<string, unknown>
+        return {
+          id: typeof choice.id === 'string' ? choice.id.toLowerCase() : String.fromCharCode(97 + ci),
+          text: String(choice.text ?? ''),
+          isCorrect: Boolean(choice.isCorrect)
+        }
+      })
+
+      // Ensure exactly one correct answer
+      const correctChoices = choices.filter(c => c.isCorrect)
+      if (correctChoices.length === 0) {
+        // Try to use correctAnswer field
+        const correctAnswerFromLLM = String(q.correctAnswer ?? 'a').toLowerCase()
+        const correctChoice = choices.find(c => c.id === correctAnswerFromLLM)
+        if (correctChoice) {
+          correctChoice.isCorrect = true
+        } else {
+          choices[0].isCorrect = true
+        }
+      } else if (correctChoices.length > 1) {
+        correctChoices.slice(1).forEach(c => { c.isCorrect = false })
+      }
+
+      const correctChoice = choices.find(c => c.isCorrect)
+
+      questions.push({
+        // Keep original ID if provided, otherwise generate new one
+        id: typeof q.id === 'string' ? q.id : `conv-${Date.now().toString(36)}-${index}`,
+        text: String(q.text).trim(),
+        type: 'multiple_choice',
+        choices,
+        correctAnswer: correctChoice?.id ?? 'a',
+        confidence: 'high', // Converted questions should be high confidence
+        notes: 'Converted from fill-in-the-blank'
+      })
+    }
+
+    return { success: true, questions }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse converted questions'
     return { success: false, error: message }
   }
 }

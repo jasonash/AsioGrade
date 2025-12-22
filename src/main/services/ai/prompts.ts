@@ -9,7 +9,9 @@ import type {
   QuestionGenerationRequest,
   RefinementCommand,
   MaterialImportRequest,
-  VariantGenerationRequest
+  VariantGenerationRequest,
+  FillInBlankConversionRequest,
+  ExtractedQuestion
 } from '../../../shared/types/ai.types'
 import type { MultipleChoiceQuestion } from '../../../shared/types/question.types'
 
@@ -44,14 +46,29 @@ For other requests, respond conversationally with helpful suggestions.`,
 
 You should:
 1. Identify questions even if they're embedded in other content
-2. Recognize multiple choice, true/false, and short answer formats
-3. Extract answer choices when present
-4. Note if the correct answer is indicated
-5. Assess your confidence in each extraction
+2. Recognize multiple choice, true/false, fill-in-the-blank, and short answer formats
+3. For FILL-IN-THE-BLANK questions:
+   - Mark them as type "fill_in_blank"
+   - Set "correctAnswer" to the word or phrase that goes in the blank
+   - Use your subject knowledge to determine the correct answer
+   - Include the blank indicator (___) in the question text
+4. Extract answer choices when present for multiple choice
+5. Note if the correct answer is indicated
+6. Assess your confidence in each extraction
 
 If the document contains study material rather than explicit questions, note this and suggest how the content could be converted to questions.`,
 
-  variantGeneration: `You are an expert in educational assessment and Universal Design for Learning (UDL). Your task is to create alternative versions of questions that maintain the same learning objective while adjusting for different student needs.`
+  variantGeneration: `You are an expert in educational assessment and Universal Design for Learning (UDL). Your task is to create alternative versions of questions that maintain the same learning objective while adjusting for different student needs.`,
+
+  fillInBlankConversion: `You are an expert educational assessment developer. Your task is to convert fill-in-the-blank questions into multiple choice format by generating plausible distractors (incorrect answers).
+
+GUIDELINES FOR DISTRACTORS:
+- Base distractors on common student misconceptions
+- Use similar vocabulary and phrasing as the correct answer
+- Ensure distractors are clearly wrong to someone who understands the concept
+- Make all choices the same approximate length
+- Avoid "trick" answers that are only wrong due to technicalities
+- Consider what incorrect but related concepts students might confuse`
 }
 
 /**
@@ -207,12 +224,12 @@ Return a JSON object with this structure:
 {
   "questions": [
     {
-      "text": "The question text",
-      "type": "multiple_choice" | "true_false" | "short_answer" | "unknown",
+      "text": "The question text (keep blanks as ___ for fill-in-blank)",
+      "type": "multiple_choice" | "true_false" | "fill_in_blank" | "short_answer" | "unknown",
       "choices": [
         { "id": "a", "text": "Choice text", "isCorrect": true/false }
       ],
-      "correctAnswer": "a" (if known),
+      "correctAnswer": "a" (for MC) or "the answer word/phrase" (for fill_in_blank),
       "confidence": "high" | "medium" | "low",
       "notes": "Any notes about this extraction"
     }
@@ -223,8 +240,13 @@ Return a JSON object with this structure:
 
 GUIDELINES:
 - Include ALL questions you find, even if you're unsure about format
+- For FILL-IN-THE-BLANK questions:
+  * Set type to "fill_in_blank"
+  * Set "correctAnswer" to the word/phrase that belongs in the blank
+  * Use your subject matter knowledge to determine the correct answer
+  * Keep the blank indicator (___) in the question text
 - For multiple choice, always include 4 choices (a, b, c, d) when possible
-- Mark confidence as "high" if the question and choices are clear
+- Mark confidence as "high" if the question and answer are clear
 - Mark confidence as "medium" if you had to infer something
 - Mark confidence as "low" if you're uncertain about the format or answer
 - If correct answers aren't marked, set isCorrect to false for all and note this
@@ -307,4 +329,51 @@ Return a JSON object with:
 }
 
 Generate the ${request.variantType} variant now:`
+}
+
+/**
+ * Build the prompt for converting fill-in-the-blank questions to multiple choice
+ */
+export function buildFillInBlankConversionPrompt(request: FillInBlankConversionRequest): string {
+  const questionsJson = request.questions.map((q) => ({
+    id: q.id,
+    text: q.text,
+    correctAnswer: q.correctAnswer
+  }))
+
+  return `Convert these fill-in-the-blank questions to multiple choice format for grade ${request.gradeLevel} ${request.subject} students.
+
+QUESTIONS TO CONVERT:
+${JSON.stringify(questionsJson, null, 2)}
+
+REQUIREMENTS:
+1. Keep the question text the same (including the blank indicator ___)
+2. Create 4 answer choices (a, b, c, d) where ONE is correct
+3. The correct answer choice should contain the original "correctAnswer" value
+4. Generate 3 PLAUSIBLE but INCORRECT distractors that:
+   - Are related to the subject matter
+   - Represent common student misconceptions
+   - Are similar in length and format to the correct answer
+   - Are clearly wrong to someone who understands the concept
+5. Randomize which choice (a, b, c, or d) is correct
+
+OUTPUT FORMAT:
+Return a JSON array of converted questions:
+[
+  {
+    "id": "original-question-id",
+    "text": "Original question text with ___",
+    "type": "multiple_choice",
+    "choices": [
+      { "id": "a", "text": "Choice text", "isCorrect": false },
+      { "id": "b", "text": "Correct answer", "isCorrect": true },
+      { "id": "c", "text": "Choice text", "isCorrect": false },
+      { "id": "d", "text": "Choice text", "isCorrect": false }
+    ],
+    "correctAnswer": "b",
+    "confidence": "high"
+  }
+]
+
+Convert all ${request.questions.length} questions now:`
 }

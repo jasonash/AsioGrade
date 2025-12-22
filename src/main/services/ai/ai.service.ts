@@ -12,13 +12,15 @@ import {
   buildRefinementPrompt,
   buildChatContextPrompt,
   buildMaterialImportPrompt,
-  buildVariantPrompt
+  buildVariantPrompt,
+  buildFillInBlankConversionPrompt
 } from './prompts'
 import {
   parseGeneratedQuestions,
   parseRefinedQuestion,
   parseMaterialImport,
-  parseVariantQuestion
+  parseVariantQuestion,
+  parseFillInBlankConversion
 } from './parser'
 import type { ServiceResult } from '../../../shared/types/common.types'
 import type { LLMUsage } from '../../../shared/types/llm.types'
@@ -34,7 +36,9 @@ import type {
   MaterialImportRequest,
   MaterialImportResult,
   VariantGenerationRequest,
-  VariantGenerationResult
+  VariantGenerationResult,
+  FillInBlankConversionRequest,
+  FillInBlankConversionResult
 } from '../../../shared/types/ai.types'
 
 class AIService {
@@ -341,6 +345,64 @@ class AIService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Variant generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Convert fill-in-the-blank questions to multiple choice format
+   * Generates plausible distractors based on the correct answer
+   */
+  async convertFillInBlankToMultipleChoice(
+    request: FillInBlankConversionRequest
+  ): Promise<ServiceResult<FillInBlankConversionResult>> {
+    try {
+      // Filter to only fill-in-blank questions with correct answers
+      const validQuestions = request.questions.filter(
+        (q) => q.type === 'fill_in_blank' && q.correctAnswer
+      )
+
+      if (validQuestions.length === 0) {
+        return {
+          success: false,
+          error: 'No valid fill-in-the-blank questions to convert'
+        }
+      }
+
+      const prompt = buildFillInBlankConversionPrompt({
+        ...request,
+        questions: validQuestions
+      })
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: SYSTEM_PROMPTS.fillInBlankConversion,
+        temperature: 0.3, // Lower temperature for consistent distractor generation
+        maxTokens: 4000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseFillInBlankConversion(result.data.content, result.data.usage)
+
+      if (!parseResult.success || !parseResult.questions) {
+        return {
+          success: false,
+          error: parseResult.error ?? 'Failed to parse converted questions'
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          convertedQuestions: parseResult.questions,
+          usage: result.data.usage
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Fill-in-blank conversion failed'
       return { success: false, error: message }
     }
   }

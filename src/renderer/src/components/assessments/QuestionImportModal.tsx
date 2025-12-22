@@ -18,19 +18,21 @@ import Chip from '@mui/material/Chip'
 import Card from '@mui/material/Card'
 import CardContent from '@mui/material/CardContent'
 import Checkbox from '@mui/material/Checkbox'
-import FormControlLabel from '@mui/material/FormControlLabel'
 import TextField from '@mui/material/TextField'
 import Divider from '@mui/material/Divider'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import WarningIcon from '@mui/icons-material/Warning'
 import ErrorIcon from '@mui/icons-material/Error'
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
 import { Modal } from '../ui'
 import type { ServiceResult } from '../../../../shared/types/common.types'
 import type {
   MaterialImportRequest,
   MaterialImportResult,
-  ExtractedQuestion
+  ExtractedQuestion,
+  FillInBlankConversionRequest,
+  FillInBlankConversionResult
 } from '../../../../shared/types/ai.types'
 import type { MultipleChoiceQuestion, Choice } from '../../../../shared/types/question.types'
 
@@ -56,6 +58,8 @@ export function QuestionImportModal({
   const [extractedText, setExtractedText] = useState<string | null>(null)
   const [importResult, setImportResult] = useState<MaterialImportResult | null>(null)
   const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(new Set())
+  const [selectedFillInBlank, setSelectedFillInBlank] = useState<Set<string>>(new Set())
+  const [isConverting, setIsConverting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
 
@@ -66,6 +70,8 @@ export function QuestionImportModal({
     setExtractedText(null)
     setImportResult(null)
     setSelectedQuestions(new Set())
+    setSelectedFillInBlank(new Set())
+    setIsConverting(false)
     setError(null)
     setIsProcessing(false)
     onClose()
@@ -134,13 +140,17 @@ export function QuestionImportModal({
       setImportResult(aiResult.data)
 
       // Pre-select high confidence multiple choice questions
-      const preSelected = new Set<string>()
+      const preSelectedMC = new Set<string>()
+      const preSelectedFIB = new Set<string>()
       for (const q of aiResult.data.questions) {
         if (q.type === 'multiple_choice' && q.confidence !== 'low') {
-          preSelected.add(q.id)
+          preSelectedMC.add(q.id)
+        } else if (q.type === 'fill_in_blank' && q.correctAnswer && q.confidence !== 'low') {
+          preSelectedFIB.add(q.id)
         }
       }
-      setSelectedQuestions(preSelected)
+      setSelectedQuestions(preSelectedMC)
+      setSelectedFillInBlank(preSelectedFIB)
 
       setStep('review')
     } catch (err) {
@@ -169,6 +179,94 @@ export function QuestionImportModal({
 
   const handleSelectNone = (): void => {
     setSelectedQuestions(new Set())
+  }
+
+  const handleToggleFillInBlank = (questionId: string): void => {
+    setSelectedFillInBlank((prev) => {
+      const next = new Set(prev)
+      if (next.has(questionId)) {
+        next.delete(questionId)
+      } else {
+        next.add(questionId)
+      }
+      return next
+    })
+  }
+
+  const handleSelectAllFillInBlank = (): void => {
+    if (!importResult) return
+    const fibQuestions = importResult.questions.filter(
+      (q) => q.type === 'fill_in_blank' && q.correctAnswer
+    )
+    setSelectedFillInBlank(new Set(fibQuestions.map((q) => q.id)))
+  }
+
+  const handleSelectNoneFillInBlank = (): void => {
+    setSelectedFillInBlank(new Set())
+  }
+
+  const handleConvertFillInBlank = async (): Promise<void> => {
+    if (!importResult || selectedFillInBlank.size === 0) return
+
+    setIsConverting(true)
+    setError(null)
+
+    try {
+      // Get the selected fill-in-blank questions
+      const questionsToConvert = importResult.questions.filter(
+        (q) => q.type === 'fill_in_blank' && selectedFillInBlank.has(q.id)
+      )
+
+      const request: FillInBlankConversionRequest = {
+        questions: questionsToConvert,
+        gradeLevel,
+        subject
+      }
+
+      const result = await window.electronAPI.invoke<ServiceResult<FillInBlankConversionResult>>(
+        'ai:convertFillInBlank',
+        request
+      )
+
+      if (!result.success) {
+        setError(result.error ?? 'Failed to convert questions')
+        setIsConverting(false)
+        return
+      }
+
+      // Update the import result with converted questions
+      const convertedIds = new Set(result.data.convertedQuestions.map((q) => q.id))
+      const updatedQuestions = importResult.questions.map((q) => {
+        if (convertedIds.has(q.id)) {
+          // Find the converted version
+          const converted = result.data.convertedQuestions.find((c) => c.id === q.id)
+          return converted ?? q
+        }
+        return q
+      })
+
+      setImportResult({
+        ...importResult,
+        questions: updatedQuestions
+      })
+
+      // Move converted questions to MC selection, clear from FIB selection
+      setSelectedQuestions((prev) => {
+        const next = new Set(prev)
+        convertedIds.forEach((id) => next.add(id))
+        return next
+      })
+      setSelectedFillInBlank((prev) => {
+        const next = new Set(prev)
+        convertedIds.forEach((id) => next.delete(id))
+        return next
+      })
+
+      setIsConverting(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Conversion failed')
+      setIsConverting(false)
+    }
   }
 
   const handleImport = (): void => {
@@ -277,7 +375,12 @@ export function QuestionImportModal({
     if (!importResult) return <></>
 
     const mcQuestions = importResult.questions.filter((q) => q.type === 'multiple_choice')
-    const otherQuestions = importResult.questions.filter((q) => q.type !== 'multiple_choice')
+    const fibQuestions = importResult.questions.filter(
+      (q) => q.type === 'fill_in_blank' && q.correctAnswer
+    )
+    const otherQuestions = importResult.questions.filter(
+      (q) => q.type !== 'multiple_choice' && q.type !== 'fill_in_blank'
+    )
     const selectedCount = selectedQuestions.size
 
     return (
@@ -364,6 +467,83 @@ export function QuestionImportModal({
             ))
           )}
         </Box>
+
+        {/* Fill-in-the-blank questions */}
+        {fibQuestions.length > 0 && (
+          <>
+            <Divider sx={{ my: 2 }} />
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Typography variant="subtitle2">
+                Fill-in-the-Blank Questions ({selectedFillInBlank.size}/{fibQuestions.length}{' '}
+                selected)
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <Button size="small" onClick={handleSelectAllFillInBlank}>
+                  All
+                </Button>
+                <Button size="small" onClick={handleSelectNoneFillInBlank}>
+                  None
+                </Button>
+              </Box>
+            </Box>
+
+            <Alert severity="info" sx={{ py: 0.5 }}>
+              AI can convert fill-in-the-blank questions to multiple choice by generating answer
+              choices.
+            </Alert>
+
+            <Box sx={{ maxHeight: 300, overflowY: 'auto' }}>
+              {fibQuestions.map((question) => (
+                <Card
+                  key={question.id}
+                  variant="outlined"
+                  sx={{
+                    mb: 1,
+                    opacity: selectedFillInBlank.has(question.id) ? 1 : 0.6
+                  }}
+                >
+                  <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                      <Checkbox
+                        checked={selectedFillInBlank.has(question.id)}
+                        onChange={() => handleToggleFillInBlank(question.id)}
+                        size="small"
+                      />
+                      <Box sx={{ flex: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                          {getConfidenceIcon(question.confidence)}
+                          <Chip label="Fill-in-blank" size="small" color="info" variant="outlined" />
+                        </Box>
+                        <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                          {question.text}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          color="success.main"
+                          sx={{ mt: 0.5, fontSize: '0.85rem' }}
+                        >
+                          Answer: {question.correctAnswer}
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              ))}
+            </Box>
+
+            <Button
+              variant="contained"
+              color="secondary"
+              onClick={handleConvertFillInBlank}
+              disabled={selectedFillInBlank.size === 0 || isConverting}
+              startIcon={isConverting ? <CircularProgress size={16} /> : <AutoFixHighIcon />}
+            >
+              {isConverting
+                ? 'Converting...'
+                : `Convert ${selectedFillInBlank.size} to Multiple Choice`}
+            </Button>
+          </>
+        )}
 
         {/* Other question types notice */}
         {otherQuestions.length > 0 && (

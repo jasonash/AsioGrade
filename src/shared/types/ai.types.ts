@@ -214,11 +214,32 @@ export interface MaterialImportRequest {
 export interface ExtractedQuestion {
   id: string
   text: string
-  type: 'multiple_choice' | 'true_false' | 'short_answer' | 'unknown'
+  type: 'multiple_choice' | 'true_false' | 'fill_in_blank' | 'short_answer' | 'unknown'
   choices?: { id: string; text: string; isCorrect?: boolean }[]
-  correctAnswer?: string
+  correctAnswer?: string // For fill_in_blank, this is the word/phrase that goes in the blank
   confidence: 'high' | 'medium' | 'low' // How confident AI is in the extraction
   notes?: string // Any notes about the extraction (e.g., "correct answer not marked")
+}
+
+// ============================================================
+// Fill-in-the-Blank Conversion Types (Phase 2)
+// ============================================================
+
+/**
+ * Request to convert fill-in-the-blank questions to multiple choice
+ */
+export interface FillInBlankConversionRequest {
+  questions: ExtractedQuestion[] // Must be type 'fill_in_blank' with correctAnswer set
+  gradeLevel: string
+  subject: string
+}
+
+/**
+ * Result of converting fill-in-the-blank to multiple choice
+ */
+export interface FillInBlankConversionResult {
+  convertedQuestions: ExtractedQuestion[] // Now type 'multiple_choice' with choices
+  usage: LLMUsage
 }
 
 /**
