@@ -736,41 +736,50 @@ class PDFService {
    * Draw a single worksheet question
    */
   private drawWorksheetQuestion(doc: PDFKit.PDFDocument, question: PracticeQuestion): void {
-    // Question number and text
+    const startY = doc.y
+    const questionIndent = 70
+    const contentWidth = LETTER_WIDTH - questionIndent - 50
+
+    // Question number
     doc.font('Helvetica-Bold').fontSize(11)
-    doc.text(`${question.number}.`, 50, doc.y, { continued: true, width: 25 })
+    doc.text(`${question.number}.`, 50, startY)
+
+    // Question text (indented)
     doc.font('Helvetica').fontSize(11)
-    doc.text(` ${question.text}`, { width: LETTER_WIDTH - 100 })
+    doc.text(question.text, questionIndent, startY, { width: contentWidth })
     doc.moveDown(0.5)
 
     if (question.type === 'multiple-choice' && question.choices) {
       // Multiple choice options
       const letters = ['A', 'B', 'C', 'D', 'E']
       for (let i = 0; i < question.choices.length; i++) {
+        const optionY = doc.y
         doc.font('Helvetica').fontSize(10)
         // Draw bubble
-        doc.circle(75, doc.y + 5, 6).stroke()
-        doc.text(`${letters[i]}. ${question.choices[i].text}`, 90, doc.y, {
-          width: LETTER_WIDTH - 140
+        doc.circle(questionIndent + 15, optionY + 5, 6).stroke()
+        doc.text(`${letters[i]}. ${question.choices[i].text}`, questionIndent + 30, optionY, {
+          width: contentWidth - 30
         })
         doc.moveDown(0.3)
       }
     } else if (question.type === 'true-false') {
       // True/False options
       doc.font('Helvetica').fontSize(10)
-      doc.circle(75, doc.y + 5, 6).stroke()
-      doc.text('True', 90, doc.y)
+      const trueY = doc.y
+      doc.circle(questionIndent + 15, trueY + 5, 6).stroke()
+      doc.text('True', questionIndent + 30, trueY)
       doc.moveDown(0.3)
-      doc.circle(75, doc.y + 5, 6).stroke()
-      doc.text('False', 90, doc.y)
+      const falseY = doc.y
+      doc.circle(questionIndent + 15, falseY + 5, 6).stroke()
+      doc.text('False', questionIndent + 30, falseY)
     } else if (question.type === 'fill-blank') {
       // Fill in the blank - draw line
-      doc.moveTo(70, doc.y + 12).lineTo(LETTER_WIDTH - 100, doc.y + 12).stroke()
+      doc.moveTo(questionIndent, doc.y + 12).lineTo(LETTER_WIDTH - 70, doc.y + 12).stroke()
       doc.moveDown(1)
     } else {
       // Short answer - draw multiple lines
       for (let i = 0; i < 3; i++) {
-        doc.moveTo(70, doc.y + 15).lineTo(LETTER_WIDTH - 70, doc.y + 15).stroke()
+        doc.moveTo(questionIndent, doc.y + 15).lineTo(LETTER_WIDTH - 70, doc.y + 15).stroke()
         doc.moveDown(1)
       }
     }
@@ -796,19 +805,27 @@ class PDFService {
     doc.moveTo(50, doc.y).lineTo(LETTER_WIDTH - 50, doc.y).stroke()
     doc.moveDown(0.5)
 
+    const answerIndent = 90
+    const contentWidth = LETTER_WIDTH - answerIndent - 50
+
     for (const question of questions) {
+      const startY = doc.y
+
+      // Question number
       doc.font('Helvetica-Bold').fontSize(10)
-      doc.text(`${question.number}. `, 60, doc.y, { continued: true })
+      doc.text(`${question.number}.`, 60, startY)
+
+      // Answer
       doc.font('Helvetica').fontSize(10)
-      doc.text(question.correctAnswer, { width: LETTER_WIDTH - 120 })
+      doc.text(question.correctAnswer, answerIndent, startY, { width: contentWidth })
 
       if (question.explanation) {
         doc.font('Helvetica-Oblique').fontSize(9)
         doc.fillColor('#666666')
-        doc.text(`   ${question.explanation}`, 70, doc.y, { width: LETTER_WIDTH - 130 })
+        doc.text(question.explanation, answerIndent, doc.y, { width: contentWidth })
         doc.fillColor('#000000')
       }
-      doc.moveDown(0.3)
+      doc.moveDown(0.5)
     }
   }
 
