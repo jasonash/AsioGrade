@@ -10,6 +10,7 @@ import Chip from '@mui/material/Chip'
 import Divider from '@mui/material/Divider'
 import IconButton from '@mui/material/IconButton'
 import TextField from '@mui/material/TextField'
+import Tooltip from '@mui/material/Tooltip'
 import Accordion from '@mui/material/Accordion'
 import AccordionSummary from '@mui/material/AccordionSummary'
 import AccordionDetails from '@mui/material/AccordionDetails'
@@ -121,6 +122,7 @@ export function LessonEditorPage({
   const [generatedMaterials, setGeneratedMaterials] = useState<GeneratedMaterial[]>([])
   const [imageGenerationAvailable, setImageGenerationAvailable] = useState(false)
   const [downloadingMaterialId, setDownloadingMaterialId] = useState<string | null>(null)
+  const [selectedComponentForMaterial, setSelectedComponentForMaterial] = useState<LessonComponent | null>(null)
 
   // Fetch full lesson details when component mounts
   useEffect(() => {
@@ -429,6 +431,16 @@ export function LessonEditorPage({
 
   const handleMaterialDelete = (materialId: string): void => {
     setGeneratedMaterials((prev) => prev.filter((m) => m.id !== materialId))
+  }
+
+  const handleOpenMaterialModal = (component?: LessonComponent): void => {
+    setSelectedComponentForMaterial(component ?? null)
+    setIsMaterialModalOpen(true)
+  }
+
+  const handleCloseMaterialModal = (): void => {
+    setIsMaterialModalOpen(false)
+    setSelectedComponentForMaterial(null)
   }
 
   // Get all standards from all collections
@@ -918,20 +930,31 @@ export function LessonEditorPage({
                         )}
                       </Box>
 
-                      {currentLesson?.status === 'draft' && (
-                        <Box sx={{ display: 'flex', gap: 0.5 }}>
-                          <IconButton size="small">
-                            <EditIcon fontSize="small" />
-                          </IconButton>
+                      <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'flex-start' }}>
+                        <Tooltip title="Generate Material">
                           <IconButton
                             size="small"
-                            color="error"
-                            onClick={() => handleDeleteComponent(component.id)}
+                            color="primary"
+                            onClick={() => handleOpenMaterialModal(component)}
                           >
-                            <DeleteIcon fontSize="small" />
+                            <AutoAwesomeIcon fontSize="small" />
                           </IconButton>
-                        </Box>
-                      )}
+                        </Tooltip>
+                        {currentLesson?.status === 'draft' && (
+                          <>
+                            <IconButton size="small">
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              color="error"
+                              onClick={() => handleDeleteComponent(component.id)}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </>
+                        )}
+                      </Box>
                     </Box>
                   </Paper>
                 </Box>
@@ -1208,7 +1231,7 @@ export function LessonEditorPage({
                 variant="contained"
                 size="small"
                 startIcon={<AddIcon />}
-                onClick={() => setIsMaterialModalOpen(true)}
+                onClick={() => handleOpenMaterialModal()}
               >
                 Generate Material
               </Button>
@@ -1234,7 +1257,7 @@ export function LessonEditorPage({
                 <Button
                   variant="outlined"
                   startIcon={<AddIcon />}
-                  onClick={() => setIsMaterialModalOpen(true)}
+                  onClick={() => handleOpenMaterialModal()}
                 >
                   Generate First Material
                 </Button>
@@ -1291,12 +1314,14 @@ export function LessonEditorPage({
       {currentLesson && (
         <MaterialGenerationModal
           isOpen={isMaterialModalOpen}
-          onClose={() => setIsMaterialModalOpen(false)}
+          onClose={handleCloseMaterialModal}
           onGenerated={handleMaterialGenerated}
           lesson={currentLesson}
           course={course}
           unit={unit}
           standards={allStandards}
+          componentId={selectedComponentForMaterial?.id}
+          componentTitle={selectedComponentForMaterial?.title}
           imageGenerationAvailable={imageGenerationAvailable}
         />
       )}
