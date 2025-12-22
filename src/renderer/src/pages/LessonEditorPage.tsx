@@ -138,6 +138,8 @@ export function LessonEditorPage({
     if (currentLesson) {
       setTitleValue(currentLesson.title)
       setDescriptionValue(currentLesson.description ?? '')
+      // Initialize generated materials from lesson data
+      setGeneratedMaterials(currentLesson.generatedMaterials ?? [])
     }
   }, [currentLesson])
 
@@ -407,8 +409,19 @@ export function LessonEditorPage({
   }
 
   // Material handlers
-  const handleMaterialGenerated = (material: GeneratedMaterial): void => {
-    setGeneratedMaterials((prev) => [material, ...prev])
+  const handleMaterialGenerated = async (material: GeneratedMaterial): Promise<void> => {
+    if (!currentLesson) return
+
+    const updatedMaterials = [material, ...(currentLesson.generatedMaterials ?? [])]
+    setGeneratedMaterials(updatedMaterials)
+
+    // Persist to lesson
+    await updateLesson({
+      id: currentLesson.id,
+      courseId: currentLesson.courseId,
+      unitId: currentLesson.unitId,
+      generatedMaterials: updatedMaterials
+    })
   }
 
   const handleMaterialDownload = async (material: GeneratedMaterial): Promise<void> => {
@@ -429,8 +442,19 @@ export function LessonEditorPage({
     }
   }
 
-  const handleMaterialDelete = (materialId: string): void => {
-    setGeneratedMaterials((prev) => prev.filter((m) => m.id !== materialId))
+  const handleMaterialDelete = async (materialId: string): Promise<void> => {
+    if (!currentLesson) return
+
+    const updatedMaterials = (currentLesson.generatedMaterials ?? []).filter((m) => m.id !== materialId)
+    setGeneratedMaterials(updatedMaterials)
+
+    // Persist to lesson
+    await updateLesson({
+      id: currentLesson.id,
+      courseId: currentLesson.courseId,
+      unitId: currentLesson.unitId,
+      generatedMaterials: updatedMaterials
+    })
   }
 
   const handleOpenMaterialModal = (component?: LessonComponent): void => {

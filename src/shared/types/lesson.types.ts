@@ -6,6 +6,7 @@
  */
 
 import type { Entity } from './common.types'
+import type { GeneratedMaterial } from './material.types'
 
 // Lesson status
 export type LessonStatus = 'draft' | 'ready' | 'taught'
@@ -102,6 +103,9 @@ export interface Lesson extends Entity {
   // Materials
   materials: LessonMaterial[]
 
+  // AI-generated materials (worksheets, puzzles, etc.)
+  generatedMaterials?: GeneratedMaterial[]
+
   // UDL considerations
   udlNotes?: UDLNotes
 
@@ -158,6 +162,7 @@ export interface UpdateLessonInput {
   successCriteria?: string[]
   components?: LessonComponent[]
   materials?: LessonMaterial[]
+  generatedMaterials?: GeneratedMaterial[]
   udlNotes?: UDLNotes
   status?: LessonStatus
   aiGenerated?: boolean
