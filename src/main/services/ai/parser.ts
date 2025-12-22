@@ -21,6 +21,39 @@ export interface ParsedRefinementResult {
 }
 
 /**
+ * Fisher-Yates shuffle algorithm for randomizing array
+ */
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array]
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]
+  }
+  return shuffled
+}
+
+/**
+ * Shuffle choices and reassign IDs to randomize correct answer position
+ * This counters LLM bias toward placing correct answers in early positions (A/B)
+ */
+function shuffleChoices(choices: Choice[]): { shuffledChoices: Choice[], correctAnswer: string } {
+  // Shuffle the choices
+  const shuffled = shuffleArray(choices)
+
+  // Reassign IDs based on new positions (a, b, c, d, ...)
+  const shuffledChoices = shuffled.map((choice, index) => ({
+    ...choice,
+    id: String.fromCharCode(97 + index) // 'a', 'b', 'c', 'd', ...
+  }))
+
+  // Find the new correct answer ID
+  const correctChoice = shuffledChoices.find(c => c.isCorrect)
+  const correctAnswer = correctChoice?.id ?? 'a'
+
+  return { shuffledChoices, correctAnswer }
+}
+
+/**
  * Parse generated questions from LLM response
  */
 export function parseGeneratedQuestions(
@@ -73,8 +106,8 @@ export function parseGeneratedQuestions(
       const correctChoices = choices.filter(c => c.isCorrect)
       if (correctChoices.length === 0) {
         // Try to use correctAnswer field
-        const correctAnswer = String(q.correctAnswer ?? 'a').toLowerCase()
-        const correctChoice = choices.find(c => c.id === correctAnswer)
+        const correctAnswerFromLLM = String(q.correctAnswer ?? 'a').toLowerCase()
+        const correctChoice = choices.find(c => c.id === correctAnswerFromLLM)
         if (correctChoice) {
           correctChoice.isCorrect = true
         } else {
@@ -85,16 +118,16 @@ export function parseGeneratedQuestions(
         correctChoices.slice(1).forEach(c => { c.isCorrect = false })
       }
 
-      // Determine correct answer
-      const correctChoice = choices.find(c => c.isCorrect)
-      const correctAnswer = correctChoice?.id ?? 'a'
+      // Shuffle choices to randomize correct answer position
+      // This counters LLM bias toward placing correct answers in A/B positions
+      const { shuffledChoices, correctAnswer } = shuffleChoices(choices)
 
       // Build the generated question
       const question: GeneratedQuestion = {
         id: `q-${Date.now().toString(36)}-${index}`,
         type: 'multiple_choice' as const,
         text: String(q.text).trim(),
-        choices,
+        choices: shuffledChoices,
         correctAnswer,
         standardRef: typeof q.standardRef === 'string' ? q.standardRef : undefined,
         points: typeof q.points === 'number' ? q.points : 1,

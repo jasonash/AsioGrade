@@ -36,7 +36,8 @@ interface AIAssistantPanelProps {
   assessmentTitle: string
   gradeLevel: string
   subject: string
-  standards: Standard[]
+  unitStandards: Standard[]
+  otherStandards: Standard[]
   existingQuestionCount: number
   selectedQuestion?: MultipleChoiceQuestion
   onQuestionsAccepted: (questions: MultipleChoiceQuestion[]) => void
@@ -50,7 +51,8 @@ export function AIAssistantPanel({
   assessmentTitle,
   gradeLevel,
   subject,
-  standards,
+  unitStandards,
+  otherStandards,
   existingQuestionCount,
   selectedQuestion,
   onQuestionsAccepted,
@@ -88,7 +90,7 @@ export function AIAssistantPanel({
     assessmentTitle,
     gradeLevel,
     subject,
-    standardRefs: standards.map((s) => s.code),
+    standardRefs: unitStandards.map((s) => s.code),
     existingQuestionCount
   }
 
@@ -173,7 +175,7 @@ export function AIAssistantPanel({
               variant="outlined"
               startIcon={<AddIcon />}
               onClick={() => setShowGenerationModal(true)}
-              disabled={isGenerating || standards.length === 0}
+              disabled={isGenerating || (unitStandards.length === 0 && otherStandards.length === 0)}
             >
               Generate Questions
             </Button>
@@ -317,7 +319,8 @@ export function AIAssistantPanel({
         assessmentId={assessmentId}
         gradeLevel={gradeLevel}
         subject={subject}
-        standards={standards}
+        unitStandards={unitStandards}
+        otherStandards={otherStandards}
       />
     </Paper>
   )

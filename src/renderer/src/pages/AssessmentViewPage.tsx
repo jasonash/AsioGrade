@@ -15,12 +15,13 @@ import PublishIcon from '@mui/icons-material/Publish'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import ScoreIcon from '@mui/icons-material/Score'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
-import { useAssessmentStore, useStandardsStore } from '../stores'
+import { useAssessmentStore, useStandardsStore, useUnitStore } from '../stores'
 import { ConfirmModal } from '../components/ui'
 import { AssessmentEditModal, QuestionList, AIAssistantPanel } from '../components/assessments'
 import type {
   CourseSummary,
   UnitSummary,
+  Unit,
   AssessmentSummary,
   AssessmentType,
   Standard,
@@ -71,18 +72,21 @@ export function AssessmentViewPage({
     clearError
   } = useAssessmentStore()
   const { allCollections, fetchAllCollections } = useStandardsStore()
+  const { getUnit } = useUnitStore()
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
+  const [fullUnit, setFullUnit] = useState<Unit | null>(null)
 
-  // Fetch full assessment details and standards when component mounts
+  // Fetch full assessment details, standards, and unit when component mounts
   useEffect(() => {
     getAssessment(assessmentSummary.id)
     fetchAllCollections(course.id)
+    getUnit(course.id, unit.id).then(setFullUnit)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
-  }, [assessmentSummary.id, course.id])
+  }, [assessmentSummary.id, course.id, unit.id])
 
   const handleDelete = async (): Promise<void> => {
     setIsDeleting(true)
@@ -166,6 +170,11 @@ export function AssessmentViewPage({
   }
 
   const allStandards = getAllStandards()
+
+  // Separate unit standards from other standards for AI generation
+  const unitStandardRefs = fullUnit?.standardRefs ?? []
+  const unitStandards = allStandards.filter((s) => unitStandardRefs.includes(s.code))
+  const otherStandards = allStandards.filter((s) => !unitStandardRefs.includes(s.code))
 
   // Calculate stats
   const totalPoints = currentAssessment?.questions.reduce((sum, q) => sum + q.points, 0) ?? 0
@@ -359,7 +368,8 @@ export function AssessmentViewPage({
               assessmentTitle={currentAssessment.title}
               gradeLevel={course.gradeLevel}
               subject={course.subject}
-              standards={allStandards}
+              unitStandards={unitStandards}
+              otherStandards={otherStandards}
               existingQuestionCount={currentAssessment.questions.length}
               onQuestionsAccepted={handleQuestionsAccepted}
               onQuestionRefined={handleQuestionRefined}

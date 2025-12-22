@@ -315,9 +315,35 @@ interface AIAssistantState {
 }
 ```
 
-### 2.7 Acceptance Criteria
+### 2.7 Known Limitations (To Revisit)
 
-#### 2.7.1 Question Generation
+#### 2.7.1 Chat Context Limitations
+
+The current chat implementation has limited context awareness:
+
+**Current State:**
+- Chat knows: assessment title, subject, grade level, standards codes, question count
+- Chat does NOT know: actual question content, full standards descriptions, conversation history
+
+**Impact:**
+- Cannot answer "what topics haven't I covered?" (doesn't know question content)
+- Cannot reference previous messages in conversation
+- Limited usefulness compared to "Generate Questions" button
+
+**Future Enhancement:**
+When revisiting the chat feature, add:
+1. Pass existing questions array to context
+2. Include full standards text (not just codes)
+3. Implement conversation history for multi-turn context
+4. Consider token budget implications of richer context
+
+**Priority:** Low (Generate Questions button is primary workflow)
+
+---
+
+### 2.8 Acceptance Criteria
+
+#### 2.8.1 Question Generation
 
 - [ ] User can generate questions from selected standards
 - [ ] Questions stream in progressively (not all at once)
@@ -326,14 +352,14 @@ interface AIAssistantState {
 - [ ] Accepted questions are added to assessment
 - [ ] Token usage is displayed after generation
 
-#### 2.7.2 Question Refinement
+#### 2.8.2 Question Refinement
 
 - [ ] User can select a question and request refinement
 - [ ] Refinement commands work: simplify, harder, distractors, rephrase
 - [ ] Original question is preserved; user chooses to accept refinement
 - [ ] Refinement shows before/after comparison
 
-#### 2.7.3 Conversational Interface
+#### 2.8.3 Conversational Interface
 
 - [ ] Natural language input is understood
 - [ ] Conversation history persists during session

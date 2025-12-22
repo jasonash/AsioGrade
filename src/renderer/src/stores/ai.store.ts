@@ -107,9 +107,12 @@ export const useAIStore = create<AIState>((set, get) => ({
           }
           break
         case 'complete':
+          // Use questions from complete event to ensure all are captured
+          // (individual 'question' events may arrive after listener cleanup due to IPC race condition)
           set((state) => ({
             isGenerating: false,
             streamingProgress: '',
+            pendingQuestions: streamEvent.questions ?? state.pendingQuestions,
             lastUsage: streamEvent.usage ?? null,
             totalTokensUsed: state.totalTokensUsed + (streamEvent.usage?.totalTokens ?? 0)
           }))
@@ -135,10 +138,30 @@ export const useAIStore = create<AIState>((set, get) => ({
         `Generate ${request.questionCount} questions for standards: ${request.standardRefs.join(', ')}`
       )
 
-      await window.electronAPI.invoke<ServiceResult<GeneratedQuestion[]>>(
+      const result = await window.electronAPI.invoke<ServiceResult<GeneratedQuestion[]>>(
         'ai:generateQuestionsStream',
         request
       )
+
+      // Use the invoke result directly - IPC events may not arrive before cleanup
+      // This ensures we always get the questions regardless of event timing
+      if (result.success && result.data) {
+        // Replace pending questions with result to avoid duplicates from race condition
+        set({
+          isGenerating: false,
+          streamingProgress: '',
+          pendingQuestions: result.data
+        })
+        get().addAssistantMessage(
+          `Generated ${result.data.length} questions. Review them below and accept the ones you want to add.`
+        )
+      } else {
+        set({
+          isGenerating: false,
+          streamingProgress: '',
+          error: result.error ?? 'Generation failed'
+        })
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Generation failed'
       set({ isGenerating: false, error: message, streamingProgress: '' })
