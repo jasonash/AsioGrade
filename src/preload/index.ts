@@ -91,6 +91,7 @@ const validInvokeChannels = [
   'ai:chat',
   'ai:extractQuestionsFromMaterial',
   'ai:generateVariant',
+  'ai:convertFillInBlank',
 
   // Import utilities
   'import:fetchUrl',
