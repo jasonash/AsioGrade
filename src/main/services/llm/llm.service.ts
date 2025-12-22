@@ -22,7 +22,9 @@ import type {
   LLMStreamChunk,
   LLMConnectionTestResult,
   LLMProviderStatus,
-  LLMError
+  LLMError,
+  ImageGenerationRequest,
+  ImageGenerationResponse
 } from '../../../shared/types/llm.types'
 import type { ServiceResult } from '../../../shared/types/common.types'
 
@@ -223,6 +225,61 @@ class LLMService {
   getDefaultProviderType(): LLMProviderType | null {
     const config = storageService.getLLMProviders()
     return config.default
+  }
+
+  /**
+   * Check if image generation is available (Google provider configured)
+   */
+  supportsImageGeneration(): boolean {
+    this.refreshProviders()
+    const google = this.providers.get('google')
+    return Boolean(google?.isConfigured() && google.supportsImageGeneration())
+  }
+
+  /**
+   * Generate an image using Gemini
+   * Currently only Google provider supports this
+   */
+  async generateImage(
+    request: ImageGenerationRequest
+  ): Promise<ServiceResult<ImageGenerationResponse>> {
+    try {
+      this.refreshProviders()
+
+      // Image generation only supported by Google/Gemini
+      const providerId = request.provider ?? 'google'
+      if (providerId !== 'google') {
+        return {
+          success: false,
+          error: 'Image generation is only supported by Google/Gemini provider'
+        }
+      }
+
+      const provider = this.getProvider('google')
+
+      if (!provider.isConfigured()) {
+        return {
+          success: false,
+          error: 'Google/Gemini API key is not configured. Please add an API key in Settings.'
+        }
+      }
+
+      if (!provider.supportsImageGeneration()) {
+        return {
+          success: false,
+          error: 'Image generation is not supported by this provider'
+        }
+      }
+
+      // Type assertion since we know Google provider has generateImage
+      const response = await provider.generateImage!(request)
+      return { success: true, data: response }
+    } catch (error) {
+      return {
+        success: false,
+        error: this.formatError(error)
+      }
+    }
   }
 
   /**

@@ -26,3 +26,6 @@ export * from './llm.types'
 
 // Lesson types has runtime values (const objects) so use regular export
 export * from './lesson.types'
+
+// Material types has runtime values (const objects) so use regular export
+export * from './material.types'

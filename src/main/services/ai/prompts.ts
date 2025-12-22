@@ -16,6 +16,11 @@ import type {
 } from '../../../shared/types/ai.types'
 import type { MultipleChoiceQuestion } from '../../../shared/types/question.types'
 import type { LearningGoal } from '../../../shared/types/lesson.types'
+import type {
+  MaterialGenerationRequest,
+  GraphicOrganizerTemplate,
+  PuzzleVocabularyRequest
+} from '../../../shared/types/material.types'
 
 /**
  * System prompts for different AI operations
@@ -619,4 +624,315 @@ Return ONLY a valid JSON object with no additional text:
 }
 
 Expand the component now:`
+}
+
+// ============================================
+// Material Generation System Prompts
+// ============================================
+
+export const MATERIAL_SYSTEM_PROMPTS = {
+  worksheetGeneration: `You are an expert educational content creator specializing in creating practice worksheets and problem sets. Your task is to create high-quality, engaging practice materials that reinforce learning.
+
+GUIDELINES:
+- Create questions that progress from easier to harder (scaffolded difficulty)
+- Include a variety of question types (fill-in-blank, short answer, multiple choice)
+- Ensure questions directly relate to the learning goals
+- Use clear, grade-appropriate language
+- Include space for student work where appropriate
+- Create questions that test understanding, not just recall`,
+
+  vocabularyExtraction: `You are an expert curriculum specialist. Your task is to extract key vocabulary terms from lesson content and create educational definitions and clues suitable for study materials and puzzles.
+
+GUIDELINES:
+- Select terms central to understanding the topic
+- Prioritize content-specific vocabulary over common words
+- Create definitions appropriate for the target grade level
+- Write clues that test understanding, not just memorization
+- Include context clues when helpful`,
+
+  graphicOrganizerGeneration: `You are an expert instructional designer specializing in visual learning tools. Your task is to create content for graphic organizers that help students organize and connect information.
+
+GUIDELINES:
+- Structure content logically based on the organizer type
+- Keep entries concise but meaningful
+- Show relationships between concepts
+- Use language appropriate for the grade level
+- Ensure content aligns with learning goals`,
+
+  diagramGeneration: `You are an expert educational illustrator. Your task is to create detailed prompts for generating educational diagrams that support student learning.
+
+GUIDELINES:
+- Be specific about visual elements needed
+- Include labels and annotations
+- Request clear, simple illustrations appropriate for the grade level
+- Focus on accuracy of educational content
+- Specify colors and layout when important for understanding`,
+
+  exitTicketGeneration: `You are an expert in formative assessment. Your task is to create quick, focused exit ticket questions that check for understanding of key lesson concepts.
+
+GUIDELINES:
+- Focus on the most essential learning from the lesson
+- Include a mix of check questions (did they learn it?) and reflection questions (how did they learn?)
+- Keep questions brief and answerable in 3-5 minutes total
+- Questions should reveal misconceptions if they exist
+- Include at least one question requiring explanation/reasoning`
+}
+
+// ============================================
+// Material Generation Prompt Builders
+// ============================================
+
+/**
+ * Build the prompt for generating worksheet/practice problems
+ */
+export function buildWorksheetPrompt(
+  request: MaterialGenerationRequest,
+  standardsText: string
+): string {
+  const questionCount = request.options?.questionCount ?? 10
+  const includeAnswerKey = request.options?.includeAnswerKey !== false
+  const difficulty = request.options?.difficulty ?? 'mixed'
+
+  const goalsText = request.learningGoals?.length
+    ? `\nLEARNING GOALS:\n${request.learningGoals.map((g) => `- ${g.text}`).join('\n')}`
+    : ''
+
+  return `Create a practice worksheet for grade ${request.gradeLevel} ${request.subject} students on the topic: "${request.topic}".
+
+STANDARDS:
+${standardsText}
+${goalsText}
+
+REQUIREMENTS:
+- Generate ${questionCount} practice questions
+- Difficulty distribution: ${difficulty === 'mixed' ? 'Start easier, progress to harder' : difficulty}
+- Include a variety of question types:
+  * Multiple choice (3-4 questions)
+  * Fill-in-the-blank (2-3 questions)
+  * Short answer requiring explanation (3-4 questions)
+${includeAnswerKey ? '- Include complete answer key with explanations' : ''}
+${request.additionalInstructions ? `\nADDITIONAL INSTRUCTIONS: ${request.additionalInstructions}` : ''}
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object:
+{
+  "title": "Worksheet title",
+  "instructions": "Instructions for students",
+  "questions": [
+    {
+      "number": 1,
+      "text": "Question text",
+      "type": "multiple-choice" | "short-answer" | "fill-blank",
+      "choices": [{"id": "a", "text": "Choice"}, ...],
+      "correctAnswer": "The correct answer or choice ID",
+      "explanation": "Why this is correct",
+      "points": 1
+    }
+  ],
+  "answerKey": ["1. Answer with explanation", "2. Answer with explanation", ...]
+}
+
+Generate the worksheet now:`
+}
+
+/**
+ * Build the prompt for extracting vocabulary for puzzles
+ */
+export function buildPuzzleVocabularyPrompt(request: PuzzleVocabularyRequest): string {
+  const contextNote = request.existingContent
+    ? `\nLESSON CONTENT TO EXTRACT FROM:\n${request.existingContent.slice(0, 3000)}`
+    : ''
+
+  return `Generate ${request.wordCount} vocabulary terms for a word puzzle for grade ${request.gradeLevel} ${request.subject} students on the topic: "${request.topic}".
+${contextNote}
+
+REQUIREMENTS:
+- Select key terms that are central to understanding ${request.topic}
+- Words should be 4-15 letters long (suitable for puzzles)
+- Create clues that test understanding, not just definitions
+- Vary difficulty: some easier terms, some more challenging
+- Avoid overly technical jargon unless grade-appropriate
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object:
+{
+  "vocabulary": [
+    {
+      "word": "TERM",
+      "clue": "A clue that helps identify this term",
+      "difficulty": "easy" | "medium" | "hard"
+    }
+  ]
+}
+
+Generate the vocabulary now:`
+}
+
+/**
+ * Build the prompt for generating vocabulary list content
+ */
+export function buildVocabularyListPrompt(
+  request: MaterialGenerationRequest,
+  standardsText: string
+): string {
+  const wordCount = request.options?.wordCount ?? 10
+  const includeExamples = request.options?.includeExamples !== false
+
+  return `Create a vocabulary study list for grade ${request.gradeLevel} ${request.subject} students on the topic: "${request.topic}".
+
+STANDARDS:
+${standardsText}
+
+REQUIREMENTS:
+- Generate ${wordCount} essential vocabulary terms
+- Definitions should be grade-appropriate and clear
+${includeExamples ? '- Include example sentences showing proper usage' : ''}
+- Include part of speech where relevant
+- Order from foundational terms to more complex
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object:
+{
+  "title": "Vocabulary: ${request.topic}",
+  "vocabulary": [
+    {
+      "term": "The vocabulary word",
+      "definition": "Clear, grade-appropriate definition",
+      "example": "Example sentence using the term",
+      "partOfSpeech": "noun/verb/adjective/etc"
+    }
+  ]
+}
+
+Generate the vocabulary list now:`
+}
+
+/**
+ * Build the prompt for generating graphic organizer content
+ */
+export function buildGraphicOrganizerPrompt(
+  request: MaterialGenerationRequest,
+  standardsText: string
+): string {
+  const template = request.options?.template ?? 'concept-map'
+  const itemCount = request.options?.itemCount ?? 4
+
+  const templateInstructions: Record<GraphicOrganizerTemplate, string> = {
+    'venn-diagram': `Compare and contrast 2-3 items related to ${request.topic}. Include unique characteristics and shared traits.`,
+    'concept-map': `Create a central concept with ${itemCount} main branches, each with 2-3 supporting details.`,
+    'flowchart': `Show the sequence or process of ${request.topic} with ${itemCount}-${itemCount + 2} steps.`,
+    'kwl-chart': `Generate "What I Know" (prior knowledge), "What I Want to Know" (questions), and sample "What I Learned" items.`,
+    'cause-effect': `Show ${itemCount} cause-and-effect relationships related to ${request.topic}.`,
+    'timeline': `Create a timeline with ${itemCount}-${itemCount + 2} key events or stages.`,
+    'main-idea': `Identify the main idea with ${itemCount} supporting details and evidence.`,
+    'comparison-matrix': `Compare ${itemCount} items across 3-4 criteria or characteristics.`
+  }
+
+  const goalsText = request.learningGoals?.length
+    ? `\nLEARNING GOALS:\n${request.learningGoals.map((g) => `- ${g.text}`).join('\n')}`
+    : ''
+
+  return `Create content for a ${template} graphic organizer for grade ${request.gradeLevel} ${request.subject} students on: "${request.topic}".
+
+STANDARDS:
+${standardsText}
+${goalsText}
+
+TEMPLATE TYPE: ${template}
+INSTRUCTIONS: ${templateInstructions[template]}
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object:
+{
+  "template": "${template}",
+  "title": "Organizer title",
+  "items": [
+    {
+      "id": "item-1",
+      "label": "Item label or category",
+      "content": ["Detail 1", "Detail 2", "Detail 3"]
+    }
+  ],
+  "connections": [
+    {"from": "item-1", "to": "item-2", "label": "relationship description"}
+  ]
+}
+
+Generate the graphic organizer content now:`
+}
+
+/**
+ * Build the prompt for generating exit ticket questions
+ */
+export function buildExitTicketPrompt(
+  request: MaterialGenerationRequest,
+  standardsText: string
+): string {
+  const questionCount = request.options?.exitTicketQuestions ?? 3
+
+  const goalsText = request.learningGoals?.length
+    ? `\nLEARNING GOALS:\n${request.learningGoals.map((g) => `- ${g.text}`).join('\n')}`
+    : ''
+
+  return `Create an exit ticket for grade ${request.gradeLevel} ${request.subject} students on: "${request.topic}".
+
+STANDARDS:
+${standardsText}
+${goalsText}
+
+REQUIREMENTS:
+- Generate ${questionCount} questions total
+- Include at least one "check" question (tests if they learned the content)
+- Include at least one "reflection" or "application" question
+- Questions should be answerable in 3-5 minutes total
+- Questions should reveal misconceptions
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object:
+{
+  "title": "Exit Ticket: ${request.topic}",
+  "questions": [
+    {
+      "number": 1,
+      "text": "Question text",
+      "type": "check" | "reflection" | "application",
+      "lines": 2
+    }
+  ]
+}
+
+Generate the exit ticket now:`
+}
+
+/**
+ * Build the prompt for generating an educational diagram (for image AI)
+ */
+export function buildDiagramPrompt(
+  request: MaterialGenerationRequest
+): string {
+  const style = request.options?.diagramStyle ?? 'labeled'
+  const includeLabels = request.options?.includeLabels !== false
+
+  const styleInstructions = {
+    simple: 'Create a simple, clean illustration with minimal detail',
+    labeled: 'Create a detailed diagram with clear labels and annotations',
+    detailed: 'Create a comprehensive, detailed illustration with extensive labels'
+  }
+
+  return `Create an educational diagram for grade ${request.gradeLevel} ${request.subject} students.
+
+TOPIC: ${request.topic}
+
+STYLE: ${styleInstructions[style]}
+
+REQUIREMENTS:
+- Educational accuracy is essential
+- Use clear, simple shapes and colors
+- Appropriate for ${request.gradeLevel} students
+${includeLabels ? '- Include clear text labels on all important parts' : '- Minimal text, focus on visual elements'}
+- White or light background for printability
+- Professional, textbook-quality appearance
+${request.additionalInstructions ? `\nSPECIFIC INSTRUCTIONS: ${request.additionalInstructions}` : ''}
+
+Create this educational diagram: A clear, labeled diagram showing ${request.topic} suitable for grade ${request.gradeLevel} ${request.subject} class. The diagram should be accurate, educational, and easy to understand.`
 }

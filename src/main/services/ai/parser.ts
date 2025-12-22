@@ -8,6 +8,14 @@ import type { GeneratedQuestion, ExtractedQuestion, MaterialImportResult, Varian
 import type { MultipleChoiceQuestion, Choice } from '../../../shared/types/question.types'
 import type { LLMUsage } from '../../../shared/types/llm.types'
 import type { LearningGoal, LessonComponent, LessonComponentType } from '../../../shared/types/lesson.types'
+import type {
+  PracticeQuestion,
+  VocabularyItem,
+  GraphicOrganizerData,
+  GraphicOrganizerTemplate,
+  ExitTicketData,
+  PuzzleVocabulary
+} from '../../../shared/types/material.types'
 
 export interface ParsedQuestionResult {
   success: boolean
@@ -773,6 +781,382 @@ export function parseExpandedComponent(
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to parse expanded component'
+    return { success: false, error: message }
+  }
+}
+
+// ============================================
+// Material Generation Parser Interfaces
+// ============================================
+
+export interface ParsedWorksheetResult {
+  success: boolean
+  title?: string
+  instructions?: string
+  questions?: PracticeQuestion[]
+  answerKey?: string[]
+  error?: string
+}
+
+export interface ParsedVocabularyListResult {
+  success: boolean
+  title?: string
+  vocabulary?: VocabularyItem[]
+  error?: string
+}
+
+export interface ParsedPuzzleVocabularyResult {
+  success: boolean
+  vocabulary?: PuzzleVocabulary[]
+  error?: string
+}
+
+export interface ParsedGraphicOrganizerResult {
+  success: boolean
+  data?: GraphicOrganizerData
+  error?: string
+}
+
+export interface ParsedExitTicketResult {
+  success: boolean
+  data?: ExitTicketData
+  error?: string
+}
+
+// ============================================
+// Material Generation Parsers
+// ============================================
+
+/**
+ * Parse worksheet content from LLM response
+ */
+export function parseWorksheetContent(
+  content: string,
+  _usage: LLMUsage
+): ParsedWorksheetResult {
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return { success: false, error: 'No JSON object found in response' }
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+
+    const title = typeof parsed.title === 'string' ? parsed.title : 'Practice Worksheet'
+    const instructions = typeof parsed.instructions === 'string' ? parsed.instructions : undefined
+
+    // Parse questions
+    const questions: PracticeQuestion[] = []
+    if (Array.isArray(parsed.questions)) {
+      for (let i = 0; i < parsed.questions.length; i++) {
+        const q = parsed.questions[i] as Record<string, unknown>
+
+        if (typeof q.text !== 'string' || !q.text.trim()) {
+          continue
+        }
+
+        // Determine question type
+        let type: PracticeQuestion['type'] = 'short-answer'
+        if (typeof q.type === 'string') {
+          const typeStr = q.type.toLowerCase()
+          if (typeStr.includes('multiple') || typeStr.includes('choice')) {
+            type = 'multiple-choice'
+          } else if (typeStr.includes('fill') || typeStr.includes('blank')) {
+            type = 'fill-blank'
+          } else if (typeStr.includes('true') || typeStr.includes('false')) {
+            type = 'true-false'
+          }
+        }
+
+        // Parse choices for multiple choice
+        let choices: { id: string; text: string }[] | undefined
+        if (type === 'multiple-choice' && Array.isArray(q.choices)) {
+          choices = q.choices.map((c: unknown, ci: number) => {
+            const choice = c as Record<string, unknown>
+            return {
+              id: typeof choice.id === 'string' ? choice.id : String.fromCharCode(97 + ci),
+              text: String(choice.text ?? '')
+            }
+          })
+        }
+
+        questions.push({
+          id: `wq-${Date.now().toString(36)}-${i}`,
+          number: typeof q.number === 'number' ? q.number : i + 1,
+          text: String(q.text).trim(),
+          type,
+          choices,
+          correctAnswer: typeof q.correctAnswer === 'string' ? q.correctAnswer : '',
+          explanation: typeof q.explanation === 'string' ? q.explanation : undefined,
+          points: typeof q.points === 'number' ? q.points : 1
+        })
+      }
+    }
+
+    // Parse answer key
+    let answerKey: string[] | undefined
+    if (Array.isArray(parsed.answerKey)) {
+      answerKey = parsed.answerKey.filter((a): a is string => typeof a === 'string')
+    }
+
+    return {
+      success: true,
+      title,
+      instructions,
+      questions,
+      answerKey
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse worksheet content'
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Parse vocabulary list from LLM response
+ */
+export function parseVocabularyList(
+  content: string,
+  _usage: LLMUsage
+): ParsedVocabularyListResult {
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return { success: false, error: 'No JSON object found in response' }
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+
+    const title = typeof parsed.title === 'string' ? parsed.title : 'Vocabulary List'
+
+    // Parse vocabulary items
+    const vocabulary: VocabularyItem[] = []
+    if (Array.isArray(parsed.vocabulary)) {
+      for (let i = 0; i < parsed.vocabulary.length; i++) {
+        const v = parsed.vocabulary[i] as Record<string, unknown>
+
+        if (typeof v.term !== 'string' || !v.term.trim()) {
+          continue
+        }
+
+        vocabulary.push({
+          id: `vocab-${Date.now().toString(36)}-${i}`,
+          term: String(v.term).trim(),
+          definition: typeof v.definition === 'string' ? v.definition : '',
+          example: typeof v.example === 'string' ? v.example : undefined,
+          partOfSpeech: typeof v.partOfSpeech === 'string' ? v.partOfSpeech : undefined
+        })
+      }
+    }
+
+    return {
+      success: true,
+      title,
+      vocabulary
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse vocabulary list'
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Parse puzzle vocabulary from LLM response
+ */
+export function parsePuzzleVocabulary(
+  content: string,
+  _usage: LLMUsage
+): ParsedPuzzleVocabularyResult {
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return { success: false, error: 'No JSON object found in response' }
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+
+    const vocabulary: PuzzleVocabulary[] = []
+    if (Array.isArray(parsed.vocabulary)) {
+      for (const v of parsed.vocabulary) {
+        const item = v as Record<string, unknown>
+
+        if (typeof item.word !== 'string' || !item.word.trim()) {
+          continue
+        }
+
+        // Clean word: uppercase, remove spaces
+        const word = String(item.word).toUpperCase().replace(/\s+/g, '')
+
+        // Validate word length for puzzles
+        if (word.length < 3 || word.length > 15) {
+          continue
+        }
+
+        // Determine difficulty
+        let difficulty: PuzzleVocabulary['difficulty'] = 'medium'
+        if (typeof item.difficulty === 'string') {
+          const diff = item.difficulty.toLowerCase()
+          if (diff === 'easy') difficulty = 'easy'
+          else if (diff === 'hard') difficulty = 'hard'
+        }
+
+        vocabulary.push({
+          word,
+          clue: typeof item.clue === 'string' ? item.clue : `Definition of ${word.toLowerCase()}`,
+          difficulty
+        })
+      }
+    }
+
+    return {
+      success: true,
+      vocabulary
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse puzzle vocabulary'
+    return { success: false, error: message }
+  }
+}
+
+const VALID_GRAPHIC_ORGANIZER_TEMPLATES: GraphicOrganizerTemplate[] = [
+  'venn-diagram', 'concept-map', 'flowchart', 'kwl-chart',
+  'cause-effect', 'timeline', 'main-idea', 'comparison-matrix'
+]
+
+/**
+ * Parse graphic organizer content from LLM response
+ */
+export function parseGraphicOrganizer(
+  content: string,
+  _usage: LLMUsage
+): ParsedGraphicOrganizerResult {
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return { success: false, error: 'No JSON object found in response' }
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+
+    // Validate template
+    const rawTemplate = typeof parsed.template === 'string' ? parsed.template : 'concept-map'
+    const template: GraphicOrganizerTemplate = VALID_GRAPHIC_ORGANIZER_TEMPLATES.includes(
+      rawTemplate as GraphicOrganizerTemplate
+    )
+      ? (rawTemplate as GraphicOrganizerTemplate)
+      : 'concept-map'
+
+    const title = typeof parsed.title === 'string' ? parsed.title : 'Graphic Organizer'
+
+    // Parse items
+    const items: GraphicOrganizerData['items'] = []
+    if (Array.isArray(parsed.items)) {
+      for (let i = 0; i < parsed.items.length; i++) {
+        const item = parsed.items[i] as Record<string, unknown>
+
+        const label = typeof item.label === 'string' ? item.label : `Item ${i + 1}`
+        const itemContent: string[] = []
+
+        if (Array.isArray(item.content)) {
+          for (const c of item.content) {
+            if (typeof c === 'string' && c.trim()) {
+              itemContent.push(c.trim())
+            }
+          }
+        }
+
+        items.push({
+          id: typeof item.id === 'string' ? item.id : `item-${i}`,
+          label,
+          content: itemContent
+        })
+      }
+    }
+
+    // Parse connections
+    const connections: GraphicOrganizerData['connections'] = []
+    if (Array.isArray(parsed.connections)) {
+      for (const conn of parsed.connections) {
+        const c = conn as Record<string, unknown>
+        if (typeof c.from === 'string' && typeof c.to === 'string') {
+          connections.push({
+            from: c.from,
+            to: c.to,
+            label: typeof c.label === 'string' ? c.label : undefined
+          })
+        }
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        template,
+        title,
+        items,
+        connections
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse graphic organizer'
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Parse exit ticket from LLM response
+ */
+export function parseExitTicket(
+  content: string,
+  _usage: LLMUsage
+): ParsedExitTicketResult {
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return { success: false, error: 'No JSON object found in response' }
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+
+    const title = typeof parsed.title === 'string' ? parsed.title : 'Exit Ticket'
+
+    // Parse questions
+    const questions: ExitTicketData['questions'] = []
+    if (Array.isArray(parsed.questions)) {
+      for (let i = 0; i < parsed.questions.length; i++) {
+        const q = parsed.questions[i] as Record<string, unknown>
+
+        if (typeof q.text !== 'string' || !q.text.trim()) {
+          continue
+        }
+
+        // Determine type
+        let type: 'reflection' | 'check' | 'application' = 'check'
+        if (typeof q.type === 'string') {
+          const typeStr = q.type.toLowerCase()
+          if (typeStr.includes('reflection')) type = 'reflection'
+          else if (typeStr.includes('application')) type = 'application'
+        }
+
+        questions.push({
+          id: `exit-${Date.now().toString(36)}-${i}`,
+          number: typeof q.number === 'number' ? q.number : i + 1,
+          text: String(q.text).trim(),
+          type,
+          lines: typeof q.lines === 'number' ? q.lines : 2
+        })
+      }
+    }
+
+    return {
+      success: true,
+      data: {
+        title,
+        questions
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse exit ticket'
     return { success: false, error: message }
   }
 }

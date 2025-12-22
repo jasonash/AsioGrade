@@ -109,6 +109,33 @@ export type LLMCompleteResult = ServiceResult<LLMResponse>
 export type LLMTestResult = ServiceResult<LLMConnectionTestResult>
 export type LLMProvidersResult = ServiceResult<LLMProviderStatus[]>
 
+// ============================================================
+// Image Generation Types (Gemini)
+// ============================================================
+
+/**
+ * Request for image generation
+ */
+export interface ImageGenerationRequest {
+  prompt: string
+  provider?: LLMProviderType // Currently only 'google' supported
+  model?: string // e.g., 'gemini-2.5-flash-image'
+  aspectRatio?: '1:1' | '16:9' | '4:3'
+}
+
+/**
+ * Response from image generation
+ */
+export interface ImageGenerationResponse {
+  imageBase64: string
+  mimeType: string
+  promptUsed: string
+  model: string
+  provider: LLMProviderType
+}
+
+export type LLMImageResult = ServiceResult<ImageGenerationResponse>
+
 // Available models per provider
 export const OPENAI_MODELS: LLMModelInfo[] = [
   {

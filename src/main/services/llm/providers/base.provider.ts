@@ -12,7 +12,9 @@ import type {
   LLMStreamChunk,
   LLMConnectionTestResult,
   LLMModelInfo,
-  LLMError
+  LLMError,
+  ImageGenerationRequest,
+  ImageGenerationResponse
 } from '../../../../shared/types/llm.types'
 
 /**
@@ -73,6 +75,17 @@ export interface BaseLLMProvider {
    * Test the connection to verify API key and model work
    */
   testConnection(): Promise<LLMConnectionTestResult>
+
+  /**
+   * Generate an image (optional - only supported by some providers)
+   * Currently only Google/Gemini supports this via gemini-2.5-flash-image model
+   */
+  generateImage?(request: ImageGenerationRequest): Promise<ImageGenerationResponse>
+
+  /**
+   * Check if this provider supports image generation
+   */
+  supportsImageGeneration(): boolean
 }
 
 /**
@@ -114,6 +127,14 @@ export abstract class AbstractLLMProvider implements BaseLLMProvider {
   abstract complete(request: LLMRequest): Promise<LLMResponse>
   abstract stream(request: LLMRequest): AsyncGenerator<LLMStreamChunk>
   abstract testConnection(): Promise<LLMConnectionTestResult>
+
+  /**
+   * Default: image generation not supported
+   * Override in providers that support it (e.g., Google)
+   */
+  supportsImageGeneration(): boolean {
+    return false
+  }
 
   /**
    * Create a standardized LLM error
