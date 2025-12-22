@@ -6,6 +6,7 @@
  */
 
 import { llmService } from '../llm/llm.service'
+import { puzzleService } from '../puzzle.service'
 import {
   SYSTEM_PROMPTS,
   MATERIAL_SYSTEM_PROMPTS,
@@ -871,6 +872,124 @@ class AIService {
   }
 
   /**
+   * Generate a word search puzzle
+   */
+  private async generateWordSearchMaterial(
+    request: MaterialGenerationRequest,
+    standardsText: string
+  ): Promise<ServiceResult<GeneratedMaterial>> {
+    try {
+      // First, extract vocabulary from the topic
+      const vocabResult = await this.generatePuzzleVocabulary({
+        topic: request.topic,
+        gradeLevel: request.gradeLevel,
+        subject: request.subject ?? '',
+        wordCount: request.options?.wordCount ?? 12,
+        existingContent: standardsText
+      })
+
+      if (!vocabResult.success) {
+        return { success: false, error: vocabResult.error }
+      }
+
+      // Generate the word search grid
+      const words = vocabResult.data.vocabulary.map((v) => v.word)
+      const puzzleResult = puzzleService.generateWordSearch(
+        words,
+        request.options?.puzzleSize ?? 'medium'
+      )
+
+      if (!puzzleResult.success) {
+        return { success: false, error: puzzleResult.error }
+      }
+
+      const material: GeneratedMaterial = {
+        id: crypto.randomUUID(),
+        lessonId: request.lessonId,
+        componentId: request.componentId,
+        type: 'word-search',
+        name: `${request.topic} Word Search`,
+        topic: request.topic,
+        aiGenerated: true,
+        aiModel: 'default',
+        generatedAt: new Date().toISOString(),
+        content: {
+          title: `${request.topic} Word Search`,
+          instructions: `Find all ${puzzleResult.data.words.length} hidden words in the puzzle below. Words may be hidden horizontally, vertically, or diagonally.`,
+          wordSearch: puzzleResult.data,
+          vocabulary: vocabResult.data.vocabulary.map((v) => ({
+            id: crypto.randomUUID(),
+            term: v.word,
+            definition: v.clue
+          }))
+        }
+      }
+
+      return { success: true, data: material }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Word search generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate a crossword puzzle
+   */
+  private async generateCrosswordMaterial(
+    request: MaterialGenerationRequest,
+    standardsText: string
+  ): Promise<ServiceResult<GeneratedMaterial>> {
+    try {
+      // First, extract vocabulary with clues from the topic
+      const vocabResult = await this.generatePuzzleVocabulary({
+        topic: request.topic,
+        gradeLevel: request.gradeLevel,
+        subject: request.subject ?? '',
+        wordCount: request.options?.wordCount ?? 12,
+        existingContent: standardsText
+      })
+
+      if (!vocabResult.success) {
+        return { success: false, error: vocabResult.error }
+      }
+
+      // Generate the crossword grid
+      const vocabulary = vocabResult.data.vocabulary.map((v) => ({
+        word: v.word.toUpperCase(),
+        clue: v.clue
+      }))
+
+      const puzzleResult = puzzleService.generateCrossword(vocabulary)
+
+      if (!puzzleResult.success) {
+        return { success: false, error: puzzleResult.error }
+      }
+
+      const material: GeneratedMaterial = {
+        id: crypto.randomUUID(),
+        lessonId: request.lessonId,
+        componentId: request.componentId,
+        type: 'crossword',
+        name: `${request.topic} Crossword`,
+        topic: request.topic,
+        aiGenerated: true,
+        aiModel: 'default',
+        generatedAt: new Date().toISOString(),
+        content: {
+          title: `${request.topic} Crossword`,
+          instructions: 'Complete the crossword puzzle using the clues provided below.',
+          crossword: puzzleResult.data
+        }
+      }
+
+      return { success: true, data: material }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Crossword generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
    * Generate material based on type
    * Unified method that dispatches to specific generators
    */
@@ -893,13 +1012,10 @@ class AIService {
         return this.generateExitTicket(request, standardsText)
 
       case 'word-search':
+        return this.generateWordSearchMaterial(request, standardsText)
+
       case 'crossword':
-        // Puzzles require vocabulary extraction + puzzle service
-        // Return error here - puzzle generation should use generatePuzzleVocabulary + puzzleService
-        return {
-          success: false,
-          error: 'Puzzle generation requires using generatePuzzleVocabulary + puzzleService'
-        }
+        return this.generateCrosswordMaterial(request, standardsText)
 
       case 'diagram':
         // Diagrams require separate image generation flow
