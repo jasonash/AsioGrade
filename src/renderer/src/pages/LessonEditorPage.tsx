@@ -1130,9 +1130,7 @@ export function LessonEditorPage({
                 course={course}
                 unit={unit}
                 lesson={currentLesson}
-                unitStandards={allStandards.filter((s) =>
-                  currentLesson.standardRefs?.includes(s.code) ?? false
-                )}
+                unitStandards={allStandards}
                 onGoalsGenerated={handleAIGoalsGenerated}
                 onStructureGenerated={handleAIStructureGenerated}
                 onComponentExpanded={handleAIComponentExpanded}
