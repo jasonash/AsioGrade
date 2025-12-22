@@ -1,9 +1,10 @@
 import { useState, type ReactElement } from 'react'
 import { Layout, type NavItem } from './components/layout'
-import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, UnitViewPage, StandardsViewPage, AssessmentViewPage, AssignmentViewPage } from './pages'
+import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, UnitViewPage, StandardsViewPage, AssessmentViewPage, AssignmentViewPage, LessonEditorPage } from './pages'
 import { CourseCreationModal } from './components/courses'
 import { useUIStore, useCourseStore, useSectionStore, useUnitStore, useAssessmentStore, useAssignmentStore } from './stores'
-import type { CourseSummary, SectionSummary, UnitSummary, AssessmentSummary, AssignmentSummary } from '../../shared/types'
+import { useLessonStore } from './stores/lesson.store'
+import type { CourseSummary, SectionSummary, UnitSummary, AssessmentSummary, AssignmentSummary, LessonSummary } from '../../shared/types'
 
 const pageConfig: Record<NavItem, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Your teaching dashboard' },
@@ -26,6 +27,7 @@ function App(): ReactElement {
   const { fetchUnits } = useUnitStore()
   const { fetchAssessments } = useAssessmentStore()
   const { fetchAssignments } = useAssignmentStore()
+  const { fetchLessons } = useLessonStore()
 
   // State for current section view
   const [currentSection, setCurrentSection] = useState<SectionSummary | null>(null)
@@ -35,6 +37,9 @@ function App(): ReactElement {
 
   // State for current assessment view
   const [currentAssessment, setCurrentAssessment] = useState<AssessmentSummary | null>(null)
+
+  // State for current lesson view
+  const [currentLesson, setCurrentLesson] = useState<LessonSummary | null>(null)
 
   // State for current assignment view (assignments are instances of assessments given to sections)
   const [currentAssignment, setCurrentAssignment] = useState<AssignmentSummary | null>(null)
@@ -46,7 +51,7 @@ function App(): ReactElement {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   const handleNavigate = (nav: NavItem): void => {
-    // Clear current course, section, unit, assessment, assignment, and standards view when navigating away
+    // Clear current course, section, unit, assessment, lesson, assignment, and standards view when navigating away
     if (currentCourse) {
       setCurrentCourse(null)
     }
@@ -58,6 +63,9 @@ function App(): ReactElement {
     }
     if (currentAssessment) {
       setCurrentAssessment(null)
+    }
+    if (currentLesson) {
+      setCurrentLesson(null)
     }
     if (currentAssignment) {
       setCurrentAssignment(null)
@@ -73,6 +81,7 @@ function App(): ReactElement {
     setCurrentSection(null)
     setCurrentUnit(null)
     setCurrentAssessment(null)
+    setCurrentLesson(null)
     setCurrentAssignment(null)
     setViewingStandards(false)
     setActiveNav('dashboard')
@@ -121,6 +130,23 @@ function App(): ReactElement {
       )
     }
 
+    // Show lesson editor if a lesson is selected
+    if (activeNav === 'dashboard' && currentLesson && currentUnit && currentCourse) {
+      return (
+        <LessonEditorPage
+          course={currentCourse}
+          unit={currentUnit}
+          lessonSummary={currentLesson}
+          onBack={() => setCurrentLesson(null)}
+          onDeleted={() => {
+            setCurrentLesson(null)
+            // Refresh lessons list
+            fetchLessons(currentUnit.id)
+          }}
+        />
+      )
+    }
+
     // Show unit view if a unit is selected
     if (activeNav === 'dashboard' && currentUnit && currentCourse) {
       return (
@@ -134,6 +160,7 @@ function App(): ReactElement {
             fetchUnits(currentCourse.id)
           }}
           onAssessmentSelect={(assessment) => setCurrentAssessment(assessment)}
+          onLessonSelect={(lesson) => setCurrentLesson(lesson)}
         />
       )
     }

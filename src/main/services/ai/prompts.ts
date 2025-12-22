@@ -11,9 +11,11 @@ import type {
   MaterialImportRequest,
   VariantGenerationRequest,
   FillInBlankConversionRequest,
-  ExtractedQuestion
+  LessonGenerationContext,
+  ComponentExpansionRequest
 } from '../../../shared/types/ai.types'
 import type { MultipleChoiceQuestion } from '../../../shared/types/question.types'
+import type { LearningGoal } from '../../../shared/types/lesson.types'
 
 /**
  * System prompts for different AI operations
@@ -68,7 +70,63 @@ GUIDELINES FOR DISTRACTORS:
 - Ensure distractors are clearly wrong to someone who understands the concept
 - Make all choices the same approximate length
 - Avoid "trick" answers that are only wrong due to technicalities
-- Consider what incorrect but related concepts students might confuse`
+- Consider what incorrect but related concepts students might confuse`,
+
+  // ============================================
+  // Lesson Generation Prompts
+  // ============================================
+
+  lessonGoalsGeneration: `You are an expert curriculum designer specializing in Backward Design (Understanding by Design). Your task is to create clear, measurable learning goals aligned to standards.
+
+GUIDELINES FOR LEARNING GOALS:
+- Use the SWBAT (Students Will Be Able To) format
+- Start with strong action verbs from Bloom's Taxonomy
+- Be specific and measurable (avoid vague verbs like "understand" or "know")
+- Focus on what students will DO to demonstrate learning
+- Align each goal directly to the provided standards
+- Consider the lesson duration when setting scope
+- Include a mix of cognitive levels appropriate for the grade
+
+BLOOM'S TAXONOMY VERBS (by level):
+- Remember: define, list, recall, identify, name, state
+- Understand: explain, summarize, describe, compare, interpret
+- Apply: demonstrate, solve, use, illustrate, construct
+- Analyze: differentiate, examine, compare, contrast, categorize
+- Evaluate: judge, critique, assess, justify, defend
+- Create: design, develop, compose, construct, formulate`,
+
+  lessonStructureGeneration: `You are an expert instructional designer. Your task is to create a complete lesson structure following the Gradual Release of Responsibility (I Do, We Do, You Do) model.
+
+LESSON FLOW PRINCIPLES:
+1. BELLRINGER: Activate prior knowledge or spark curiosity (3-5 min)
+2. OBJECTIVE: Share learning goals clearly with students
+3. DIRECT INSTRUCTION (I Do): Teacher models, explains, demonstrates
+4. GUIDED PRACTICE (We Do): Teacher and students work together
+5. INDEPENDENT PRACTICE (You Do): Students apply learning independently
+6. FORMATIVE CHECK: Quick assessment of understanding
+7. CLOSURE: Summarize learning and preview what's next
+
+GUIDELINES:
+- Match activities to learning goals
+- Include transition cues between components
+- Build in time for student questions
+- Suggest specific strategies and activities
+- Consider pacing based on total lesson time
+- Include differentiation ideas where appropriate
+- Balance teacher talk with student activity`,
+
+  componentExpansion: `You are an expert instructional coach. Your task is to expand a lesson component with detailed, actionable content that a teacher can use directly in their classroom.
+
+INCLUDE IN YOUR EXPANSION:
+- Step-by-step teacher actions
+- Suggested teacher language/scripts
+- Expected student responses or behaviors
+- Materials or preparation needed
+- Questions to ask students
+- Differentiation strategies (support and extension)
+- Common misconceptions to address
+- Assessment opportunities within the component
+- Timing cues and transitions`
 }
 
 /**
@@ -376,4 +434,189 @@ Return a JSON array of converted questions:
 ]
 
 Convert all ${request.questions.length} questions now:`
+}
+
+// ============================================
+// Lesson Generation Prompt Builders
+// ============================================
+
+/**
+ * Build the prompt for generating learning goals from standards
+ */
+export function buildLessonGoalsPrompt(
+  context: LessonGenerationContext,
+  standardsText: string
+): string {
+  const materialsNote = context.unitMaterialsContext
+    ? `\nRELEVANT UNIT MATERIALS:\n${context.unitMaterialsContext.slice(0, 2000)}`
+    : ''
+
+  const priorNote = context.priorKnowledge
+    ? `\nSTUDENT PRIOR KNOWLEDGE: ${context.priorKnowledge}`
+    : ''
+
+  const needsNote = context.studentNeeds
+    ? `\nSTUDENT NEEDS: ${context.studentNeeds}`
+    : ''
+
+  return `Generate learning goals for a ${context.durationMinutes}-minute ${context.subject} lesson for grade ${context.gradeLevel} students.
+
+STANDARDS TO ADDRESS:
+${standardsText}
+${materialsNote}${priorNote}${needsNote}
+
+REQUIREMENTS:
+- Generate 2-4 SWBAT learning goals appropriate for a ${context.durationMinutes}-minute lesson
+- Each goal should align to at least one standard
+- Include goals at different cognitive levels
+- Make goals specific and measurable
+- Generate 2-4 success criteria students can use to self-assess
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object with no additional text:
+{
+  "goals": [
+    {
+      "id": "goal-1",
+      "text": "Students will be able to [specific action verb] [specific content] [optional: condition/context].",
+      "standardRef": "STANDARD-CODE"
+    }
+  ],
+  "successCriteria": [
+    "I can [specific observable behavior].",
+    "I can [specific observable behavior]."
+  ]
+}
+
+Generate the learning goals now:`
+}
+
+/**
+ * Build the prompt for generating lesson structure
+ */
+export function buildLessonStructurePrompt(
+  context: LessonGenerationContext,
+  goals: LearningGoal[],
+  standardsText: string
+): string {
+  const goalsText = goals.map((g, i) => `${i + 1}. ${g.text}`).join('\n')
+
+  const materialsNote = context.availableMaterials?.length
+    ? `\nAVAILABLE MATERIALS: ${context.availableMaterials.join(', ')}`
+    : ''
+
+  const needsNote = context.studentNeeds
+    ? `\nSTUDENT NEEDS TO CONSIDER: ${context.studentNeeds}`
+    : ''
+
+  return `Create a complete lesson structure for a ${context.durationMinutes}-minute ${context.subject} lesson for grade ${context.gradeLevel} students.
+
+LEARNING GOALS:
+${goalsText}
+
+STANDARDS:
+${standardsText}
+${materialsNote}${needsNote}
+
+REQUIREMENTS:
+- Total time must equal ${context.durationMinutes} minutes
+- Include appropriate components following Gradual Release of Responsibility
+- Each component should contribute to achieving the learning goals
+- Suggest specific activities, not generic descriptions
+- Include timing for each component
+
+COMPONENT TYPES AVAILABLE:
+- bellringer: Opening warm-up (3-5 min)
+- objective: Share goals with students (2-3 min)
+- direct: Direct instruction / I Do (10-15 min typically)
+- guided: Guided practice / We Do (8-12 min typically)
+- independent: Independent practice / You Do (10-15 min typically)
+- collaborative: Group work
+- check: Formative check / exit ticket (3-5 min)
+- closure: Lesson wrap-up (3-5 min)
+- extension: For early finishers
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object with no additional text:
+{
+  "components": [
+    {
+      "id": "comp-1",
+      "type": "bellringer",
+      "title": "Opening Activity",
+      "description": "Specific description of the activity",
+      "estimatedMinutes": 5,
+      "order": 0,
+      "teacherNotes": "What the teacher should do/say",
+      "studentInstructions": "What students should do"
+    }
+  ],
+  "totalMinutes": ${context.durationMinutes}
+}
+
+Generate the lesson structure now:`
+}
+
+/**
+ * Build the prompt for expanding a single lesson component
+ */
+export function buildComponentExpansionPrompt(
+  request: ComponentExpansionRequest,
+  standardsText: string
+): string {
+  const componentJson = JSON.stringify(
+    {
+      type: request.component.type,
+      title: request.component.title,
+      description: request.component.description,
+      estimatedMinutes: request.component.estimatedMinutes
+    },
+    null,
+    2
+  )
+
+  const goalsText = request.goals?.length
+    ? `\nLEARNING GOALS:\n${request.goals.map((g) => `- ${g.text}`).join('\n')}`
+    : ''
+
+  return `Expand this ${request.component.type} component for a grade ${request.context.gradeLevel} ${request.context.subject} lesson.
+
+COMPONENT TO EXPAND:
+${componentJson}
+${goalsText}
+
+STANDARDS:
+${standardsText}
+
+TIME AVAILABLE: ${request.component.estimatedMinutes} minutes
+
+REQUIREMENTS:
+- Provide detailed, step-by-step teacher actions
+- Include suggested teacher language/scripts
+- Describe expected student responses
+- List any materials or preparation needed
+- Include 2-3 discussion questions
+- Suggest differentiation for struggling and advanced students
+- Address common misconceptions
+- Include transition to next component
+
+OUTPUT FORMAT:
+Return ONLY a valid JSON object with no additional text:
+{
+  "title": "Updated title if needed",
+  "description": "Expanded description of the activity",
+  "estimatedMinutes": ${request.component.estimatedMinutes},
+  "teacherNotes": "Detailed step-by-step teacher actions and suggested language",
+  "studentInstructions": "Clear instructions for students",
+  "materials": ["List of materials needed"],
+  "discussionQuestions": ["Question 1", "Question 2"],
+  "differentiation": {
+    "support": "Strategies for struggling students",
+    "extension": "Challenges for advanced students"
+  },
+  "misconceptions": ["Common misconception 1", "Common misconception 2"],
+  "transitionCue": "How to transition to the next component"
+}
+
+Expand the component now:`
 }

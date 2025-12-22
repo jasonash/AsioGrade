@@ -13,14 +13,20 @@ import {
   buildChatContextPrompt,
   buildMaterialImportPrompt,
   buildVariantPrompt,
-  buildFillInBlankConversionPrompt
+  buildFillInBlankConversionPrompt,
+  buildLessonGoalsPrompt,
+  buildLessonStructurePrompt,
+  buildComponentExpansionPrompt
 } from './prompts'
 import {
   parseGeneratedQuestions,
   parseRefinedQuestion,
   parseMaterialImport,
   parseVariantQuestion,
-  parseFillInBlankConversion
+  parseFillInBlankConversion,
+  parseLessonGoals,
+  parseLessonStructure,
+  parseExpandedComponent
 } from './parser'
 import type { ServiceResult } from '../../../shared/types/common.types'
 import type { LLMUsage } from '../../../shared/types/llm.types'
@@ -38,8 +44,14 @@ import type {
   VariantGenerationRequest,
   VariantGenerationResult,
   FillInBlankConversionRequest,
-  FillInBlankConversionResult
+  FillInBlankConversionResult,
+  LessonGenerationContext,
+  LessonGoalsResult,
+  LessonStructureResult,
+  ComponentExpansionRequest,
+  ComponentExpansionResult
 } from '../../../shared/types/ai.types'
+import type { LearningGoal, LessonComponent } from '../../../shared/types/lesson.types'
 
 class AIService {
   /**
@@ -403,6 +415,146 @@ class AIService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Fill-in-blank conversion failed'
+      return { success: false, error: message }
+    }
+  }
+
+  // ============================================================
+  // Lesson Generation Methods (Phase 3)
+  // ============================================================
+
+  /**
+   * Generate learning goals from standards
+   */
+  async generateLearningGoals(
+    context: LessonGenerationContext,
+    standardsText: string
+  ): Promise<ServiceResult<LessonGoalsResult>> {
+    try {
+      const prompt = buildLessonGoalsPrompt(context, standardsText)
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: SYSTEM_PROMPTS.lessonGoalsGeneration,
+        temperature: 0.4,
+        maxTokens: 2000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseLessonGoals(result.data.content, result.data.usage)
+
+      if (!parseResult.success || !parseResult.goals) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse learning goals' }
+      }
+
+      return {
+        success: true,
+        data: {
+          goals: parseResult.goals,
+          successCriteria: parseResult.successCriteria ?? [],
+          usage: result.data.usage
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Learning goals generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate lesson structure from learning goals
+   */
+  async generateLessonStructure(
+    context: LessonGenerationContext,
+    goals: LearningGoal[],
+    standardsText: string
+  ): Promise<ServiceResult<LessonStructureResult>> {
+    try {
+      const prompt = buildLessonStructurePrompt(context, goals, standardsText)
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: SYSTEM_PROMPTS.lessonStructureGeneration,
+        temperature: 0.4,
+        maxTokens: 4000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseLessonStructure(result.data.content, result.data.usage)
+
+      if (!parseResult.success || !parseResult.components) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse lesson structure' }
+      }
+
+      return {
+        success: true,
+        data: {
+          components: parseResult.components,
+          totalMinutes: parseResult.totalMinutes ?? context.durationMinutes,
+          usage: result.data.usage
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Lesson structure generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Expand a lesson component with detailed content
+   */
+  async expandComponent(
+    request: ComponentExpansionRequest,
+    standardsText: string
+  ): Promise<ServiceResult<ComponentExpansionResult>> {
+    try {
+      const prompt = buildComponentExpansionPrompt(request, standardsText)
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: SYSTEM_PROMPTS.componentExpansion,
+        temperature: 0.4,
+        maxTokens: 3000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseExpandedComponent(
+        result.data.content,
+        request.component,
+        result.data.usage
+      )
+
+      if (!parseResult.success || !parseResult.component) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse expanded component' }
+      }
+
+      // Merge expansion into a full LessonComponent
+      const expandedComponent: LessonComponent = {
+        ...request.component,
+        ...parseResult.component,
+        id: request.component.id,
+        type: request.component.type,
+        order: request.component.order
+      }
+
+      return {
+        success: true,
+        data: {
+          expandedComponent,
+          usage: result.data.usage
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Component expansion failed'
       return { success: false, error: message }
     }
   }

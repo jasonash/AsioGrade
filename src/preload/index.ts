@@ -64,6 +64,20 @@ const validInvokeChannels = [
   'drive:updateAssignment',
   'drive:deleteAssignment',
 
+  // Google Drive - Lessons
+  'drive:listLessons',
+  'drive:getLesson',
+  'drive:createLesson',
+  'drive:updateLesson',
+  'drive:deleteLesson',
+  'drive:reorderLessons',
+
+  // Google Drive - Unit Materials
+  'drive:listUnitMaterials',
+  'drive:uploadUnitMaterial',
+  'drive:deleteUnitMaterial',
+  'drive:getUnitMaterialsContext',
+
   // Storage
   'storage:get',
   'storage:set',
@@ -92,6 +106,11 @@ const validInvokeChannels = [
   'ai:extractQuestionsFromMaterial',
   'ai:generateVariant',
   'ai:convertFillInBlank',
+
+  // AI Lesson Generation
+  'ai:generateLessonGoals',
+  'ai:generateLessonStructure',
+  'ai:expandLessonComponent',
 
   // Import utilities
   'import:fetchUrl',

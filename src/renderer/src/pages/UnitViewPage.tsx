@@ -16,10 +16,12 @@ import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import { useUnitStore, useStandardsStore, useAssessmentStore } from '../stores'
+import { useLessonStore } from '../stores/lesson.store'
 import { ConfirmModal } from '../components/ui'
 import { UnitEditModal } from '../components/units'
 import { AssessmentCard, AssessmentCreationModal } from '../components/assessments'
-import type { CourseSummary, UnitSummary, AssessmentSummary, Standard, StandardDomain, Standards } from '../../../shared/types'
+import { LessonCard, LessonCreationModal } from '../components/lessons'
+import type { CourseSummary, UnitSummary, AssessmentSummary, LessonSummary, Standard, StandardDomain, Standards } from '../../../shared/types'
 
 interface UnitViewPageProps {
   course: CourseSummary
@@ -27,23 +29,27 @@ interface UnitViewPageProps {
   onBack: () => void
   onDeleted: () => void
   onAssessmentSelect?: (assessment: AssessmentSummary) => void
+  onLessonSelect?: (lesson: LessonSummary) => void
 }
 
-export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessmentSelect }: UnitViewPageProps): ReactElement {
+export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessmentSelect, onLessonSelect }: UnitViewPageProps): ReactElement {
   const { currentUnit, loading, error, getUnit, deleteUnit, clearError } = useUnitStore()
   const { allCollections, fetchAllCollections } = useStandardsStore()
   const { assessments, fetchAssessments, loading: assessmentsLoading } = useAssessmentStore()
+  const { lessons, fetchLessons, loading: lessonsLoading } = useLessonStore()
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isCreateAssessmentModalOpen, setIsCreateAssessmentModalOpen] = useState(false)
+  const [isCreateLessonModalOpen, setIsCreateLessonModalOpen] = useState(false)
 
-  // Fetch full unit details, standards, and assessments when component mounts
+  // Fetch full unit details, standards, assessments, and lessons when component mounts
   useEffect(() => {
     getUnit(course.id, unitSummary.id)
     fetchAllCollections(course.id)
     fetchAssessments(unitSummary.id)
+    fetchLessons(unitSummary.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
   }, [course.id, unitSummary.id])
 
@@ -147,7 +153,7 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessm
 
       {/* Stats Cards */}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
               <CalendarTodayIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
@@ -158,7 +164,7 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessm
             </Typography>
           </Paper>
         </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
               <MenuBookIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
@@ -169,7 +175,18 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessm
             </Typography>
           </Paper>
         </Grid>
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={{ xs: 12, sm: 3 }}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+              <MenuBookIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+              <Typography variant="body2" color="text.secondary">Lessons</Typography>
+            </Box>
+            <Typography variant="h4" fontWeight={700}>
+              {lessons.length}
+            </Typography>
+          </Paper>
+        </Grid>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
               <AssignmentIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
@@ -245,6 +262,59 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessm
               </Box>
             ))}
           </Paper>
+        )}
+      </Box>
+
+      <Divider />
+
+      {/* Lessons Section */}
+      <Box component="section">
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" fontWeight={600}>
+            Lessons
+          </Typography>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={() => setIsCreateLessonModalOpen(true)}
+          >
+            Create Lesson
+          </Button>
+        </Box>
+
+        {lessonsLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress size={32} />
+          </Box>
+        ) : lessons.length === 0 ? (
+          <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
+            <MenuBookIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+            <Typography fontWeight={500} gutterBottom>
+              No lessons yet
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Create your first lesson to start planning instruction.
+            </Typography>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={() => setIsCreateLessonModalOpen(true)}
+            >
+              Create Lesson
+            </Button>
+          </Paper>
+        ) : (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {lessons.map((lesson) => (
+              <LessonCard
+                key={lesson.id}
+                lesson={lesson}
+                onClick={() => onLessonSelect?.(lesson)}
+              />
+            ))}
+          </Box>
         )}
       </Box>
 
@@ -354,6 +424,34 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessm
             updatedAt: assessment.updatedAt
           }
           onAssessmentSelect?.(summary)
+        }}
+      />
+
+      {/* Lesson Creation Modal */}
+      <LessonCreationModal
+        isOpen={isCreateLessonModalOpen}
+        onClose={() => setIsCreateLessonModalOpen(false)}
+        courseId={course.id}
+        unitId={unitSummary.id}
+        unitName={unitSummary.name}
+        onSuccess={(lesson) => {
+          setIsCreateLessonModalOpen(false)
+          // Refresh lessons list
+          fetchLessons(unitSummary.id)
+          // Navigate to the new lesson
+          const summary: LessonSummary = {
+            id: lesson.id,
+            unitId: lesson.unitId,
+            title: lesson.title,
+            estimatedMinutes: lesson.estimatedMinutes,
+            componentCount: lesson.components.length,
+            goalCount: lesson.learningGoals.length,
+            status: lesson.status,
+            aiGenerated: lesson.aiGenerated,
+            createdAt: lesson.createdAt,
+            updatedAt: lesson.updatedAt
+          }
+          onLessonSelect?.(summary)
         }}
       />
     </Box>

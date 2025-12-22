@@ -33,6 +33,14 @@ import type {
   UpdateAssignmentInput,
   StudentAssignment,
   AssignmentGrades,
+  Lesson,
+  LessonSummary,
+  CreateLessonInput,
+  UpdateLessonInput,
+  ReorderLessonsInput,
+  UnitMaterial,
+  UnitMaterialSummary,
+  UploadUnitMaterialInput,
   ServiceResult
 } from '../../shared/types'
 
@@ -57,6 +65,8 @@ interface FolderCache {
   assessmentFileIds: Record<string, string> // assessmentId -> fileId
   assignmentFileIds: Record<string, string> // assignmentId -> fileId
   gradeFileIds: Record<string, string> // assignmentId -> grade file ID
+  lessonFileIds: Record<string, string> // lessonId -> fileId
+  materialFileIds: Record<string, string> // materialId -> fileId
 }
 
 // Metadata cache with TTL for performance
@@ -72,6 +82,7 @@ interface MetadataCache {
   assessments: Record<string, CacheEntry<Assessment>> // assessmentId -> assessment
   assignments: Record<string, CacheEntry<Assignment>> // assignmentId -> assignment
   grades: Record<string, CacheEntry<AssignmentGrades>> // assignmentId -> grades
+  lessons: Record<string, CacheEntry<Lesson>> // lessonId -> lesson
   standardsCollections: Record<string, CacheEntry<Standards>> // standardsId -> standards collection
   standardsSummaries: Record<string, CacheEntry<StandardsSummary[]>> // courseFolderId -> list of summaries
   sectionCounts: Record<string, CacheEntry<number>> // courseFolderId -> section count
@@ -79,6 +90,7 @@ interface MetadataCache {
   unitCounts: Record<string, CacheEntry<number>> // courseFolderId -> unit count
   assessmentCounts: Record<string, CacheEntry<number>> // unitFolderId -> assessment count
   assignmentCounts: Record<string, CacheEntry<number>> // sectionFolderId -> assignment count
+  lessonCounts: Record<string, CacheEntry<number>> // unitFolderId -> lesson count
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -92,7 +104,9 @@ class DriveService {
     unitFolderIds: {},
     assessmentFileIds: {},
     assignmentFileIds: {},
-    gradeFileIds: {}
+    gradeFileIds: {},
+    lessonFileIds: {},
+    materialFileIds: {}
   }
   private metadataCache: MetadataCache = {
     courses: {},
@@ -101,13 +115,15 @@ class DriveService {
     assessments: {},
     assignments: {},
     grades: {},
+    lessons: {},
     standardsCollections: {},
     standardsSummaries: {},
     sectionCounts: {},
     studentCounts: {},
     unitCounts: {},
     assessmentCounts: {},
-    assignmentCounts: {}
+    assignmentCounts: {},
+    lessonCounts: {}
   }
 
   /**
@@ -135,7 +151,9 @@ class DriveService {
       unitFolderIds: {},
       assessmentFileIds: {},
       assignmentFileIds: {},
-      gradeFileIds: {}
+      gradeFileIds: {},
+      lessonFileIds: {},
+      materialFileIds: {}
     }
     this.metadataCache = {
       courses: {},
@@ -144,13 +162,15 @@ class DriveService {
       assessments: {},
       assignments: {},
       grades: {},
+      lessons: {},
       standardsCollections: {},
       standardsSummaries: {},
       sectionCounts: {},
       studentCounts: {},
       unitCounts: {},
       assessmentCounts: {},
-      assignmentCounts: {}
+      assignmentCounts: {},
+      lessonCounts: {}
     }
   }
 
@@ -222,6 +242,16 @@ class DriveService {
     delete this.metadataCache.assignments[assignmentId]
     if (sectionFolderId) {
       delete this.metadataCache.assignmentCounts[sectionFolderId]
+    }
+  }
+
+  /**
+   * Invalidate caches related to a lesson (call after mutations)
+   */
+  private invalidateLessonCache(lessonId: string, unitFolderId?: string): void {
+    delete this.metadataCache.lessons[lessonId]
+    if (unitFolderId) {
+      delete this.metadataCache.lessonCounts[unitFolderId]
     }
   }
 
@@ -3066,6 +3096,563 @@ class DriveService {
    */
   invalidateGradeCache(assignmentId: string): void {
     delete this.metadataCache.grades[assignmentId]
+  }
+
+  // ============================================================
+  // Lesson Operations
+  // ============================================================
+
+  /**
+   * List all lessons in a unit
+   */
+  async listLessons(unitId: string): Promise<ServiceResult<LessonSummary[]>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get unit folder ID
+      const unitFolderId = this.folderCache.unitFolderIds[unitId] ?? unitId
+
+      // Find lessons folder
+      const lessonsFolderResponse = await drive.files.list({
+        q: `name='lessons' and mimeType='application/vnd.google-apps.folder' and '${unitFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (
+        !lessonsFolderResponse.data.files ||
+        lessonsFolderResponse.data.files.length === 0
+      ) {
+        // No lessons folder yet, return empty list
+        return { success: true, data: [] }
+      }
+
+      const lessonsFolderId = lessonsFolderResponse.data.files[0].id!
+
+      // List all JSON files in lessons folder
+      const response = await drive.files.list({
+        q: `'${lessonsFolderId}' in parents and mimeType='application/json' and trashed=false`,
+        fields: 'files(id, name, modifiedTime)',
+        spaces: 'drive'
+      })
+
+      if (!response.data.files || response.data.files.length === 0) {
+        return { success: true, data: [] }
+      }
+
+      // Read each lesson file and build summaries
+      const summaries: LessonSummary[] = []
+
+      for (const file of response.data.files) {
+        try {
+          const contentResponse = await drive.files.get({
+            fileId: file.id!,
+            alt: 'media'
+          })
+
+          const lesson = contentResponse.data as unknown as Lesson
+
+          // Cache the file ID mapping
+          this.folderCache.lessonFileIds[lesson.id] = file.id!
+
+          summaries.push({
+            id: lesson.id,
+            unitId: lesson.unitId,
+            title: lesson.title,
+            estimatedMinutes: lesson.estimatedMinutes,
+            componentCount: lesson.components.length,
+            goalCount: lesson.learningGoals.length,
+            status: lesson.status,
+            aiGenerated: lesson.aiGenerated,
+            createdAt: lesson.createdAt,
+            updatedAt: lesson.updatedAt
+          })
+        } catch {
+          // Skip invalid files
+          continue
+        }
+      }
+
+      // Sort by order, then by creation date
+      summaries.sort((a, b) => {
+        // First sort would need order field, but we have createdAt for now
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      })
+
+      return { success: true, data: summaries }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to list lessons'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Get a specific lesson by ID
+   */
+  async getLesson(lessonId: string): Promise<ServiceResult<Lesson>> {
+    try {
+      // Check cache first
+      const cached = this.metadataCache.lessons[lessonId]
+      if (this.isCacheValid(cached)) {
+        return { success: true, data: cached.data }
+      }
+
+      const drive = await this.getDrive()
+
+      // Get file ID from cache or use as-is
+      const fileId = this.folderCache.lessonFileIds[lessonId] ?? lessonId
+
+      const response = await drive.files.get({
+        fileId,
+        alt: 'media'
+      })
+
+      const lesson = response.data as unknown as Lesson
+
+      // Cache the result
+      this.metadataCache.lessons[lessonId] = {
+        data: lesson,
+        timestamp: Date.now()
+      }
+
+      return { success: true, data: lesson }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get lesson'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Create a new lesson within a unit
+   */
+  async createLesson(input: CreateLessonInput): Promise<ServiceResult<Lesson>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get unit folder ID
+      const unitFolderId = this.folderCache.unitFolderIds[input.unitId] ?? input.unitId
+
+      // Ensure lessons folder exists
+      const lessonsFolderId = await this.ensureSubfolder(unitFolderId, 'lessons')
+
+      // Get existing lessons to determine order
+      const existingResult = await this.listLessons(input.unitId)
+      const order = existingResult.success ? existingResult.data.length + 1 : 1
+
+      // Generate unique lesson ID
+      const lessonId = this.generateUniqueId(input.title)
+      const now = new Date().toISOString()
+
+      // Create lesson object
+      const lesson: Lesson = {
+        id: lessonId,
+        courseId: input.courseId,
+        unitId: input.unitId,
+        title: input.title,
+        description: input.description,
+        order,
+        estimatedMinutes: input.estimatedMinutes,
+        standardRefs: input.standardRefs ?? [],
+        learningGoals: input.learningGoals ?? [],
+        successCriteria: input.successCriteria ?? [],
+        components: input.components ?? [],
+        materials: input.materials ?? [],
+        status: 'draft' as const,
+        aiGenerated: false,
+        createdAt: now,
+        updatedAt: now,
+        version: 1
+      }
+
+      // Save to Drive
+      const fileResponse = await drive.files.create({
+        requestBody: {
+          name: `${lessonId}.json`,
+          mimeType: 'application/json',
+          parents: [lessonsFolderId]
+        },
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(lesson, null, 2)
+        },
+        fields: 'id'
+      })
+
+      // Cache the file ID mapping
+      this.folderCache.lessonFileIds[lessonId] = fileResponse.data.id!
+
+      // Invalidate lesson count cache
+      this.invalidateLessonCache(lessonId, unitFolderId)
+
+      return { success: true, data: lesson }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create lesson'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Update an existing lesson
+   */
+  async updateLesson(input: UpdateLessonInput): Promise<ServiceResult<Lesson>> {
+    try {
+      // Get existing lesson
+      const existingResult = await this.getLesson(input.id)
+      if (!existingResult.success) {
+        return { success: false, error: existingResult.error }
+      }
+
+      const existing = existingResult.data
+      const drive = await this.getDrive()
+
+      // Get file ID
+      const fileId = this.folderCache.lessonFileIds[input.id]
+      if (!fileId) {
+        return { success: false, error: 'Lesson file not found in cache' }
+      }
+
+      const now = new Date().toISOString()
+
+      // Merge updates
+      const updated: Lesson = {
+        ...existing,
+        title: input.title ?? existing.title,
+        description: input.description ?? existing.description,
+        order: input.order ?? existing.order,
+        estimatedMinutes: input.estimatedMinutes ?? existing.estimatedMinutes,
+        standardRefs: input.standardRefs ?? existing.standardRefs,
+        learningGoals: input.learningGoals ?? existing.learningGoals,
+        successCriteria: input.successCriteria ?? existing.successCriteria,
+        components: input.components ?? existing.components,
+        materials: input.materials ?? existing.materials,
+        udlNotes: input.udlNotes ?? existing.udlNotes,
+        status: input.status ?? existing.status,
+        aiGenerated: input.aiGenerated ?? existing.aiGenerated,
+        updatedAt: now,
+        version: existing.version + 1
+      }
+
+      // Save to Drive
+      await drive.files.update({
+        fileId,
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(updated, null, 2)
+        }
+      })
+
+      // Invalidate cache
+      const unitFolderId = this.folderCache.unitFolderIds[input.unitId]
+      this.invalidateLessonCache(input.id, unitFolderId)
+
+      return { success: true, data: updated }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update lesson'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Delete a lesson
+   */
+  async deleteLesson(lessonId: string, unitId: string): Promise<ServiceResult<void>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get file ID
+      let fileId = this.folderCache.lessonFileIds[lessonId]
+      if (!fileId) {
+        // Try to find it by listing lessons first
+        const listResult = await this.listLessons(unitId)
+        if (!listResult.success) {
+          return { success: false, error: 'Failed to find lesson' }
+        }
+
+        fileId = this.folderCache.lessonFileIds[lessonId]
+        if (!fileId) {
+          return { success: false, error: 'Lesson not found' }
+        }
+      }
+
+      // Move to trash
+      await drive.files.update({
+        fileId,
+        requestBody: { trashed: true }
+      })
+
+      // Get unit folder ID for cache invalidation
+      const unitFolderId = this.folderCache.unitFolderIds[unitId]
+
+      // Clear from caches
+      delete this.folderCache.lessonFileIds[lessonId]
+      this.invalidateLessonCache(lessonId, unitFolderId)
+
+      return { success: true, data: undefined }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete lesson'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Reorder lessons within a unit
+   */
+  async reorderLessons(input: ReorderLessonsInput): Promise<ServiceResult<void>> {
+    try {
+      // Update each lesson with its new order
+      for (let i = 0; i < input.lessonIds.length; i++) {
+        const lessonId = input.lessonIds[i]
+        const lessonResult = await this.getLesson(lessonId)
+
+        if (lessonResult.success) {
+          await this.updateLesson({
+            id: lessonId,
+            courseId: lessonResult.data.courseId,
+            unitId: input.unitId,
+            order: i + 1
+          })
+        }
+      }
+
+      return { success: true, data: undefined }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to reorder lessons'
+      return { success: false, error: message }
+    }
+  }
+
+  // ============================================================
+  // Unit Materials Operations
+  // ============================================================
+
+  /**
+   * List all materials in a unit
+   */
+  async listUnitMaterials(unitId: string): Promise<ServiceResult<UnitMaterialSummary[]>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get unit folder ID
+      const unitFolderId = this.folderCache.unitFolderIds[unitId] ?? unitId
+
+      // Find materials folder
+      const materialsFolderResponse = await drive.files.list({
+        q: `name='materials' and mimeType='application/vnd.google-apps.folder' and '${unitFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (
+        !materialsFolderResponse.data.files ||
+        materialsFolderResponse.data.files.length === 0
+      ) {
+        // No materials folder yet, return empty list
+        return { success: true, data: [] }
+      }
+
+      const materialsFolderId = materialsFolderResponse.data.files[0].id!
+
+      // List all files in materials folder (not just JSON)
+      const response = await drive.files.list({
+        q: `'${materialsFolderId}' in parents and trashed=false`,
+        fields: 'files(id, name, mimeType, createdTime)',
+        spaces: 'drive'
+      })
+
+      if (!response.data.files || response.data.files.length === 0) {
+        return { success: true, data: [] }
+      }
+
+      // Build summaries
+      const summaries: UnitMaterialSummary[] = []
+
+      for (const file of response.data.files) {
+        // Cache the file ID mapping
+        this.folderCache.materialFileIds[file.id!] = file.id!
+
+        // Determine type from mimeType
+        let type: 'pdf' | 'docx' | 'txt' | 'other' = 'other'
+        if (file.mimeType === 'application/pdf') {
+          type = 'pdf'
+        } else if (
+          file.mimeType ===
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        ) {
+          type = 'docx'
+        } else if (file.mimeType === 'text/plain') {
+          type = 'txt'
+        }
+
+        summaries.push({
+          id: file.id!,
+          name: file.name!,
+          type,
+          uploadedAt: file.createdTime!
+        })
+      }
+
+      // Sort by upload date (newest first)
+      summaries.sort(
+        (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+      )
+
+      return { success: true, data: summaries }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to list unit materials'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Upload a material to a unit
+   */
+  async uploadUnitMaterial(input: UploadUnitMaterialInput): Promise<ServiceResult<UnitMaterial>> {
+    try {
+      const drive = await this.getDrive()
+      const fs = await import('fs')
+      const path = await import('path')
+
+      // Get unit folder ID
+      const unitFolderId = this.folderCache.unitFolderIds[input.unitId] ?? input.unitId
+
+      // Ensure materials folder exists
+      const materialsFolderId = await this.ensureSubfolder(unitFolderId, 'materials')
+
+      // Determine file type and MIME type
+      const ext = path.extname(input.filePath).toLowerCase()
+      let mimeType = 'application/octet-stream'
+      let type: 'pdf' | 'docx' | 'txt' | 'other' = 'other'
+
+      if (ext === '.pdf') {
+        mimeType = 'application/pdf'
+        type = 'pdf'
+      } else if (ext === '.docx') {
+        mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        type = 'docx'
+      } else if (ext === '.txt') {
+        mimeType = 'text/plain'
+        type = 'txt'
+      }
+
+      // Upload file
+      const fileContent = fs.readFileSync(input.filePath)
+      const fileResponse = await drive.files.create({
+        requestBody: {
+          name: input.name,
+          mimeType,
+          parents: [materialsFolderId]
+        },
+        media: {
+          mimeType,
+          body: fileContent
+        },
+        fields: 'id, createdTime'
+      })
+
+      const materialId = fileResponse.data.id!
+
+      // Cache the file ID mapping
+      this.folderCache.materialFileIds[materialId] = materialId
+
+      // Create material object
+      const material: UnitMaterial = {
+        id: materialId,
+        unitId: input.unitId,
+        name: input.name,
+        type,
+        driveFileId: materialId,
+        uploadedAt: fileResponse.data.createdTime!
+      }
+
+      return { success: true, data: material }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to upload unit material'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Delete a unit material
+   */
+  async deleteUnitMaterial(materialId: string): Promise<ServiceResult<void>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Move to trash
+      await drive.files.update({
+        fileId: materialId,
+        requestBody: { trashed: true }
+      })
+
+      // Clear from cache
+      delete this.folderCache.materialFileIds[materialId]
+
+      return { success: true, data: undefined }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete unit material'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Get extracted text from all materials in a unit (for AI context)
+   */
+  async getUnitMaterialsContext(unitId: string): Promise<ServiceResult<string>> {
+    try {
+      // Import the import service for text extraction
+      const { importService } = await import('./import.service')
+
+      // List all materials
+      const materialsResult = await this.listUnitMaterials(unitId)
+      if (!materialsResult.success) {
+        return { success: false, error: materialsResult.error }
+      }
+
+      if (materialsResult.data.length === 0) {
+        return { success: true, data: '' }
+      }
+
+      const drive = await this.getDrive()
+      const textParts: string[] = []
+
+      for (const material of materialsResult.data) {
+        try {
+          // Download the file content
+          const response = await drive.files.get({
+            fileId: material.id,
+            alt: 'media'
+          })
+
+          // Extract text based on type
+          let text = ''
+          if (material.type === 'txt') {
+            text = response.data as string
+          } else if (material.type === 'pdf' || material.type === 'docx') {
+            // Convert response to buffer
+            const buffer = Buffer.from(response.data as string, 'binary')
+            const extractResult = await importService.extractTextFromBuffer(
+              buffer,
+              material.type === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            )
+            if (extractResult.success) {
+              text = extractResult.data
+            }
+          }
+
+          if (text) {
+            textParts.push(`--- ${material.name} ---\n${text}`)
+          }
+        } catch {
+          // Skip files that can't be processed
+          continue
+        }
+      }
+
+      return { success: true, data: textParts.join('\n\n') }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get unit materials context'
+      return { success: false, error: message }
+    }
   }
 
   // ============================================================

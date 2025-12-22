@@ -7,6 +7,7 @@
 import type { GeneratedQuestion, ExtractedQuestion, MaterialImportResult, VariantType } from '../../../shared/types/ai.types'
 import type { MultipleChoiceQuestion, Choice } from '../../../shared/types/question.types'
 import type { LLMUsage } from '../../../shared/types/llm.types'
+import type { LearningGoal, LessonComponent, LessonComponentType } from '../../../shared/types/lesson.types'
 
 export interface ParsedQuestionResult {
   success: boolean
@@ -37,6 +38,30 @@ export interface ParsedVariantResult {
 export interface ParsedFillInBlankConversionResult {
   success: boolean
   questions?: ExtractedQuestion[]
+  error?: string
+}
+
+// ============================================
+// Lesson Generation Parser Interfaces
+// ============================================
+
+export interface ParsedLessonGoalsResult {
+  success: boolean
+  goals?: LearningGoal[]
+  successCriteria?: string[]
+  error?: string
+}
+
+export interface ParsedLessonStructureResult {
+  success: boolean
+  components?: LessonComponent[]
+  totalMinutes?: number
+  error?: string
+}
+
+export interface ParsedComponentExpansionResult {
+  success: boolean
+  component?: Partial<LessonComponent> & { differentiation?: { support: string; extension: string }; discussionQuestions?: string[]; misconceptions?: string[]; transitionCue?: string }
   error?: string
 }
 
@@ -450,7 +475,7 @@ export function parseVariantQuestion(
  */
 export function parseFillInBlankConversion(
   content: string,
-  usage: LLMUsage
+  _usage: LLMUsage
 ): ParsedFillInBlankConversionResult {
   try {
     // Try to extract JSON array from the response
@@ -520,6 +545,234 @@ export function parseFillInBlankConversion(
     return { success: true, questions }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to parse converted questions'
+    return { success: false, error: message }
+  }
+}
+
+// ============================================
+// Lesson Generation Parsers
+// ============================================
+
+const VALID_COMPONENT_TYPES: LessonComponentType[] = [
+  'bellringer', 'objective', 'direct', 'guided', 'independent',
+  'collaborative', 'check', 'closure', 'extension'
+]
+
+/**
+ * Parse learning goals from LLM response
+ */
+export function parseLessonGoals(
+  content: string,
+  _usage: LLMUsage
+): ParsedLessonGoalsResult {
+  try {
+    // Try to extract JSON object from the response
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return { success: false, error: 'No JSON object found in response' }
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+
+    // Parse goals
+    if (!Array.isArray(parsed.goals)) {
+      return { success: false, error: 'Response missing goals array' }
+    }
+
+    const goals: LearningGoal[] = []
+    for (let i = 0; i < parsed.goals.length; i++) {
+      const g = parsed.goals[i] as Record<string, unknown>
+
+      if (typeof g.text !== 'string' || !g.text.trim()) {
+        continue
+      }
+
+      goals.push({
+        id: typeof g.id === 'string' ? g.id : `goal-${Date.now().toString(36)}-${i}`,
+        text: g.text.trim(),
+        standardRef: typeof g.standardRef === 'string' ? g.standardRef : undefined,
+        assessedBy: Array.isArray(g.assessedBy) ? g.assessedBy.filter((x): x is string => typeof x === 'string') : undefined
+      })
+    }
+
+    if (goals.length === 0) {
+      return { success: false, error: 'No valid goals found in response' }
+    }
+
+    // Parse success criteria
+    const successCriteria: string[] = []
+    if (Array.isArray(parsed.successCriteria)) {
+      for (const criterion of parsed.successCriteria) {
+        if (typeof criterion === 'string' && criterion.trim()) {
+          successCriteria.push(criterion.trim())
+        }
+      }
+    }
+
+    return {
+      success: true,
+      goals,
+      successCriteria
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse learning goals'
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Parse lesson structure (components) from LLM response
+ */
+export function parseLessonStructure(
+  content: string,
+  _usage: LLMUsage
+): ParsedLessonStructureResult {
+  try {
+    // Try to extract JSON object from the response
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return { success: false, error: 'No JSON object found in response' }
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+
+    // Parse components
+    if (!Array.isArray(parsed.components)) {
+      return { success: false, error: 'Response missing components array' }
+    }
+
+    const components: LessonComponent[] = []
+    for (let i = 0; i < parsed.components.length; i++) {
+      const c = parsed.components[i] as Record<string, unknown>
+
+      // Validate type
+      const rawType = typeof c.type === 'string' ? c.type : 'direct'
+      const type: LessonComponentType = VALID_COMPONENT_TYPES.includes(rawType as LessonComponentType)
+        ? (rawType as LessonComponentType)
+        : 'direct'
+
+      // Validate required fields
+      const title = typeof c.title === 'string' && c.title.trim() ? c.title.trim() : type
+      const description = typeof c.description === 'string' ? c.description.trim() : ''
+      const estimatedMinutes = typeof c.estimatedMinutes === 'number' && c.estimatedMinutes > 0
+        ? c.estimatedMinutes
+        : 5
+
+      components.push({
+        id: typeof c.id === 'string' ? c.id : `comp-${Date.now().toString(36)}-${i}`,
+        type,
+        title,
+        description,
+        estimatedMinutes,
+        order: typeof c.order === 'number' ? c.order : i,
+        teacherNotes: typeof c.teacherNotes === 'string' ? c.teacherNotes : undefined,
+        studentInstructions: typeof c.studentInstructions === 'string' ? c.studentInstructions : undefined,
+        materials: Array.isArray(c.materials) ? c.materials.filter((m): m is string => typeof m === 'string') : undefined,
+        assessmentQuestions: Array.isArray(c.assessmentQuestions) ? c.assessmentQuestions.filter((q): q is string => typeof q === 'string') : undefined
+      })
+    }
+
+    if (components.length === 0) {
+      return { success: false, error: 'No valid components found in response' }
+    }
+
+    // Sort by order
+    components.sort((a, b) => a.order - b.order)
+
+    // Calculate total minutes
+    const totalMinutes = typeof parsed.totalMinutes === 'number'
+      ? parsed.totalMinutes
+      : components.reduce((sum, c) => sum + c.estimatedMinutes, 0)
+
+    return {
+      success: true,
+      components,
+      totalMinutes
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse lesson structure'
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Parse expanded component from LLM response
+ */
+export function parseExpandedComponent(
+  content: string,
+  originalComponent: LessonComponent,
+  _usage: LLMUsage
+): ParsedComponentExpansionResult {
+  try {
+    // Try to extract JSON object from the response
+    const jsonMatch = content.match(/\{[\s\S]*\}/)
+    if (!jsonMatch) {
+      return { success: false, error: 'No JSON object found in response' }
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+
+    // Build expanded component, keeping original values for missing fields
+    const expandedComponent: Partial<LessonComponent> & {
+      differentiation?: { support: string; extension: string }
+      discussionQuestions?: string[]
+      misconceptions?: string[]
+      transitionCue?: string
+    } = {
+      id: originalComponent.id,
+      type: originalComponent.type,
+      order: originalComponent.order,
+      title: typeof parsed.title === 'string' && parsed.title.trim()
+        ? parsed.title.trim()
+        : originalComponent.title,
+      description: typeof parsed.description === 'string'
+        ? parsed.description.trim()
+        : originalComponent.description,
+      estimatedMinutes: typeof parsed.estimatedMinutes === 'number'
+        ? parsed.estimatedMinutes
+        : originalComponent.estimatedMinutes,
+      teacherNotes: typeof parsed.teacherNotes === 'string'
+        ? parsed.teacherNotes
+        : originalComponent.teacherNotes,
+      studentInstructions: typeof parsed.studentInstructions === 'string'
+        ? parsed.studentInstructions
+        : originalComponent.studentInstructions,
+      materials: Array.isArray(parsed.materials)
+        ? parsed.materials.filter((m): m is string => typeof m === 'string')
+        : originalComponent.materials
+    }
+
+    // Parse additional expansion fields
+    if (parsed.differentiation && typeof parsed.differentiation === 'object') {
+      const diff = parsed.differentiation as Record<string, unknown>
+      expandedComponent.differentiation = {
+        support: typeof diff.support === 'string' ? diff.support : '',
+        extension: typeof diff.extension === 'string' ? diff.extension : ''
+      }
+    }
+
+    if (Array.isArray(parsed.discussionQuestions)) {
+      expandedComponent.discussionQuestions = parsed.discussionQuestions.filter(
+        (q): q is string => typeof q === 'string'
+      )
+    }
+
+    if (Array.isArray(parsed.misconceptions)) {
+      expandedComponent.misconceptions = parsed.misconceptions.filter(
+        (m): m is string => typeof m === 'string'
+      )
+    }
+
+    if (typeof parsed.transitionCue === 'string') {
+      expandedComponent.transitionCue = parsed.transitionCue
+    }
+
+    return {
+      success: true,
+      component: expandedComponent
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse expanded component'
     return { success: false, error: message }
   }
 }

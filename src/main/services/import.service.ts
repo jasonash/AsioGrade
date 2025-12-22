@@ -395,6 +395,31 @@ class ImportService {
         return { success: false, error: `Unsupported file type: .${extension}` }
     }
   }
+
+  /**
+   * Extract text from a buffer based on MIME type
+   * Used for extracting text from files downloaded from Google Drive
+   */
+  async extractTextFromBuffer(buffer: Buffer, mimeType: string): Promise<ServiceResult<string>> {
+    try {
+      if (mimeType === 'application/pdf') {
+        const text = await extractPdfText(buffer)
+        return { success: true, data: text }
+      } else if (
+        mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+      ) {
+        const result = await mammoth.extractRawText({ buffer })
+        return { success: true, data: result.value }
+      } else if (mimeType === 'text/plain') {
+        return { success: true, data: buffer.toString('utf-8') }
+      } else {
+        return { success: false, error: `Unsupported MIME type: ${mimeType}` }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to extract text from buffer'
+      return { success: false, error: message }
+    }
+  }
 }
 
 export const importService = new ImportService()

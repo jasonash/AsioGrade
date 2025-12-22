@@ -24,6 +24,10 @@ import type {
   UpdateAssessmentInput,
   CreateAssignmentInput,
   UpdateAssignmentInput,
+  CreateLessonInput,
+  UpdateLessonInput,
+  ReorderLessonsInput,
+  UploadUnitMaterialInput,
   ScantronGenerationRequest,
   ScantronStudentInfo,
   GradeProcessRequest,
@@ -38,8 +42,11 @@ import type {
   AIChatRequest,
   MaterialImportRequest,
   VariantGenerationRequest,
-  FillInBlankConversionRequest
+  FillInBlankConversionRequest,
+  LessonGenerationContext,
+  ComponentExpansionRequest
 } from '../../shared/types/ai.types'
+import type { LearningGoal } from '../../shared/types/lesson.types'
 
 /**
  * Register all IPC handlers for the main process
@@ -552,6 +559,64 @@ function registerDriveHandlers(): void {
       return driveService.deleteAssignment(assignmentId, sectionId)
     }
   )
+
+  // ============================================================
+  // Lesson Operations
+  // ============================================================
+
+  // List lessons for a unit
+  ipcMain.handle('drive:listLessons', async (_event, unitId: string) => {
+    return driveService.listLessons(unitId)
+  })
+
+  // Get a specific lesson
+  ipcMain.handle('drive:getLesson', async (_event, lessonId: string) => {
+    return driveService.getLesson(lessonId)
+  })
+
+  // Create a new lesson
+  ipcMain.handle('drive:createLesson', async (_event, input: CreateLessonInput) => {
+    return driveService.createLesson(input)
+  })
+
+  // Update a lesson
+  ipcMain.handle('drive:updateLesson', async (_event, input: UpdateLessonInput) => {
+    return driveService.updateLesson(input)
+  })
+
+  // Delete a lesson
+  ipcMain.handle('drive:deleteLesson', async (_event, lessonId: string, unitId: string) => {
+    return driveService.deleteLesson(lessonId, unitId)
+  })
+
+  // Reorder lessons
+  ipcMain.handle('drive:reorderLessons', async (_event, input: ReorderLessonsInput) => {
+    return driveService.reorderLessons(input)
+  })
+
+  // ============================================================
+  // Unit Materials Operations
+  // ============================================================
+
+  // List materials for a unit
+  ipcMain.handle('drive:listUnitMaterials', async (_event, unitId: string) => {
+    return driveService.listUnitMaterials(unitId)
+  })
+
+  // Upload a material to a unit
+  ipcMain.handle('drive:uploadUnitMaterial', async (_event, input: UploadUnitMaterialInput) => {
+    return driveService.uploadUnitMaterial(input)
+  })
+
+  // Delete a unit material
+  ipcMain.handle('drive:deleteUnitMaterial', async (_event, materialId: string) => {
+    return driveService.deleteUnitMaterial(materialId)
+  })
+
+  // Get extracted text from all unit materials (for AI context)
+  ipcMain.handle('drive:getUnitMaterialsContext', async (_event, unitId: string) => {
+    return driveService.getUnitMaterialsContext(unitId)
+  })
 }
 
 function registerLLMHandlers(): void {
@@ -841,6 +906,70 @@ function registerAIHandlers(): void {
     'ai:convertFillInBlank',
     async (_event, request: FillInBlankConversionRequest) => {
       return aiService.convertFillInBlankToMultipleChoice(request)
+    }
+  )
+
+  // ============================================================
+  // Phase 3: Lesson Generation
+  // ============================================================
+
+  // Generate learning goals from standards
+  ipcMain.handle(
+    'ai:generateLessonGoals',
+    async (_event, context: LessonGenerationContext) => {
+      try {
+        const standardsResult = await driveService.getAllStandardsForCourse(context.courseId)
+        if (!standardsResult.success) {
+          return { success: false, error: 'Failed to load standards' }
+        }
+
+        const standardsText = buildStandardsText(standardsResult.data, context.standardRefs)
+
+        return aiService.generateLearningGoals(context, standardsText)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Goals generation failed'
+        return { success: false, error: message }
+      }
+    }
+  )
+
+  // Generate lesson structure from goals
+  ipcMain.handle(
+    'ai:generateLessonStructure',
+    async (_event, context: LessonGenerationContext, goals: LearningGoal[]) => {
+      try {
+        const standardsResult = await driveService.getAllStandardsForCourse(context.courseId)
+        if (!standardsResult.success) {
+          return { success: false, error: 'Failed to load standards' }
+        }
+
+        const standardsText = buildStandardsText(standardsResult.data, context.standardRefs)
+
+        return aiService.generateLessonStructure(context, goals, standardsText)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Structure generation failed'
+        return { success: false, error: message }
+      }
+    }
+  )
+
+  // Expand a lesson component with details
+  ipcMain.handle(
+    'ai:expandLessonComponent',
+    async (_event, request: ComponentExpansionRequest) => {
+      try {
+        const standardsResult = await driveService.getAllStandardsForCourse(request.context.courseId)
+        if (!standardsResult.success) {
+          return { success: false, error: 'Failed to load standards' }
+        }
+
+        const standardsText = buildStandardsText(standardsResult.data, request.context.standardRefs)
+
+        return aiService.expandComponent(request, standardsText)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Component expansion failed'
+        return { success: false, error: message }
+      }
     }
   )
 }
