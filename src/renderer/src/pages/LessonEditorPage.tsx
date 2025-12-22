@@ -34,6 +34,9 @@ import { useLessonStore } from '../stores/lesson.store'
 import { useStandardsStore } from '../stores'
 import { ConfirmModal } from '../components/ui'
 import { LessonAIPanel } from '../components/lessons'
+import { MaterialGenerationModal, GeneratedMaterialCard } from '../components/materials'
+import type { GeneratedMaterial } from '../../../shared/types/material.types'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import type {
   CourseSummary,
   UnitSummary,
@@ -113,10 +116,18 @@ export function LessonEditorPage({
   const [newRepresentationText, setNewRepresentationText] = useState('')
   const [newExpressionText, setNewExpressionText] = useState('')
 
+  // Materials state
+  const [isMaterialModalOpen, setIsMaterialModalOpen] = useState(false)
+  const [generatedMaterials, setGeneratedMaterials] = useState<GeneratedMaterial[]>([])
+  const [imageGenerationAvailable, setImageGenerationAvailable] = useState(false)
+  const [downloadingMaterialId, setDownloadingMaterialId] = useState<string | null>(null)
+
   // Fetch full lesson details when component mounts
   useEffect(() => {
     getLesson(lessonSummary.id)
     fetchAllCollections(course.id)
+    // Check if image generation is available
+    window.electronAPI.invoke<boolean>('ai:supportsImageGeneration').then(setImageGenerationAvailable)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
   }, [lessonSummary.id, course.id])
 
@@ -391,6 +402,33 @@ export function LessonEditorPage({
       unitId: currentLesson.unitId,
       udlNotes: updatedNotes
     })
+  }
+
+  // Material handlers
+  const handleMaterialGenerated = (material: GeneratedMaterial): void => {
+    setGeneratedMaterials((prev) => [material, ...prev])
+  }
+
+  const handleMaterialDownload = async (material: GeneratedMaterial): Promise<void> => {
+    if (!material.pdfBuffer) return
+
+    setDownloadingMaterialId(material.id)
+    try {
+      const filename = `${material.name.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`
+      await window.electronAPI.invoke('file:saveWithDialog', {
+        data: material.pdfBuffer,
+        defaultFilename: filename,
+        filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+      })
+    } catch (err) {
+      console.error('Failed to download material:', err)
+    } finally {
+      setDownloadingMaterialId(null)
+    }
+  }
+
+  const handleMaterialDelete = (materialId: string): void => {
+    setGeneratedMaterials((prev) => prev.filter((m) => m.id !== materialId))
   }
 
   // Get all standards from all collections
@@ -1156,6 +1194,66 @@ export function LessonEditorPage({
               </AccordionDetails>
             </Accordion>
           </Box>
+
+          {/* Materials Section */}
+          <Box sx={{ mt: 4 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AutoAwesomeIcon sx={{ color: 'primary.main' }} />
+                <Typography variant="h6" fontWeight={600}>
+                  Generated Materials
+                </Typography>
+              </Box>
+              <Button
+                variant="contained"
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={() => setIsMaterialModalOpen(true)}
+              >
+                Generate Material
+              </Button>
+            </Box>
+
+            {generatedMaterials.length === 0 ? (
+              <Paper
+                variant="outlined"
+                sx={{
+                  p: 4,
+                  textAlign: 'center',
+                  bgcolor: 'action.hover',
+                  borderStyle: 'dashed'
+                }}
+              >
+                <AutoAwesomeIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+                <Typography variant="body1" color="text.secondary" gutterBottom>
+                  No materials generated yet
+                </Typography>
+                <Typography variant="body2" color="text.disabled" sx={{ mb: 2 }}>
+                  Generate worksheets, puzzles, vocabulary lists, and more from your lesson content
+                </Typography>
+                <Button
+                  variant="outlined"
+                  startIcon={<AddIcon />}
+                  onClick={() => setIsMaterialModalOpen(true)}
+                >
+                  Generate First Material
+                </Button>
+              </Paper>
+            ) : (
+              <Grid container spacing={2}>
+                {generatedMaterials.map((material) => (
+                  <Grid size={{ xs: 12, sm: 6 }} key={material.id}>
+                    <GeneratedMaterialCard
+                      material={material}
+                      onDownload={handleMaterialDownload}
+                      onDelete={handleMaterialDelete}
+                      isDownloading={downloadingMaterialId === material.id}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            )}
+          </Box>
           </Box>
         </Grid>
 
@@ -1188,6 +1286,20 @@ export function LessonEditorPage({
         variant="danger"
         isLoading={isDeleting}
       />
+
+      {/* Material Generation Modal */}
+      {currentLesson && (
+        <MaterialGenerationModal
+          isOpen={isMaterialModalOpen}
+          onClose={() => setIsMaterialModalOpen(false)}
+          onGenerated={handleMaterialGenerated}
+          lesson={currentLesson}
+          course={course}
+          unit={unit}
+          standards={allStandards}
+          imageGenerationAvailable={imageGenerationAvailable}
+        />
+      )}
     </Box>
   )
 }
