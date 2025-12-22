@@ -5,7 +5,12 @@
  * refinement, and conversational assistance.
  */
 
-import type { QuestionGenerationRequest, RefinementCommand } from '../../../shared/types/ai.types'
+import type {
+  QuestionGenerationRequest,
+  RefinementCommand,
+  MaterialImportRequest,
+  VariantGenerationRequest
+} from '../../../shared/types/ai.types'
 import type { MultipleChoiceQuestion } from '../../../shared/types/question.types'
 
 /**
@@ -33,7 +38,20 @@ GUIDELINES:
 
 When asked to generate questions, respond with a JSON array of questions.
 When asked to refine a question, respond with the refined question in JSON format.
-For other requests, respond conversationally with helpful suggestions.`
+For other requests, respond conversationally with helpful suggestions.`,
+
+  materialImport: `You are an expert at extracting assessment questions from educational documents. Your task is to identify any quiz, test, or assessment questions in the provided text and structure them into a standard format.
+
+You should:
+1. Identify questions even if they're embedded in other content
+2. Recognize multiple choice, true/false, and short answer formats
+3. Extract answer choices when present
+4. Note if the correct answer is indicated
+5. Assess your confidence in each extraction
+
+If the document contains study material rather than explicit questions, note this and suggest how the content could be converted to questions.`,
+
+  variantGeneration: `You are an expert in educational assessment and Universal Design for Learning (UDL). Your task is to create alternative versions of questions that maintain the same learning objective while adjusting for different student needs.`
 }
 
 /**
@@ -166,4 +184,127 @@ export function buildChatContextPrompt(
 
 When generating questions, use the JSON format specified in your instructions.
 When refining questions, maintain the JSON format with an explanation of changes.`
+}
+
+/**
+ * Build the prompt for extracting questions from imported material
+ */
+export function buildMaterialImportPrompt(request: MaterialImportRequest): string {
+  const countHint = request.expectedQuestionCount
+    ? `\nExpected question count: approximately ${request.expectedQuestionCount}`
+    : ''
+
+  return `Analyze this ${request.subject} document for grade ${request.gradeLevel} students and extract any assessment questions.
+${countHint}
+
+SOURCE FILE: ${request.sourceFileName}
+
+DOCUMENT CONTENT:
+${request.text}
+
+OUTPUT FORMAT:
+Return a JSON object with this structure:
+{
+  "questions": [
+    {
+      "text": "The question text",
+      "type": "multiple_choice" | "true_false" | "short_answer" | "unknown",
+      "choices": [
+        { "id": "a", "text": "Choice text", "isCorrect": true/false }
+      ],
+      "correctAnswer": "a" (if known),
+      "confidence": "high" | "medium" | "low",
+      "notes": "Any notes about this extraction"
+    }
+  ],
+  "summary": "Brief summary of what was found",
+  "nonQuestionContent": "Summary of any useful content that wasn't questions"
+}
+
+GUIDELINES:
+- Include ALL questions you find, even if you're unsure about format
+- For multiple choice, always include 4 choices (a, b, c, d) when possible
+- Mark confidence as "high" if the question and choices are clear
+- Mark confidence as "medium" if you had to infer something
+- Mark confidence as "low" if you're uncertain about the format or answer
+- If correct answers aren't marked, set isCorrect to false for all and note this
+- Extract question text exactly as written, only fix obvious typos
+
+Extract the questions now:`
+}
+
+/**
+ * Build the prompt for generating question variants
+ */
+export function buildVariantPrompt(request: VariantGenerationRequest): string {
+  const questionJson = JSON.stringify(
+    {
+      text: request.question.text,
+      choices: request.question.choices,
+      correctAnswer: request.question.correctAnswer,
+      standardRef: request.question.standardRef
+    },
+    null,
+    2
+  )
+
+  const variantPrompts: Record<typeof request.variantType, string> = {
+    simplified: `Create a SIMPLIFIED version of this question for students who need reading support.
+
+Guidelines:
+- Lower the reading level to approximately ${request.targetReadingLevel ?? 'elementary level'}
+- Use shorter sentences and simpler vocabulary
+- Keep the same concept being tested
+- Maintain the same correct answer
+- Simplify distractors without making them too obvious
+- The question should still be valid assessment`,
+
+    scaffolded: `Create a SCAFFOLDED version of this question with built-in support.
+
+Guidelines:
+- Add ${request.hintsToAdd ?? 1} hint(s) within the question stem
+- Hints should guide thinking without revealing the answer
+- Consider adding:
+  - Definition reminders
+  - Process hints ("First, consider...")
+  - Visual cues if applicable
+  - Reference to related concepts
+- Keep the same correct answer
+- The question should still assess the same standard`,
+
+    extended: `Create an EXTENDED version of this question for students who need more challenge.
+
+Guidelines:
+- Increase complexity through:
+  - Multi-step reasoning
+  - Application to new contexts
+  - Synthesis of multiple concepts
+  - More nuanced distractors
+${request.additionalComplexity ? `- Additional focus: ${request.additionalComplexity}` : ''}
+- The question should still align to the same standard
+- Keep it challenging but fair`
+  }
+
+  return `${variantPrompts[request.variantType]}
+
+ORIGINAL QUESTION:
+${questionJson}
+
+TARGET GRADE LEVEL: ${request.gradeLevel}
+
+OUTPUT FORMAT:
+Return a JSON object with:
+{
+  "text": "The modified question text",
+  "choices": [
+    { "id": "a", "text": "Choice text", "isCorrect": false },
+    { "id": "b", "text": "Choice text", "isCorrect": true },
+    { "id": "c", "text": "Choice text", "isCorrect": false },
+    { "id": "d", "text": "Choice text", "isCorrect": false }
+  ],
+  "correctAnswer": "b",
+  "explanation": "Description of what was changed and why"
+}
+
+Generate the ${request.variantType} variant now:`
 }

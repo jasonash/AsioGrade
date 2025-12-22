@@ -8,6 +8,7 @@
 import { dialog, BrowserWindow } from 'electron'
 import { readFile } from 'fs/promises'
 import https from 'https'
+import mammoth from 'mammoth'
 import type { ServiceResult } from '../../shared/types/common.types'
 
 // pdf-parse doesn't have proper ES module exports, use require
@@ -246,6 +247,40 @@ class ImportService {
   }
 
   /**
+   * Show native file dialog for selecting document files (PDF, DOCX, TXT)
+   * Used for importing existing assessments/materials
+   */
+  async openMaterialFileDialog(): Promise<ServiceResult<string | null>> {
+    try {
+      const focusedWindow = BrowserWindow.getFocusedWindow()
+
+      const dialogOptions: Electron.OpenDialogOptions = {
+        title: 'Select Material to Import',
+        properties: ['openFile'],
+        filters: [
+          { name: 'All Supported', extensions: ['pdf', 'docx', 'doc', 'txt'] },
+          { name: 'PDF Files', extensions: ['pdf'] },
+          { name: 'Word Documents', extensions: ['docx', 'doc'] },
+          { name: 'Text Files', extensions: ['txt'] }
+        ]
+      }
+
+      const result = focusedWindow
+        ? await dialog.showOpenDialog(focusedWindow, dialogOptions)
+        : await dialog.showOpenDialog(dialogOptions)
+
+      if (result.canceled || result.filePaths.length === 0) {
+        return { success: true, data: null }
+      }
+
+      return { success: true, data: result.filePaths[0] }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to open file dialog'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
    * Read text file contents
    */
   async readTextFile(filePath: string): Promise<ServiceResult<string>> {
@@ -279,6 +314,44 @@ class ImportService {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to extract text from PDF'
       return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Extract text from DOCX file
+   */
+  async readDocxText(filePath: string): Promise<ServiceResult<string>> {
+    try {
+      const dataBuffer = await readFile(filePath)
+      const result = await mammoth.extractRawText({ buffer: dataBuffer })
+
+      if (!result.value.trim()) {
+        return { success: false, error: 'No text content found in document' }
+      }
+
+      return { success: true, data: result.value }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to extract text from document'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Extract text from any supported file based on extension
+   */
+  async extractTextFromFile(filePath: string): Promise<ServiceResult<string>> {
+    const extension = filePath.toLowerCase().split('.').pop()
+
+    switch (extension) {
+      case 'pdf':
+        return this.readPdfText(filePath)
+      case 'docx':
+      case 'doc':
+        return this.readDocxText(filePath)
+      case 'txt':
+        return this.readTextFile(filePath)
+      default:
+        return { success: false, error: `Unsupported file type: .${extension}` }
     }
   }
 }

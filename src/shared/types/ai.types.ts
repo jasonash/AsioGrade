@@ -187,3 +187,107 @@ export interface AIAssistantState {
   pendingQuestions: GeneratedQuestion[] // Questions waiting for approval
   error: string | null
 }
+
+// ============================================================
+// Material Import Types (Phase 2)
+// ============================================================
+
+/**
+ * Request to extract questions from uploaded document text
+ */
+export interface MaterialImportRequest {
+  // Document content
+  text: string
+  sourceFileName: string
+
+  // Context for extraction
+  gradeLevel: string
+  subject: string
+
+  // Optional hints
+  expectedQuestionCount?: number
+}
+
+/**
+ * A question extracted from imported material
+ */
+export interface ExtractedQuestion {
+  id: string
+  text: string
+  type: 'multiple_choice' | 'true_false' | 'short_answer' | 'unknown'
+  choices?: { id: string; text: string; isCorrect?: boolean }[]
+  correctAnswer?: string
+  confidence: 'high' | 'medium' | 'low' // How confident AI is in the extraction
+  notes?: string // Any notes about the extraction (e.g., "correct answer not marked")
+}
+
+/**
+ * Result of material import extraction
+ */
+export interface MaterialImportResult {
+  questions: ExtractedQuestion[]
+  summary: string // Brief summary of what was found
+  nonQuestionContent?: string // Content that wasn't questions but might be useful
+  usage: LLMUsage
+}
+
+// ============================================================
+// Coverage Analysis Types (Phase 2)
+// ============================================================
+
+/**
+ * Analysis of how well an assessment covers standards
+ */
+export interface CoverageAnalysis {
+  standardsCovered: StandardCoverage[]
+  standardsUncovered: string[] // Standard refs with no questions
+  recommendations: string[] // Actionable suggestions
+  balance: 'good' | 'uneven' | 'poor'
+  totalQuestions: number
+  totalPoints: number
+}
+
+/**
+ * Coverage details for a single standard
+ */
+export interface StandardCoverage {
+  standardRef: string
+  questionCount: number
+  totalPoints: number
+  questionIds: string[]
+}
+
+// ============================================================
+// Variant Generation Types (Phase 2)
+// ============================================================
+
+export type VariantType = 'simplified' | 'scaffolded' | 'extended'
+
+/**
+ * Request to generate a variant of an existing question
+ */
+export interface VariantGenerationRequest {
+  question: MultipleChoiceQuestion
+  variantType: VariantType
+  gradeLevel: string
+
+  // For simplified
+  targetReadingLevel?: string // e.g., "5th grade"
+
+  // For scaffolded
+  hintsToAdd?: number
+
+  // For extended
+  additionalComplexity?: string
+}
+
+/**
+ * Result of variant generation
+ */
+export interface VariantGenerationResult {
+  original: MultipleChoiceQuestion
+  variant: MultipleChoiceQuestion
+  variantType: VariantType
+  explanation: string // What was changed
+  usage: LLMUsage
+}

@@ -35,7 +35,9 @@ import type { LLMRequest, LLMProviderType } from '../../shared/types/llm.types'
 import type {
   QuestionGenerationRequest,
   QuestionRefinementRequest,
-  AIChatRequest
+  AIChatRequest,
+  MaterialImportRequest,
+  VariantGenerationRequest
 } from '../../shared/types/ai.types'
 
 /**
@@ -635,6 +637,20 @@ function registerImportHandlers(): void {
   ipcMain.handle('import:readPdfText', async (_event, filePath: string) => {
     return importService.readPdfText(filePath)
   })
+
+  // ============================================================
+  // Material Import Operations (Phase 2)
+  // ============================================================
+
+  // Open file dialog for material import (PDF, DOCX, TXT)
+  ipcMain.handle('import:openMaterialFileDialog', async () => {
+    return importService.openMaterialFileDialog()
+  })
+
+  // Extract text from any supported file type
+  ipcMain.handle('import:extractTextFromFile', async (_event, filePath: string) => {
+    return importService.extractTextFromFile(filePath)
+  })
 }
 
 function registerPDFHandlers(): void {
@@ -798,6 +814,26 @@ function registerAIHandlers(): void {
   ipcMain.handle('ai:chat', async (_event, request: AIChatRequest) => {
     return aiService.chat(request)
   })
+
+  // ============================================================
+  // Phase 2: Material Import & Variants
+  // ============================================================
+
+  // Extract questions from imported material text
+  ipcMain.handle(
+    'ai:extractQuestionsFromMaterial',
+    async (_event, request: MaterialImportRequest) => {
+      return aiService.extractQuestionsFromMaterial(request)
+    }
+  )
+
+  // Generate a question variant (simplified, scaffolded, extended)
+  ipcMain.handle(
+    'ai:generateVariant',
+    async (_event, request: VariantGenerationRequest) => {
+      return aiService.generateVariant(request)
+    }
+  )
 }
 
 /**

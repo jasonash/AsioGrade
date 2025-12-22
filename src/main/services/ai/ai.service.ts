@@ -10,9 +10,16 @@ import {
   SYSTEM_PROMPTS,
   buildQuestionGenerationPrompt,
   buildRefinementPrompt,
-  buildChatContextPrompt
+  buildChatContextPrompt,
+  buildMaterialImportPrompt,
+  buildVariantPrompt
 } from './prompts'
-import { parseGeneratedQuestions, parseRefinedQuestion } from './parser'
+import {
+  parseGeneratedQuestions,
+  parseRefinedQuestion,
+  parseMaterialImport,
+  parseVariantQuestion
+} from './parser'
 import type { ServiceResult } from '../../../shared/types/common.types'
 import type { LLMUsage } from '../../../shared/types/llm.types'
 import type {
@@ -23,7 +30,11 @@ import type {
   AIChatRequest,
   AIChatResponse,
   AIMessage,
-  QuestionStreamEvent
+  QuestionStreamEvent,
+  MaterialImportRequest,
+  MaterialImportResult,
+  VariantGenerationRequest,
+  VariantGenerationResult
 } from '../../../shared/types/ai.types'
 
 class AIService {
@@ -250,6 +261,86 @@ class AIService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Chat request failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Extract questions from imported material text (Phase 2)
+   */
+  async extractQuestionsFromMaterial(
+    request: MaterialImportRequest
+  ): Promise<ServiceResult<MaterialImportResult>> {
+    try {
+      const prompt = buildMaterialImportPrompt(request)
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: SYSTEM_PROMPTS.materialImport,
+        temperature: 0.2, // Lower temperature for extraction accuracy
+        maxTokens: 4000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseMaterialImport(result.data.content, result.data.usage)
+
+      if (!parseResult.success || !parseResult.result) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse extracted questions' }
+      }
+
+      return { success: true, data: parseResult.result }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Material import failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate a variant of a question (simplified, scaffolded, or extended) (Phase 2)
+   */
+  async generateVariant(
+    request: VariantGenerationRequest
+  ): Promise<ServiceResult<VariantGenerationResult>> {
+    try {
+      const prompt = buildVariantPrompt(request)
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: SYSTEM_PROMPTS.variantGeneration,
+        temperature: 0.4,
+        maxTokens: 2000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseVariantQuestion(
+        result.data.content,
+        request.question,
+        request.variantType,
+        result.data.model
+      )
+
+      if (!parseResult.success || !parseResult.question) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse variant question' }
+      }
+
+      return {
+        success: true,
+        data: {
+          original: request.question,
+          variant: parseResult.question,
+          variantType: request.variantType,
+          explanation: parseResult.explanation ?? '',
+          usage: result.data.usage
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Variant generation failed'
       return { success: false, error: message }
     }
   }

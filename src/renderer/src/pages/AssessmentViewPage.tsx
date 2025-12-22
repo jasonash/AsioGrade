@@ -370,7 +370,7 @@ export function AssessmentViewPage({
               subject={course.subject}
               unitStandards={unitStandards}
               otherStandards={otherStandards}
-              existingQuestionCount={currentAssessment.questions.length}
+              existingQuestions={(currentAssessment.questions as MultipleChoiceQuestion[]) ?? []}
               onQuestionsAccepted={handleQuestionsAccepted}
               onQuestionRefined={handleQuestionRefined}
             />

@@ -23,11 +23,14 @@ import AddIcon from '@mui/icons-material/Add'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import SmartToyIcon from '@mui/icons-material/SmartToy'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
 import { useAIStore } from '../../stores'
 import { GeneratedQuestionCard } from './GeneratedQuestionCard'
 import { QuestionGenerationModal } from './QuestionGenerationModal'
+import { MaterialImportModal } from './MaterialImportModal'
+import { CoverageAnalysis } from './CoverageAnalysis'
 import type { Standard, MultipleChoiceQuestion } from '../../../../shared/types'
-import type { AIAssessmentContext } from '../../../../shared/types/ai.types'
+import type { AIAssessmentContext, QuestionGenerationRequest } from '../../../../shared/types/ai.types'
 
 interface AIAssistantPanelProps {
   courseId: string
@@ -38,7 +41,7 @@ interface AIAssistantPanelProps {
   subject: string
   unitStandards: Standard[]
   otherStandards: Standard[]
-  existingQuestionCount: number
+  existingQuestions: MultipleChoiceQuestion[]
   selectedQuestion?: MultipleChoiceQuestion
   onQuestionsAccepted: (questions: MultipleChoiceQuestion[]) => void
   onQuestionRefined: (questionId: string, refined: MultipleChoiceQuestion) => void
@@ -53,7 +56,7 @@ export function AIAssistantPanel({
   subject,
   unitStandards,
   otherStandards,
-  existingQuestionCount,
+  existingQuestions,
   selectedQuestion,
   onQuestionsAccepted,
   onQuestionRefined
@@ -77,7 +80,11 @@ export function AIAssistantPanel({
   const [chatInput, setChatInput] = useState('')
   const [isExpanded, setIsExpanded] = useState(true)
   const [showGenerationModal, setShowGenerationModal] = useState(false)
+  const [showImportModal, setShowImportModal] = useState(false)
+  const [showCoverage, setShowCoverage] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const { generateQuestions } = useAIStore()
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -91,7 +98,23 @@ export function AIAssistantPanel({
     gradeLevel,
     subject,
     standardRefs: unitStandards.map((s) => s.code),
-    existingQuestionCount
+    existingQuestionCount: existingQuestions.length
+  }
+
+  // Handler for generating questions for uncovered standards
+  const handleGenerateMissing = async (standardRefs: string[]): Promise<void> => {
+    const request: QuestionGenerationRequest = {
+      courseId,
+      unitId,
+      assessmentId,
+      standardRefs,
+      questionCount: Math.min(standardRefs.length * 2, 10), // 2 per standard, max 10
+      questionTypes: ['multiple_choice'],
+      difficulty: 'mixed',
+      gradeLevel,
+      subject
+    }
+    await generateQuestions(request)
   }
 
   const handleSendMessage = async (): Promise<void> => {
@@ -177,7 +200,16 @@ export function AIAssistantPanel({
               onClick={() => setShowGenerationModal(true)}
               disabled={isGenerating || (unitStandards.length === 0 && otherStandards.length === 0)}
             >
-              Generate Questions
+              Generate
+            </Button>
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<UploadFileIcon />}
+              onClick={() => setShowImportModal(true)}
+              disabled={isGenerating}
+            >
+              Import
             </Button>
             {selectedQuestion && (
               <Button
@@ -186,11 +218,42 @@ export function AIAssistantPanel({
                 startIcon={<AutoFixHighIcon />}
                 disabled={isGenerating}
               >
-                Improve Selected
+                Improve
               </Button>
             )}
           </Box>
         </Box>
+
+        {/* Coverage Analysis (Collapsible) */}
+        {unitStandards.length > 0 && (
+          <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+            <Box
+              sx={{
+                p: 2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer'
+              }}
+              onClick={() => setShowCoverage(!showCoverage)}
+            >
+              <Typography variant="subtitle2">Standards Coverage</Typography>
+              <IconButton size="small">
+                {showCoverage ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              </IconButton>
+            </Box>
+            <Collapse in={showCoverage}>
+              <Box sx={{ px: 2, pb: 2 }}>
+                <CoverageAnalysis
+                  standards={unitStandards}
+                  questions={existingQuestions}
+                  onGenerateMissing={handleGenerateMissing}
+                  isGenerating={isGenerating}
+                />
+              </Box>
+            </Collapse>
+          </Box>
+        )}
 
         {/* Error display */}
         {error && (
@@ -321,6 +384,15 @@ export function AIAssistantPanel({
         subject={subject}
         unitStandards={unitStandards}
         otherStandards={otherStandards}
+      />
+
+      {/* Material Import Modal */}
+      <MaterialImportModal
+        isOpen={showImportModal}
+        onClose={() => setShowImportModal(false)}
+        gradeLevel={gradeLevel}
+        subject={subject}
+        onQuestionsImported={onQuestionsAccepted}
       />
     </Paper>
   )

@@ -89,12 +89,16 @@ const validInvokeChannels = [
   'ai:generateQuestionsStream',
   'ai:refineQuestion',
   'ai:chat',
+  'ai:extractQuestionsFromMaterial',
+  'ai:generateVariant',
 
   // Import utilities
   'import:fetchUrl',
   'import:openFileDialog',
   'import:readTextFile',
   'import:readPdfText',
+  'import:openMaterialFileDialog',
+  'import:extractTextFromFile',
 
   // PDF
   'pdf:parseScantron',
