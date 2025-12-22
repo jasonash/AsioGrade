@@ -49,6 +49,7 @@ import type {
   ComponentExpansionRequest
 } from '../../shared/types/ai.types'
 import type { LearningGoal } from '../../shared/types/lesson.types'
+import type { MaterialGenerationRequest, GeneratedMaterial } from '../../shared/types/material.types'
 
 /**
  * Register all IPC handlers for the main process
@@ -78,6 +79,9 @@ export function registerIpcHandlers(): void {
 
   // AI handlers
   registerAIHandlers()
+
+  // Material handlers
+  registerMaterialHandlers()
 
   // File handlers
   registerFileHandlers()
@@ -1018,6 +1022,54 @@ function registerAIHandlers(): void {
         return aiService.expandComponent(request, standardsText)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Component expansion failed'
+        return { success: false, error: message }
+      }
+    }
+  )
+
+  // ============================================================
+  // Phase 5: Material Generation
+  // ============================================================
+
+  // Generate teaching material (worksheet, puzzle, vocabulary, etc.)
+  ipcMain.handle(
+    'ai:generateMaterial',
+    async (_event, request: MaterialGenerationRequest, standardsText: string) => {
+      try {
+        return aiService.generateMaterial(request, standardsText)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Material generation failed'
+        return { success: false, error: message }
+      }
+    }
+  )
+
+  // Check if image generation is available
+  ipcMain.handle('ai:supportsImageGeneration', async () => {
+    return llmService.supportsImageGeneration()
+  })
+}
+
+function registerMaterialHandlers(): void {
+  // ============================================================
+  // Material PDF Generation
+  // ============================================================
+
+  // Generate PDF for a material
+  ipcMain.handle(
+    'material:generatePDF',
+    async (_event, material: GeneratedMaterial, courseName?: string, unitName?: string) => {
+      try {
+        const result = await pdfService.generateMaterialPDF(material, courseName, unitName)
+        if (result.success && result.pdfBuffer) {
+          return {
+            success: true,
+            pdfBuffer: result.pdfBuffer.toString('base64')
+          }
+        }
+        return { success: false, error: result.error ?? 'PDF generation failed' }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'PDF generation failed'
         return { success: false, error: message }
       }
     }

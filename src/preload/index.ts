@@ -112,6 +112,13 @@ const validInvokeChannels = [
   'ai:generateLessonStructure',
   'ai:expandLessonComponent',
 
+  // AI Material Generation
+  'ai:generateMaterial',
+  'ai:supportsImageGeneration',
+
+  // Material PDF Generation
+  'material:generatePDF',
+
   // Import utilities
   'import:fetchUrl',
   'import:openFileDialog',
