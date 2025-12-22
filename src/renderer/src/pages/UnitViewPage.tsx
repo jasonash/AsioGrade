@@ -15,12 +15,18 @@ import AddIcon from '@mui/icons-material/Add'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import AssignmentIcon from '@mui/icons-material/Assignment'
+import IconButton from '@mui/material/IconButton'
+import FolderIcon from '@mui/icons-material/Folder'
+import UploadFileIcon from '@mui/icons-material/UploadFile'
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
+import ArticleIcon from '@mui/icons-material/Article'
+import DescriptionIcon from '@mui/icons-material/Description'
 import { useUnitStore, useStandardsStore, useAssessmentStore } from '../stores'
 import { useLessonStore } from '../stores/lesson.store'
 import { ConfirmModal } from '../components/ui'
 import { UnitEditModal } from '../components/units'
 import { AssessmentCard, AssessmentCreationModal } from '../components/assessments'
-import { LessonCard, LessonCreationModal } from '../components/lessons'
+import { LessonCard, LessonCreationModal, MaterialUploadModal } from '../components/lessons'
 import type { CourseSummary, UnitSummary, AssessmentSummary, LessonSummary, Standard, StandardDomain, Standards } from '../../../shared/types'
 
 interface UnitViewPageProps {
@@ -36,20 +42,31 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessm
   const { currentUnit, loading, error, getUnit, deleteUnit, clearError } = useUnitStore()
   const { allCollections, fetchAllCollections } = useStandardsStore()
   const { assessments, fetchAssessments, loading: assessmentsLoading } = useAssessmentStore()
-  const { lessons, fetchLessons, loading: lessonsLoading } = useLessonStore()
+  const {
+    lessons,
+    fetchLessons,
+    loading: lessonsLoading,
+    materials,
+    fetchMaterials,
+    deleteMaterial,
+    materialsLoading
+  } = useLessonStore()
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isCreateAssessmentModalOpen, setIsCreateAssessmentModalOpen] = useState(false)
   const [isCreateLessonModalOpen, setIsCreateLessonModalOpen] = useState(false)
+  const [isUploadMaterialModalOpen, setIsUploadMaterialModalOpen] = useState(false)
+  const [deletingMaterialId, setDeletingMaterialId] = useState<string | null>(null)
 
-  // Fetch full unit details, standards, assessments, and lessons when component mounts
+  // Fetch full unit details, standards, assessments, lessons, and materials when component mounts
   useEffect(() => {
     getUnit(course.id, unitSummary.id)
     fetchAllCollections(course.id)
     fetchAssessments(unitSummary.id)
     fetchLessons(unitSummary.id)
+    fetchMaterials(unitSummary.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
   }, [course.id, unitSummary.id])
 
@@ -61,6 +78,25 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessm
     if (success) {
       setIsDeleteModalOpen(false)
       onDeleted()
+    }
+  }
+
+  const handleDeleteMaterial = async (materialId: string): Promise<void> => {
+    setDeletingMaterialId(materialId)
+    await deleteMaterial(materialId, unitSummary.id)
+    setDeletingMaterialId(null)
+  }
+
+  const getMaterialIcon = (type: string): ReactElement => {
+    switch (type) {
+      case 'pdf':
+        return <PictureAsPdfIcon sx={{ color: 'error.main' }} />
+      case 'docx':
+        return <ArticleIcon sx={{ color: 'info.main' }} />
+      case 'txt':
+        return <DescriptionIcon sx={{ color: 'text.secondary' }} />
+      default:
+        return <DescriptionIcon sx={{ color: 'text.disabled' }} />
     }
   }
 
@@ -267,6 +303,92 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessm
 
       <Divider />
 
+      {/* Materials Section */}
+      <Box component="section">
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" fontWeight={600}>
+            Teaching Materials
+          </Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<UploadFileIcon />}
+            onClick={() => setIsUploadMaterialModalOpen(true)}
+          >
+            Upload Material
+          </Button>
+        </Box>
+
+        {materialsLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+            <CircularProgress size={32} />
+          </Box>
+        ) : materials.length === 0 ? (
+          <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
+            <FolderIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+            <Typography fontWeight={500} gutterBottom>
+              No materials uploaded
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Upload slides, notes, or worksheets to provide context for AI-generated content.
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<UploadFileIcon />}
+              onClick={() => setIsUploadMaterialModalOpen(true)}
+            >
+              Upload Material
+            </Button>
+          </Paper>
+        ) : (
+          <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+            {materials.map((material, index) => (
+              <Box
+                key={material.id}
+                sx={{
+                  p: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  borderBottom: index < materials.length - 1 ? 1 : 0,
+                  borderColor: 'divider'
+                }}
+              >
+                {getMaterialIcon(material.type)}
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body1" fontWeight={500} noWrap>
+                    {material.name}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {material.type.toUpperCase()} • Uploaded{' '}
+                    {new Date(material.uploadedAt).toLocaleDateString()}
+                  </Typography>
+                </Box>
+                <IconButton
+                  size="small"
+                  color="error"
+                  onClick={() => handleDeleteMaterial(material.id)}
+                  disabled={deletingMaterialId === material.id}
+                >
+                  {deletingMaterialId === material.id ? (
+                    <CircularProgress size={20} />
+                  ) : (
+                    <DeleteIcon />
+                  )}
+                </IconButton>
+              </Box>
+            ))}
+          </Paper>
+        )}
+
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+          Materials are used as context for AI-generated questions and lessons.
+        </Typography>
+      </Box>
+
+      <Divider />
+
       {/* Lessons Section */}
       <Box component="section">
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
@@ -452,6 +574,19 @@ export function UnitViewPage({ course, unitSummary, onBack, onDeleted, onAssessm
             updatedAt: lesson.updatedAt
           }
           onLessonSelect?.(summary)
+        }}
+      />
+
+      {/* Material Upload Modal */}
+      <MaterialUploadModal
+        isOpen={isUploadMaterialModalOpen}
+        onClose={() => setIsUploadMaterialModalOpen(false)}
+        courseId={course.id}
+        unitId={unitSummary.id}
+        unitName={unitSummary.name}
+        onSuccess={() => {
+          // Refresh materials list is handled in the modal via store
+          setIsUploadMaterialModalOpen(false)
         }}
       />
     </Box>

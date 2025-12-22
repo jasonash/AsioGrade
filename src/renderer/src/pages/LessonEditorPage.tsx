@@ -10,6 +10,13 @@ import Chip from '@mui/material/Chip'
 import Divider from '@mui/material/Divider'
 import IconButton from '@mui/material/IconButton'
 import TextField from '@mui/material/TextField'
+import Accordion from '@mui/material/Accordion'
+import AccordionSummary from '@mui/material/AccordionSummary'
+import AccordionDetails from '@mui/material/AccordionDetails'
+import List from '@mui/material/List'
+import ListItem from '@mui/material/ListItem'
+import ListItemText from '@mui/material/ListItemText'
+import ListItemSecondaryAction from '@mui/material/ListItemSecondaryAction'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -20,9 +27,12 @@ import ViewListIcon from '@mui/icons-material/ViewList'
 import SmartToyIcon from '@mui/icons-material/SmartToy'
 import AddIcon from '@mui/icons-material/Add'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import AccessibilityNewIcon from '@mui/icons-material/AccessibilityNew'
 import { useLessonStore } from '../stores/lesson.store'
-import { useStandardsStore, useUnitStore } from '../stores'
+import { useStandardsStore } from '../stores'
 import { ConfirmModal } from '../components/ui'
+import { LessonAIPanel } from '../components/lessons'
 import type {
   CourseSummary,
   UnitSummary,
@@ -31,7 +41,8 @@ import type {
   LessonComponent,
   LearningGoal,
   LessonComponentType,
-  Standard
+  Standard,
+  UDLNotes
 } from '../../../shared/types'
 import {
   COMPONENT_TYPE_LABELS,
@@ -79,7 +90,6 @@ export function LessonEditorPage({
     clearError
   } = useLessonStore()
   const { allCollections, fetchAllCollections } = useStandardsStore()
-  const { getUnit } = useUnitStore()
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -95,6 +105,11 @@ export function LessonEditorPage({
   const [editingGoalId, setEditingGoalId] = useState<string | null>(null)
   const [goalTextValue, setGoalTextValue] = useState('')
   const [newGoalText, setNewGoalText] = useState('')
+
+  // UDL editing
+  const [newEngagementText, setNewEngagementText] = useState('')
+  const [newRepresentationText, setNewRepresentationText] = useState('')
+  const [newExpressionText, setNewExpressionText] = useState('')
 
   // Fetch full lesson details when component mounts
   useEffect(() => {
@@ -240,6 +255,112 @@ export function LessonEditorPage({
       courseId: currentLesson.courseId,
       unitId: currentLesson.unitId,
       components: updatedComponents
+    })
+  }
+
+  // AI-generated content handlers
+  const handleAIGoalsGenerated = async (
+    goals: LearningGoal[],
+    successCriteria: string[]
+  ): Promise<void> => {
+    if (!currentLesson) return
+
+    // Merge with existing goals
+    const existingIds = new Set(currentLesson.learningGoals.map((g) => g.id))
+    const newGoals = goals.filter((g) => !existingIds.has(g.id))
+
+    await updateLesson({
+      id: currentLesson.id,
+      courseId: currentLesson.courseId,
+      unitId: currentLesson.unitId,
+      learningGoals: [...currentLesson.learningGoals, ...newGoals],
+      successCriteria: [...(currentLesson.successCriteria ?? []), ...successCriteria]
+    })
+  }
+
+  const handleAIStructureGenerated = async (components: LessonComponent[]): Promise<void> => {
+    if (!currentLesson) return
+
+    // Replace existing components with generated ones
+    // Ensure ordering is correct
+    const orderedComponents = components.map((c, index) => ({ ...c, order: index }))
+
+    await updateLesson({
+      id: currentLesson.id,
+      courseId: currentLesson.courseId,
+      unitId: currentLesson.unitId,
+      components: orderedComponents
+    })
+  }
+
+  const handleAIComponentExpanded = async (expandedComponent: LessonComponent): Promise<void> => {
+    if (!currentLesson) return
+
+    // Update the specific component with expanded content
+    const updatedComponents = currentLesson.components.map((c) =>
+      c.id === expandedComponent.id ? expandedComponent : c
+    )
+
+    await updateLesson({
+      id: currentLesson.id,
+      courseId: currentLesson.courseId,
+      unitId: currentLesson.unitId,
+      components: updatedComponents
+    })
+  }
+
+  // UDL Notes handlers
+  type UDLCategory = 'engagement' | 'representation' | 'expression'
+
+  const handleAddUDLNote = async (category: UDLCategory, text: string): Promise<void> => {
+    if (!currentLesson || !text.trim()) return
+
+    const currentNotes: UDLNotes = currentLesson.udlNotes ?? {
+      engagement: [],
+      representation: [],
+      expression: []
+    }
+
+    const updatedNotes: UDLNotes = {
+      ...currentNotes,
+      [category]: [...currentNotes[category], text.trim()]
+    }
+
+    await updateLesson({
+      id: currentLesson.id,
+      courseId: currentLesson.courseId,
+      unitId: currentLesson.unitId,
+      udlNotes: updatedNotes
+    })
+
+    // Clear the input
+    if (category === 'engagement') setNewEngagementText('')
+    else if (category === 'representation') setNewRepresentationText('')
+    else setNewExpressionText('')
+  }
+
+  const handleRemoveUDLNote = async (category: UDLCategory, index: number): Promise<void> => {
+    if (!currentLesson) return
+
+    const currentNotes: UDLNotes = currentLesson.udlNotes ?? {
+      engagement: [],
+      representation: [],
+      expression: []
+    }
+
+    const updatedCategory = [...currentNotes[category]]
+    updatedCategory.splice(index, 1)
+
+    const updatedNotes: UDLNotes = {
+      ...currentNotes,
+      [category]: updatedCategory
+    }
+
+    await updateLesson({
+      id: currentLesson.id,
+      courseId: currentLesson.courseId,
+      unitId: currentLesson.unitId,
+      udlNotes: updatedNotes
     })
   }
 
@@ -656,7 +777,7 @@ export function LessonEditorPage({
                 />
               )}
 
-              {currentLesson?.components.map((component, index) => (
+              {currentLesson?.components.map((component) => (
                 <Box
                   key={component.id}
                   sx={{ position: 'relative', mb: 2 }}
@@ -778,51 +899,245 @@ export function LessonEditorPage({
                   </Typography>
                 </Paper>
               )}
+
+          {/* UDL Section */}
+          <Box sx={{ mt: 4 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <AccessibilityNewIcon sx={{ color: 'primary.main' }} />
+              <Typography variant="h6" fontWeight={600}>
+                Universal Design for Learning (UDL)
+              </Typography>
+            </Box>
+
+            {/* Engagement */}
+            <Accordion defaultExpanded sx={{ mb: 1 }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography fontWeight={500}>Engagement</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                  (Multiple means of engagement)
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  How will you recruit interest, sustain effort, and support self-regulation?
+                </Typography>
+                {(currentLesson?.udlNotes?.engagement ?? []).length === 0 ? (
+                  <Typography variant="body2" color="text.disabled" sx={{ mb: 2 }}>
+                    No engagement strategies added yet.
+                  </Typography>
+                ) : (
+                  <List dense disablePadding sx={{ mb: 2 }}>
+                    {(currentLesson?.udlNotes?.engagement ?? []).map((note, index) => (
+                      <ListItem
+                        key={index}
+                        sx={{
+                          bgcolor: 'action.hover',
+                          borderRadius: 1,
+                          mb: 0.5
+                        }}
+                      >
+                        <ListItemText primary={note} />
+                        {currentLesson?.status === 'draft' && (
+                          <ListItemSecondaryAction>
+                            <IconButton
+                              edge="end"
+                              size="small"
+                              onClick={() => handleRemoveUDLNote('engagement', index)}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </ListItemSecondaryAction>
+                        )}
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+                {currentLesson?.status === 'draft' && (
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      placeholder="Add engagement strategy..."
+                      value={newEngagementText}
+                      onChange={(e) => setNewEngagementText(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          handleAddUDLNote('engagement', newEngagementText)
+                        }
+                      }}
+                    />
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => handleAddUDLNote('engagement', newEngagementText)}
+                      disabled={!newEngagementText.trim()}
+                    >
+                      Add
+                    </Button>
+                  </Box>
+                )}
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Representation */}
+            <Accordion sx={{ mb: 1 }}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography fontWeight={500}>Representation</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                  (Multiple means of representation)
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  How will you present information in different ways?
+                </Typography>
+                {(currentLesson?.udlNotes?.representation ?? []).length === 0 ? (
+                  <Typography variant="body2" color="text.disabled" sx={{ mb: 2 }}>
+                    No representation strategies added yet.
+                  </Typography>
+                ) : (
+                  <List dense disablePadding sx={{ mb: 2 }}>
+                    {(currentLesson?.udlNotes?.representation ?? []).map((note, index) => (
+                      <ListItem
+                        key={index}
+                        sx={{
+                          bgcolor: 'action.hover',
+                          borderRadius: 1,
+                          mb: 0.5
+                        }}
+                      >
+                        <ListItemText primary={note} />
+                        {currentLesson?.status === 'draft' && (
+                          <ListItemSecondaryAction>
+                            <IconButton
+                              edge="end"
+                              size="small"
+                              onClick={() => handleRemoveUDLNote('representation', index)}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </ListItemSecondaryAction>
+                        )}
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+                {currentLesson?.status === 'draft' && (
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      placeholder="Add representation strategy..."
+                      value={newRepresentationText}
+                      onChange={(e) => setNewRepresentationText(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          handleAddUDLNote('representation', newRepresentationText)
+                        }
+                      }}
+                    />
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => handleAddUDLNote('representation', newRepresentationText)}
+                      disabled={!newRepresentationText.trim()}
+                    >
+                      Add
+                    </Button>
+                  </Box>
+                )}
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Expression */}
+            <Accordion>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography fontWeight={500}>Action & Expression</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                  (Multiple means of action/expression)
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  How will you allow students to demonstrate their learning?
+                </Typography>
+                {(currentLesson?.udlNotes?.expression ?? []).length === 0 ? (
+                  <Typography variant="body2" color="text.disabled" sx={{ mb: 2 }}>
+                    No expression strategies added yet.
+                  </Typography>
+                ) : (
+                  <List dense disablePadding sx={{ mb: 2 }}>
+                    {(currentLesson?.udlNotes?.expression ?? []).map((note, index) => (
+                      <ListItem
+                        key={index}
+                        sx={{
+                          bgcolor: 'action.hover',
+                          borderRadius: 1,
+                          mb: 0.5
+                        }}
+                      >
+                        <ListItemText primary={note} />
+                        {currentLesson?.status === 'draft' && (
+                          <ListItemSecondaryAction>
+                            <IconButton
+                              edge="end"
+                              size="small"
+                              onClick={() => handleRemoveUDLNote('expression', index)}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </ListItemSecondaryAction>
+                        )}
+                      </ListItem>
+                    ))}
+                  </List>
+                )}
+                {currentLesson?.status === 'draft' && (
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <TextField
+                      size="small"
+                      fullWidth
+                      placeholder="Add expression strategy..."
+                      value={newExpressionText}
+                      onChange={(e) => setNewExpressionText(e.target.value)}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter') {
+                          handleAddUDLNote('expression', newExpressionText)
+                        }
+                      }}
+                    />
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => handleAddUDLNote('expression', newExpressionText)}
+                      disabled={!newExpressionText.trim()}
+                    >
+                      Add
+                    </Button>
+                  </Box>
+                )}
+              </AccordionDetails>
+            </Accordion>
+          </Box>
           </Box>
         </Grid>
 
         {/* Right column - AI Assistant (for draft lessons) */}
         {currentLesson?.status === 'draft' && (
           <Grid size={{ xs: 12, md: 4 }}>
-            <Paper variant="outlined" sx={{ p: 2, position: 'sticky', top: 16 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <SmartToyIcon sx={{ color: 'primary.main' }} />
-                <Typography variant="h6" fontWeight={600}>
-                  AI Assistant
-                </Typography>
-              </Box>
-
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                AI-powered lesson planning features coming soon. The AI will help you:
-              </Typography>
-
-              <Box component="ul" sx={{ pl: 2, m: 0 }}>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Generate learning goals from standards
-                </Typography>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Create lesson structure and flow
-                </Typography>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Expand component details
-                </Typography>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Suggest differentiation strategies
-                </Typography>
-              </Box>
-
-              <Divider sx={{ my: 2 }} />
-
-              <Typography variant="body2" color="text.secondary">
-                Course: {course.name}
-                <br />
-                Unit: {unit.name}
-                <br />
-                Grade: {course.gradeLevel}
-                <br />
-                Subject: {course.subject}
-              </Typography>
-            </Paper>
+            <Box sx={{ position: 'sticky', top: 16 }}>
+              <LessonAIPanel
+                course={course}
+                unit={unit}
+                lesson={currentLesson}
+                unitStandards={allStandards.filter((s) =>
+                  currentLesson.standardRefs?.includes(s.code) ?? false
+                )}
+                onGoalsGenerated={handleAIGoalsGenerated}
+                onStructureGenerated={handleAIStructureGenerated}
+                onComponentExpanded={handleAIComponentExpanded}
+              />
+            </Box>
           </Grid>
         )}
       </Grid>
