@@ -1,4 +1,6 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { writeFile } from 'fs/promises'
+import path from 'path'
 import { storageService } from '../services/storage.service'
 import { authService } from '../services/auth.service'
 import { driveService } from '../services/drive.service'
@@ -76,6 +78,9 @@ export function registerIpcHandlers(): void {
 
   // AI handlers
   registerAIHandlers()
+
+  // File handlers
+  registerFileHandlers()
 }
 
 function registerAuthHandlers(): void {
@@ -784,6 +789,51 @@ function registerPDFHandlers(): void {
       return { success: false, error: message }
     }
   })
+
+  // Generate lesson plan PDF
+  ipcMain.handle(
+    'pdf:generateLessonPlan',
+    async (
+      _event,
+      lessonId: string,
+      courseName: string,
+      unitName: string
+    ) => {
+      try {
+        // Get the full lesson
+        const lessonResult = await driveService.getLesson(lessonId)
+        if (!lessonResult.success) {
+          return { success: false, error: lessonResult.error ?? 'Lesson not found' }
+        }
+        if (!lessonResult.data) {
+          return { success: false, error: 'Lesson not found' }
+        }
+
+        // Generate PDF
+        const result = await pdfService.generateLessonPDF(
+          lessonResult.data,
+          courseName,
+          unitName
+        )
+
+        // Convert Buffer to base64 for IPC transfer
+        if (result.success && result.pdfBuffer) {
+          return {
+            success: true,
+            data: {
+              pdfBase64: result.pdfBuffer.toString('base64'),
+              filename: `${lessonResult.data.title.replace(/[^a-zA-Z0-9]/g, '_')}_lesson_plan.pdf`
+            }
+          }
+        }
+
+        return { success: false, error: result.error ?? 'Failed to generate PDF' }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to generate lesson PDF'
+        return { success: false, error: message }
+      }
+    }
+  )
 }
 
 function registerGradeHandlers(): void {
@@ -968,6 +1018,56 @@ function registerAIHandlers(): void {
         return aiService.expandComponent(request, standardsText)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Component expansion failed'
+        return { success: false, error: message }
+      }
+    }
+  )
+}
+
+function registerFileHandlers(): void {
+  // ============================================================
+  // File Save Operations (with remembered directory)
+  // ============================================================
+
+  // Save file with dialog - remembers last directory
+  ipcMain.handle(
+    'file:saveWithDialog',
+    async (
+      _event,
+      options: {
+        data: string // base64 encoded data
+        defaultFilename: string
+        filters: { name: string; extensions: string[] }[]
+      }
+    ) => {
+      try {
+        const lastDir = storageService.getLastSaveDirectory()
+
+        const result = await dialog.showSaveDialog({
+          defaultPath: lastDir
+            ? path.join(lastDir, options.defaultFilename)
+            : options.defaultFilename,
+          filters: options.filters
+        })
+
+        if (result.canceled || !result.filePath) {
+          return { success: false, canceled: true }
+        }
+
+        // Convert base64 to buffer and write
+        const buffer = Buffer.from(options.data, 'base64')
+        await writeFile(result.filePath, buffer)
+
+        // Remember the directory for next time
+        const savedDir = path.dirname(result.filePath)
+        storageService.setLastSaveDirectory(savedDir)
+
+        return {
+          success: true,
+          filePath: result.filePath
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to save file'
         return { success: false, error: message }
       }
     }

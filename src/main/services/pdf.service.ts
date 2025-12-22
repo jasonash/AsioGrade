@@ -10,8 +10,10 @@ import type {
   ScantronGenerationResult,
   ScantronQRData,
   ScantronStudentInfo,
-  ScantronOptions
+  ScantronOptions,
+  Lesson
 } from '../../shared/types'
+import { COMPONENT_TYPE_LABELS } from '../../shared/types/lesson.types'
 
 // US Letter dimensions in points (72 dpi)
 const LETTER_WIDTH = 612
@@ -397,6 +399,238 @@ class PDFService {
           .stroke('#cccccc')
       }
     }
+  }
+
+  /**
+   * Generate a lesson plan PDF
+   */
+  async generateLessonPDF(
+    lesson: Lesson,
+    courseName: string,
+    unitName: string
+  ): Promise<{ success: boolean; pdfBuffer?: Buffer; error?: string }> {
+    try {
+      const doc = new PDFDocument({
+        size: 'LETTER',
+        margin: 50
+      })
+
+      const chunks: Buffer[] = []
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk))
+
+      // Title and header
+      this.drawLessonHeader(doc, lesson, courseName, unitName)
+
+      // Learning Goals section
+      if (lesson.learningGoals.length > 0) {
+        this.drawLessonSection(doc, 'Learning Goals')
+        for (const goal of lesson.learningGoals) {
+          doc.font('Helvetica').fontSize(10)
+          doc.text(`• ${goal.text}`, 60, doc.y, { width: LETTER_WIDTH - 120 })
+          doc.moveDown(0.3)
+        }
+        doc.moveDown(0.5)
+      }
+
+      // Success Criteria section
+      if (lesson.successCriteria && lesson.successCriteria.length > 0) {
+        this.drawLessonSection(doc, 'Success Criteria')
+        for (const criteria of lesson.successCriteria) {
+          doc.font('Helvetica').fontSize(10)
+          doc.text(`• ${criteria}`, 60, doc.y, { width: LETTER_WIDTH - 120 })
+          doc.moveDown(0.3)
+        }
+        doc.moveDown(0.5)
+      }
+
+      // Lesson Flow section
+      if (lesson.components.length > 0) {
+        this.drawLessonSection(doc, 'Lesson Flow')
+
+        let totalTime = 0
+        for (const component of lesson.components) {
+          // Check if we need a new page
+          if (doc.y > LETTER_HEIGHT - 150) {
+            doc.addPage()
+          }
+
+          const label = COMPONENT_TYPE_LABELS[component.type]
+
+          // Component header row
+          doc.font('Helvetica-Bold').fontSize(11)
+          doc.text(
+            `${component.title} (${label}) - ${component.estimatedMinutes} min`,
+            60,
+            doc.y,
+            { width: LETTER_WIDTH - 120 }
+          )
+          doc.moveDown(0.3)
+
+          // Description
+          if (component.description) {
+            doc.font('Helvetica').fontSize(10)
+            doc.text(component.description, 70, doc.y, { width: LETTER_WIDTH - 130 })
+            doc.moveDown(0.3)
+          }
+
+          // Teacher Notes
+          if (component.teacherNotes) {
+            doc.font('Helvetica-Oblique').fontSize(9)
+            doc.fillColor('#666666')
+            doc.text(`Teacher Notes: ${component.teacherNotes}`, 70, doc.y, {
+              width: LETTER_WIDTH - 130
+            })
+            doc.fillColor('#000000')
+            doc.moveDown(0.3)
+          }
+
+          // Student Instructions
+          if (component.studentInstructions) {
+            doc.font('Helvetica').fontSize(9)
+            doc.fillColor('#333333')
+            doc.text(`Student Instructions: ${component.studentInstructions}`, 70, doc.y, {
+              width: LETTER_WIDTH - 130
+            })
+            doc.fillColor('#000000')
+            doc.moveDown(0.3)
+          }
+
+          totalTime += component.estimatedMinutes
+          doc.moveDown(0.5)
+        }
+
+        // Total time
+        doc.font('Helvetica-Bold').fontSize(10)
+        doc.text(`Total Time: ${totalTime} minutes`, 60, doc.y)
+        doc.moveDown(1)
+      }
+
+      // UDL Notes section
+      if (lesson.udlNotes) {
+        const hasUDLContent =
+          (lesson.udlNotes.engagement?.length ?? 0) > 0 ||
+          (lesson.udlNotes.representation?.length ?? 0) > 0 ||
+          (lesson.udlNotes.expression?.length ?? 0) > 0
+
+        if (hasUDLContent) {
+          // Check if we need a new page
+          if (doc.y > LETTER_HEIGHT - 200) {
+            doc.addPage()
+          }
+
+          this.drawLessonSection(doc, 'Universal Design for Learning (UDL)')
+
+          if (lesson.udlNotes.engagement && lesson.udlNotes.engagement.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10)
+            doc.text('Engagement:', 60, doc.y)
+            doc.moveDown(0.2)
+            doc.font('Helvetica').fontSize(9)
+            for (const note of lesson.udlNotes.engagement) {
+              doc.text(`• ${note}`, 70, doc.y, { width: LETTER_WIDTH - 130 })
+              doc.moveDown(0.2)
+            }
+            doc.moveDown(0.3)
+          }
+
+          if (lesson.udlNotes.representation && lesson.udlNotes.representation.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10)
+            doc.text('Representation:', 60, doc.y)
+            doc.moveDown(0.2)
+            doc.font('Helvetica').fontSize(9)
+            for (const note of lesson.udlNotes.representation) {
+              doc.text(`• ${note}`, 70, doc.y, { width: LETTER_WIDTH - 130 })
+              doc.moveDown(0.2)
+            }
+            doc.moveDown(0.3)
+          }
+
+          if (lesson.udlNotes.expression && lesson.udlNotes.expression.length > 0) {
+            doc.font('Helvetica-Bold').fontSize(10)
+            doc.text('Action & Expression:', 60, doc.y)
+            doc.moveDown(0.2)
+            doc.font('Helvetica').fontSize(9)
+            for (const note of lesson.udlNotes.expression) {
+              doc.text(`• ${note}`, 70, doc.y, { width: LETTER_WIDTH - 130 })
+              doc.moveDown(0.2)
+            }
+          }
+        }
+      }
+
+      doc.end()
+
+      const pdfBuffer = await new Promise<Buffer>((resolve) => {
+        doc.on('end', () => {
+          resolve(Buffer.concat(chunks))
+        })
+      })
+
+      return { success: true, pdfBuffer }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate lesson PDF'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Draw the lesson header
+   */
+  private drawLessonHeader(
+    doc: PDFKit.PDFDocument,
+    lesson: Lesson,
+    courseName: string,
+    unitName: string
+  ): void {
+    // Title
+    doc.font('Helvetica-Bold').fontSize(18)
+    doc.text(lesson.title, 50, 50, { width: LETTER_WIDTH - 100, align: 'center' })
+    doc.moveDown(0.5)
+
+    // Subtitle with course and unit
+    doc.font('Helvetica').fontSize(11)
+    doc.fillColor('#666666')
+    doc.text(`${courseName} | ${unitName}`, { align: 'center' })
+    doc.fillColor('#000000')
+    doc.moveDown(0.3)
+
+    // Description if present
+    if (lesson.description) {
+      doc.font('Helvetica-Oblique').fontSize(10)
+      doc.text(lesson.description, 50, doc.y, {
+        width: LETTER_WIDTH - 100,
+        align: 'center'
+      })
+      doc.moveDown(0.5)
+    }
+
+    // Stats row
+    const totalMinutes = lesson.components.reduce((sum, c) => sum + c.estimatedMinutes, 0)
+    doc.font('Helvetica').fontSize(9)
+    doc.fillColor('#666666')
+    doc.text(
+      `Duration: ${totalMinutes} min | ${lesson.learningGoals.length} Learning Goals | ${lesson.components.length} Components`,
+      { align: 'center' }
+    )
+    doc.fillColor('#000000')
+    doc.moveDown(1)
+
+    // Divider
+    doc
+      .moveTo(50, doc.y)
+      .lineTo(LETTER_WIDTH - 50, doc.y)
+      .stroke('#cccccc')
+    doc.moveDown(1)
+  }
+
+  /**
+   * Draw a section header
+   */
+  private drawLessonSection(doc: PDFKit.PDFDocument, title: string): void {
+    doc.font('Helvetica-Bold').fontSize(13)
+    doc.fillColor('#333333')
+    doc.text(title, 50, doc.y)
+    doc.fillColor('#000000')
+    doc.moveDown(0.5)
   }
 }
 

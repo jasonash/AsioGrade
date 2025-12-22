@@ -83,6 +83,9 @@ interface StoreSchema {
     y?: number
     isMaximized: boolean
   }
+
+  // Last directory used for file saves/exports
+  lastSaveDirectory: string | null
 }
 
 // Default values
@@ -120,7 +123,8 @@ const defaults: StoreSchema = {
     width: 1200,
     height: 800,
     isMaximized: false
-  }
+  },
+  lastSaveDirectory: null
 }
 
 class StorageService {
@@ -279,6 +283,15 @@ class StorageService {
     const metadata = this.store.get('cacheMetadata')
     metadata[key] = data
     this.store.set('cacheMetadata', metadata)
+  }
+
+  // Last save directory for file dialogs
+  getLastSaveDirectory(): string | null {
+    return this.store.get('lastSaveDirectory')
+  }
+
+  setLastSaveDirectory(directory: string | null): void {
+    this.store.set('lastSaveDirectory', directory)
   }
 
   // Clear all data (for logout/reset)

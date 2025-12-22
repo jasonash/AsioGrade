@@ -57,20 +57,20 @@ export function CSVImportModal({
     clearError()
   }, [clearError])
 
-  const downloadTemplate = useCallback(() => {
+  const downloadTemplate = useCallback(async () => {
     const templateContent = `firstName,lastName,email,studentNumber
 John,Smith,john.smith@school.edu,12345
 Jane,Doe,jane.doe@school.edu,12346
 `
-    const blob = new Blob([templateContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'student_roster_template.csv'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    // Convert to base64 for the save dialog
+    const base64Data = btoa(templateContent)
+
+    // Use save dialog (remembers last directory)
+    await window.electronAPI.invoke('file:saveWithDialog', {
+      data: base64Data,
+      defaultFilename: 'student_roster_template.csv',
+      filters: [{ name: 'CSV Files', extensions: ['csv'] }]
+    })
   }, [])
 
   const parseCSV = useCallback((content: string): ParsedStudent[] => {

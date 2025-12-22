@@ -283,9 +283,9 @@ export function LessonAIPanel({
               Standards to Use ({selectedStandards.length} selected)
             </Typography>
             <List dense disablePadding sx={{ maxHeight: 150, overflow: 'auto' }}>
-              {unitStandards.map((standard) => (
+              {unitStandards.map((standard, index) => (
                 <ListItem
-                  key={standard.code}
+                  key={`${standard.code}-${index}`}
                   dense
                   disablePadding
                   onClick={() => toggleStandard(standard.code)}

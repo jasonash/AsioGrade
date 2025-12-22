@@ -124,6 +124,10 @@ const validInvokeChannels = [
   'pdf:parseScantron',
   'pdf:generateScantron',
   'pdf:exportTest',
+  'pdf:generateLessonPlan',
+
+  // File operations
+  'file:saveWithDialog',
 
   // Grading
   'grade:processScantron',

@@ -88,23 +88,17 @@ export function ScantronGenerationModal({
         studentCount: result.studentCount,
         pageCount: result.pageCount
       })
-      setGenerationComplete(true)
 
-      // Trigger download
-      const binaryString = atob(result.pdfBase64)
-      const bytes = new Uint8Array(binaryString.length)
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i)
+      // Use save dialog (remembers last directory)
+      const saveResult = await window.electronAPI.invoke('file:saveWithDialog', {
+        data: result.pdfBase64,
+        defaultFilename: `scantron-${assignment.assessmentTitle.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`,
+        filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+      })
+
+      if (saveResult.success) {
+        setGenerationComplete(true)
       }
-      const blob = new Blob([bytes], { type: 'application/pdf' })
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `scantron-${assignment.assessmentTitle.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
     }
   }, [assignment, formData, generateScantron])
 

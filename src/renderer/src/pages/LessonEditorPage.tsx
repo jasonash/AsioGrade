@@ -29,6 +29,7 @@ import AddIcon from '@mui/icons-material/Add'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import AccessibilityNewIcon from '@mui/icons-material/AccessibilityNew'
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import { useLessonStore } from '../stores/lesson.store'
 import { useStandardsStore } from '../stores'
 import { ConfirmModal } from '../components/ui'
@@ -94,6 +95,7 @@ export function LessonEditorPage({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   // Editing state
   const [editingTitle, setEditingTitle] = useState(false)
@@ -148,6 +150,33 @@ export function LessonEditorPage({
       status: 'ready'
     })
     setIsPublishing(false)
+  }
+
+  const handleExportPDF = async (): Promise<void> => {
+    if (!currentLesson) return
+
+    setIsExporting(true)
+    try {
+      const result = await window.electronAPI.invoke(
+        'pdf:generateLessonPlan',
+        currentLesson.id,
+        course.name,
+        unit.name
+      )
+
+      if (result.success && result.data) {
+        // Use save dialog (remembers last directory)
+        await window.electronAPI.invoke('file:saveWithDialog', {
+          data: result.data.pdfBase64,
+          defaultFilename: result.data.filename,
+          filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
+        })
+      }
+    } catch (err) {
+      console.error('Failed to export PDF:', err)
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   const handleTitleSave = async (): Promise<void> => {
@@ -532,6 +561,14 @@ export function LessonEditorPage({
           </Box>
 
           <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<PictureAsPdfIcon />}
+              onClick={handleExportPDF}
+              disabled={isExporting || componentCount === 0}
+            >
+              {isExporting ? 'Exporting...' : 'Export PDF'}
+            </Button>
             {currentLesson?.status === 'draft' && (
               <Button
                 variant="contained"
