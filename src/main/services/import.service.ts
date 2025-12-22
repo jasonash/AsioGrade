@@ -9,11 +9,42 @@ import { dialog, BrowserWindow } from 'electron'
 import { readFile } from 'fs/promises'
 import https from 'https'
 import mammoth from 'mammoth'
+import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { ServiceResult } from '../../shared/types/common.types'
 
-// pdf-parse doesn't have proper ES module exports, use require
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdfParse = require('pdf-parse')
+/**
+ * Extract text from PDF buffer using pdfjs-dist directly
+ * This is more lenient than pdf-parse for malformed PDFs
+ */
+async function extractPdfText(data: Buffer): Promise<string> {
+  const uint8Array = new Uint8Array(data)
+
+  // Load PDF with options optimized for Node.js (no worker) and error recovery
+  const loadingTask = pdfjsLib.getDocument({
+    data: uint8Array,
+    // Disable worker - not needed in Node.js/Electron main process
+    useWorkerFetch: false,
+    isEvalSupported: false,
+    useSystemFonts: true,
+    disableFontFace: true,
+    // Don't stop on recoverable errors (like bad XRef entries)
+    stopAtErrors: false
+  })
+
+  const pdf = await loadingTask.promise
+  const textParts: string[] = []
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i)
+    const textContent = await page.getTextContent()
+    const pageText = textContent.items
+      .map((item) => ('str' in item ? item.str : ''))
+      .join(' ')
+    textParts.push(pageText)
+  }
+
+  return textParts.join('\n\n')
+}
 
 /**
  * Fetch URL using Node's https module (handles certificate issues better)
@@ -91,14 +122,15 @@ class ImportService {
       // Handle PDF downloads automatically
       if (contentType.includes('application/pdf')) {
         try {
-          const pdfData = await pdfParse(data)
+          const text = await extractPdfText(data)
 
-          if (!pdfData.text.trim()) {
-            return { success: false, error: 'No text content found in the PDF' }
+          if (!text.trim()) {
+            return { success: false, error: 'No text content found in the PDF. It may contain only scanned images.' }
           }
 
-          return { success: true, data: pdfData.text }
-        } catch {
+          return { success: true, data: text }
+        } catch (err) {
+          console.error('PDF extraction error:', err)
           return { success: false, error: 'Failed to extract text from the PDF. The file may be scanned images or corrupted.' }
         }
       }
@@ -111,14 +143,15 @@ class ImportService {
 
         if (filename.toLowerCase().endsWith('.pdf')) {
           try {
-            const pdfData = await pdfParse(data)
+            const text = await extractPdfText(data)
 
-            if (!pdfData.text.trim()) {
-              return { success: false, error: 'No text content found in the PDF' }
+            if (!text.trim()) {
+              return { success: false, error: 'No text content found in the PDF. It may contain only scanned images.' }
             }
 
-            return { success: true, data: pdfData.text }
-          } catch {
+            return { success: true, data: text }
+          } catch (err) {
+            console.error('PDF extraction error:', err)
             return { success: false, error: 'Failed to extract text from the PDF' }
           }
         }
@@ -133,9 +166,9 @@ class ImportService {
 
         // Unknown file type - try to parse as PDF anyway (common for .gov sites)
         try {
-          const pdfData = await pdfParse(data)
-          if (pdfData.text.trim()) {
-            return { success: true, data: pdfData.text }
+          const text = await extractPdfText(data)
+          if (text.trim()) {
+            return { success: true, data: text }
           }
         } catch {
           // Not a PDF, continue
@@ -183,9 +216,9 @@ class ImportService {
 
       // Unknown content type - try to parse as PDF anyway
       try {
-        const pdfData = await pdfParse(data)
-        if (pdfData.text.trim()) {
-          return { success: true, data: pdfData.text }
+        const text = await extractPdfText(data)
+        if (text.trim()) {
+          return { success: true, data: text }
         }
       } catch {
         // Not a PDF
@@ -304,15 +337,23 @@ class ImportService {
   async readPdfText(filePath: string): Promise<ServiceResult<string>> {
     try {
       const dataBuffer = await readFile(filePath)
-      const data = await pdfParse(dataBuffer)
+      const text = await extractPdfText(dataBuffer)
 
-      if (!data.text.trim()) {
-        return { success: false, error: 'No text content found in PDF' }
+      if (!text.trim()) {
+        return { success: false, error: 'No text content found in PDF. It may contain only scanned images.' }
       }
 
-      return { success: true, data: data.text }
+      return { success: true, data: text }
     } catch (error) {
+      console.error('PDF extraction error:', error)
       const message = error instanceof Error ? error.message : 'Failed to extract text from PDF'
+      // Provide more helpful error message for common issues
+      if (message.includes('XRef') || message.includes('Invalid PDF')) {
+        return {
+          success: false,
+          error: 'This PDF has a non-standard format. Try re-exporting it from the original application, or convert it to DOCX/TXT.'
+        }
+      }
       return { success: false, error: message }
     }
   }
