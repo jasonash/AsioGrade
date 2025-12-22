@@ -1064,11 +1064,21 @@ class PDFService {
    * Draw crossword grid
    */
   private drawCrosswordGrid(doc: PDFKit.PDFDocument, crossword: CrosswordData): void {
-    const maxCellSize = 24
     const gridCols = crossword.size.cols
     const gridRows = crossword.size.rows
-    const cellSize = Math.min(maxCellSize, (LETTER_WIDTH - 140) / gridCols, 200 / gridRows)
+
+    // Calculate cell size to make grid reasonably large but fit on page
+    // Target: grid should be about 350-400 points wide (leaves room for margins)
+    // Minimum cell size of 18 for readability
+    const maxGridWidth = LETTER_WIDTH - 120 // 492 points available
+    const maxGridHeight = 320 // Allow enough room for clues below
+    const cellSize = Math.max(
+      18, // Minimum cell size for readability
+      Math.min(28, maxGridWidth / gridCols, maxGridHeight / gridRows)
+    )
+
     const gridWidth = cellSize * gridCols
+    const gridHeight = cellSize * gridRows
     const startX = (LETTER_WIDTH - gridWidth) / 2
     const startY = doc.y
 
@@ -1081,7 +1091,9 @@ class PDFService {
       }
     }
 
-    doc.font('Helvetica').fontSize(cellSize * 0.35)
+    // Draw only the cells that contain letters (white squares)
+    // Skip null cells entirely - they just won't be drawn
+    doc.font('Helvetica')
 
     for (let row = 0; row < gridRows; row++) {
       for (let col = 0; col < gridCols; col++) {
@@ -1089,25 +1101,25 @@ class PDFService {
         const y = startY + row * cellSize
         const cell = crossword.grid[row]?.[col]
 
-        if (cell === null) {
-          // Black square
-          doc.rect(x, y, cellSize, cellSize).fill('#000000')
-        } else {
-          // White square
-          doc.rect(x, y, cellSize, cellSize).stroke()
+        if (cell !== null) {
+          // White square with border
+          doc.lineWidth(0.5)
+          doc.rect(x, y, cellSize, cellSize).stroke('#000000')
 
           // Add clue number if applicable
           const key = `${row},${col}`
           const num = clueNumbers.get(key)
           if (num) {
-            doc.font('Helvetica').fontSize(cellSize * 0.3)
-            doc.text(String(num), x + 2, y + 2, { lineBreak: false })
+            doc.fontSize(cellSize * 0.32)
+            doc.fillColor('#000000')
+            doc.text(String(num), x + 2, y + 1, { lineBreak: false })
           }
         }
+        // Null cells are simply not drawn (white background shows through)
       }
     }
 
-    doc.y = startY + gridRows * cellSize + 10
+    doc.y = startY + gridHeight + 15
   }
 
   /**
@@ -1157,16 +1169,19 @@ class PDFService {
     doc.text(`Solution: ${title}`, 50, 50, { width: LETTER_WIDTH - 100, align: 'center' })
     doc.moveDown(1)
 
-    const cellSize = Math.min(
-      20,
-      (LETTER_WIDTH - 140) / crossword.size.cols,
-      200 / crossword.size.rows
+    // Use same sizing logic as the puzzle grid
+    const maxGridWidth = LETTER_WIDTH - 120
+    const maxGridHeight = 320
+    const cellSize = Math.max(
+      18,
+      Math.min(28, maxGridWidth / crossword.size.cols, maxGridHeight / crossword.size.rows)
     )
     const gridWidth = cellSize * crossword.size.cols
+    const gridHeight = cellSize * crossword.size.rows
     const startX = (LETTER_WIDTH - gridWidth) / 2
     const startY = doc.y
 
-    doc.font('Courier-Bold').fontSize(cellSize * 0.6)
+    doc.font('Courier-Bold').fontSize(cellSize * 0.55)
 
     for (let row = 0; row < crossword.size.rows; row++) {
       for (let col = 0; col < crossword.size.cols; col++) {
@@ -1174,18 +1189,19 @@ class PDFService {
         const y = startY + row * cellSize
         const cell = crossword.grid[row]?.[col]
 
-        if (cell === null) {
-          doc.rect(x, y, cellSize, cellSize).fill('#000000')
-        } else {
-          doc.rect(x, y, cellSize, cellSize).stroke()
+        if (cell !== null) {
+          // Draw cell with letter
+          doc.lineWidth(0.5)
+          doc.rect(x, y, cellSize, cellSize).stroke('#000000')
           doc.fillColor('#000000')
-          doc.text(cell, x, y + cellSize * 0.2, { width: cellSize, align: 'center' })
+          doc.text(cell, x, y + cellSize * 0.25, { width: cellSize, align: 'center' })
         }
+        // Skip null cells - white background shows through
       }
     }
 
     // Answer list
-    doc.y = startY + crossword.size.rows * cellSize + 20
+    doc.y = startY + gridHeight + 20
     doc.font('Helvetica-Bold').fontSize(10)
     doc.text('Answers:', 50, doc.y)
     doc.moveDown(0.5)
