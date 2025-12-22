@@ -8,6 +8,7 @@
 import { llmService } from '../llm/llm.service'
 import {
   SYSTEM_PROMPTS,
+  MATERIAL_SYSTEM_PROMPTS,
   buildQuestionGenerationPrompt,
   buildRefinementPrompt,
   buildChatContextPrompt,
@@ -16,7 +17,13 @@ import {
   buildFillInBlankConversionPrompt,
   buildLessonGoalsPrompt,
   buildLessonStructurePrompt,
-  buildComponentExpansionPrompt
+  buildComponentExpansionPrompt,
+  buildWorksheetPrompt,
+  buildVocabularyListPrompt,
+  buildPuzzleVocabularyPrompt,
+  buildGraphicOrganizerPrompt,
+  buildExitTicketPrompt,
+  buildDiagramPrompt
 } from './prompts'
 import {
   parseGeneratedQuestions,
@@ -26,7 +33,12 @@ import {
   parseFillInBlankConversion,
   parseLessonGoals,
   parseLessonStructure,
-  parseExpandedComponent
+  parseExpandedComponent,
+  parseWorksheetContent,
+  parseVocabularyList,
+  parsePuzzleVocabulary,
+  parseGraphicOrganizer,
+  parseExitTicket
 } from './parser'
 import type { ServiceResult } from '../../../shared/types/common.types'
 import type { LLMUsage } from '../../../shared/types/llm.types'
@@ -52,6 +64,12 @@ import type {
   ComponentExpansionResult
 } from '../../../shared/types/ai.types'
 import type { LearningGoal, LessonComponent } from '../../../shared/types/lesson.types'
+import type {
+  MaterialGenerationRequest,
+  PuzzleVocabularyRequest,
+  GeneratedMaterial,
+  DiagramGenerationResult
+} from '../../../shared/types/material.types'
 
 class AIService {
   /**
@@ -556,6 +574,345 @@ class AIService {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Component expansion failed'
       return { success: false, error: message }
+    }
+  }
+
+  // ============================================================
+  // Material Generation Methods (Phase 5)
+  // ============================================================
+
+  /**
+   * Generate a worksheet with practice questions
+   */
+  async generateWorksheet(
+    request: MaterialGenerationRequest,
+    standardsText: string
+  ): Promise<ServiceResult<GeneratedMaterial>> {
+    try {
+      const prompt = buildWorksheetPrompt(request, standardsText)
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: MATERIAL_SYSTEM_PROMPTS.worksheetGeneration,
+        temperature: 0.4,
+        maxTokens: 4000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseWorksheetContent(result.data.content, result.data.usage)
+
+      if (!parseResult.success) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse worksheet content' }
+      }
+
+      const material: GeneratedMaterial = {
+        id: `mat-${Date.now().toString(36)}`,
+        lessonId: request.lessonId,
+        componentId: request.componentId,
+        type: 'worksheet',
+        name: parseResult.title ?? `${request.topic} Worksheet`,
+        topic: request.topic,
+        content: {
+          title: parseResult.title ?? `${request.topic} Worksheet`,
+          instructions: parseResult.instructions,
+          questions: parseResult.questions,
+          answerKey: parseResult.answerKey
+        },
+        aiGenerated: true,
+        aiModel: result.data.model,
+        generatedAt: new Date().toISOString(),
+        usage: result.data.usage
+      }
+
+      return { success: true, data: material }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Worksheet generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate a vocabulary list
+   */
+  async generateVocabularyList(
+    request: MaterialGenerationRequest,
+    standardsText: string
+  ): Promise<ServiceResult<GeneratedMaterial>> {
+    try {
+      const prompt = buildVocabularyListPrompt(request, standardsText)
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: MATERIAL_SYSTEM_PROMPTS.vocabularyExtraction,
+        temperature: 0.3,
+        maxTokens: 3000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseVocabularyList(result.data.content, result.data.usage)
+
+      if (!parseResult.success) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse vocabulary list' }
+      }
+
+      const material: GeneratedMaterial = {
+        id: `mat-${Date.now().toString(36)}`,
+        lessonId: request.lessonId,
+        componentId: request.componentId,
+        type: 'vocabulary-list',
+        name: parseResult.title ?? `${request.topic} Vocabulary`,
+        topic: request.topic,
+        content: {
+          title: parseResult.title ?? `${request.topic} Vocabulary`,
+          vocabulary: parseResult.vocabulary
+        },
+        aiGenerated: true,
+        aiModel: result.data.model,
+        generatedAt: new Date().toISOString(),
+        usage: result.data.usage
+      }
+
+      return { success: true, data: material }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Vocabulary list generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate vocabulary for puzzle generation (words + clues)
+   * Returns words/clues that can be passed to puzzle generation library
+   */
+  async generatePuzzleVocabulary(
+    request: PuzzleVocabularyRequest
+  ): Promise<ServiceResult<{ vocabulary: { word: string; clue: string }[]; usage: LLMUsage }>> {
+    try {
+      const prompt = buildPuzzleVocabularyPrompt(request)
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: MATERIAL_SYSTEM_PROMPTS.vocabularyExtraction,
+        temperature: 0.3,
+        maxTokens: 2000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parsePuzzleVocabulary(result.data.content, result.data.usage)
+
+      if (!parseResult.success || !parseResult.vocabulary) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse puzzle vocabulary' }
+      }
+
+      return {
+        success: true,
+        data: {
+          vocabulary: parseResult.vocabulary,
+          usage: result.data.usage
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Puzzle vocabulary generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate a graphic organizer
+   */
+  async generateGraphicOrganizer(
+    request: MaterialGenerationRequest,
+    standardsText: string
+  ): Promise<ServiceResult<GeneratedMaterial>> {
+    try {
+      const prompt = buildGraphicOrganizerPrompt(request, standardsText)
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: MATERIAL_SYSTEM_PROMPTS.graphicOrganizerGeneration,
+        temperature: 0.4,
+        maxTokens: 3000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseGraphicOrganizer(result.data.content, result.data.usage)
+
+      if (!parseResult.success || !parseResult.data) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse graphic organizer' }
+      }
+
+      const material: GeneratedMaterial = {
+        id: `mat-${Date.now().toString(36)}`,
+        lessonId: request.lessonId,
+        componentId: request.componentId,
+        type: 'graphic-organizer',
+        name: parseResult.data.title ?? `${request.topic} Graphic Organizer`,
+        topic: request.topic,
+        content: {
+          title: parseResult.data.title,
+          graphicOrganizer: parseResult.data
+        },
+        aiGenerated: true,
+        aiModel: result.data.model,
+        generatedAt: new Date().toISOString(),
+        usage: result.data.usage
+      }
+
+      return { success: true, data: material }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Graphic organizer generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate an exit ticket
+   */
+  async generateExitTicket(
+    request: MaterialGenerationRequest,
+    standardsText: string
+  ): Promise<ServiceResult<GeneratedMaterial>> {
+    try {
+      const prompt = buildExitTicketPrompt(request, standardsText)
+
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: MATERIAL_SYSTEM_PROMPTS.exitTicketGeneration,
+        temperature: 0.4,
+        maxTokens: 2000
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      const parseResult = parseExitTicket(result.data.content, result.data.usage)
+
+      if (!parseResult.success || !parseResult.data) {
+        return { success: false, error: parseResult.error ?? 'Failed to parse exit ticket' }
+      }
+
+      const material: GeneratedMaterial = {
+        id: `mat-${Date.now().toString(36)}`,
+        lessonId: request.lessonId,
+        componentId: request.componentId,
+        type: 'exit-ticket',
+        name: parseResult.data.title ?? `${request.topic} Exit Ticket`,
+        topic: request.topic,
+        content: {
+          title: parseResult.data.title,
+          exitTicket: parseResult.data
+        },
+        aiGenerated: true,
+        aiModel: result.data.model,
+        generatedAt: new Date().toISOString(),
+        usage: result.data.usage
+      }
+
+      return { success: true, data: material }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Exit ticket generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate an educational diagram using Gemini image generation
+   * Requires Google/Gemini API key to be configured
+   */
+  async generateDiagram(
+    request: MaterialGenerationRequest
+  ): Promise<ServiceResult<DiagramGenerationResult>> {
+    try {
+      // Check if image generation is available
+      if (!llmService.supportsImageGeneration()) {
+        return {
+          success: false,
+          error: 'Diagram generation requires a Google/Gemini API key. Please configure it in Settings.'
+        }
+      }
+
+      // Build the diagram prompt
+      const prompt = buildDiagramPrompt(request)
+
+      // Generate the image
+      const result = await llmService.generateImage({
+        prompt,
+        aspectRatio: '4:3' // Good for educational diagrams
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      return {
+        success: true,
+        data: {
+          imageBase64: result.data.imageBase64,
+          mimeType: result.data.mimeType,
+          promptUsed: result.data.promptUsed
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Diagram generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate material based on type
+   * Unified method that dispatches to specific generators
+   */
+  async generateMaterial(
+    request: MaterialGenerationRequest,
+    standardsText: string
+  ): Promise<ServiceResult<GeneratedMaterial>> {
+    switch (request.materialType) {
+      case 'worksheet':
+      case 'practice-problems':
+        return this.generateWorksheet(request, standardsText)
+
+      case 'vocabulary-list':
+        return this.generateVocabularyList(request, standardsText)
+
+      case 'graphic-organizer':
+        return this.generateGraphicOrganizer(request, standardsText)
+
+      case 'exit-ticket':
+        return this.generateExitTicket(request, standardsText)
+
+      case 'word-search':
+      case 'crossword':
+        // Puzzles require vocabulary extraction + puzzle service
+        // Return error here - puzzle generation should use generatePuzzleVocabulary + puzzleService
+        return {
+          success: false,
+          error: 'Puzzle generation requires using generatePuzzleVocabulary + puzzleService'
+        }
+
+      case 'diagram':
+        // Diagrams require separate image generation flow
+        return {
+          success: false,
+          error: 'Diagram generation requires using generateDiagram method directly'
+        }
+
+      default:
+        return {
+          success: false,
+          error: `Unknown material type: ${request.materialType}`
+        }
     }
   }
 }
