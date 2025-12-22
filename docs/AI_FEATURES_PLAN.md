@@ -33,6 +33,7 @@ These features build on the existing LLM service infrastructure and integrate de
 | **2** | Assessment AI Polish | Import, coverage analysis, variants | Phase 1 |
 | **3** | Lesson Planning Core | Data model, basic AI generation | Phase 1 (shared AI patterns) |
 | **4** | Lesson Planning Polish | Export, UDL, analytics integration | Phase 3, Analytics data |
+| **5** | Material Generation | Auto-generate teaching materials | Phase 4 (future) |
 
 ---
 
@@ -1044,6 +1045,102 @@ Return specific, actionable suggestions for this particular lesson.
 - [ ] Suggestions are specific to lesson content
 - [ ] UDL notes can be saved with lesson
 - [ ] UDL considerations appear in export
+
+---
+
+## 5.5 Phase 5: Material Generation (Future)
+
+### 5.5.1 Vision
+
+When AI suggests activities in a lesson (e.g., "puzzle challenge", "diagram activity", "practice worksheet"), the system should be able to **automatically generate the actual materials** - not just describe what they should be.
+
+This transforms the AI from a planning assistant into a full content creation tool.
+
+### 5.5.2 Goals
+
+- Auto-generate teaching materials based on lesson component suggestions
+- Reduce teacher prep time from hours to minutes
+- Maintain quality and curriculum alignment
+- Support various material types (text-based, puzzles, visual aids)
+
+### 5.5.3 Material Types & Feasibility
+
+| Material Type | Feasibility | Implementation Approach |
+|---------------|-------------|------------------------|
+| **Worksheets/Handouts** | High | LLM generates content, export to PDF/DOCX |
+| **Practice Problems** | High | Similar to assessment question generation |
+| **Reading Passages** | High | LLM generates grade-appropriate text |
+| **Vocabulary Lists** | High | Extract from standards/content, LLM adds definitions |
+| **Word Search Puzzles** | Medium | LLM provides words, algorithm generates grid |
+| **Crossword Puzzles** | Medium | LLM provides clues/answers, algorithm generates puzzle |
+| **Matching Activities** | Medium | LLM generates pairs, template formats |
+| **Graphic Organizers** | Medium | LLM fills content, templates provide structure |
+| **Diagrams/Visuals** | Low | Would require image generation AI (DALL-E, etc.) |
+| **Interactive Activities** | Low | Would require separate tooling/platform |
+
+### 5.5.4 Proposed Features
+
+#### Text-Based Materials
+```
+Teacher: "Generate a bellringer puzzle for this lesson on photosynthesis"
+AI generates:
+- 10-question word scramble with photosynthesis terms
+- Answer key
+- Exportable PDF worksheet
+```
+
+#### Puzzle Generation
+```
+Teacher: "Create a crossword for vocabulary review"
+AI generates:
+- Pulls vocabulary from lesson content/standards
+- Creates clues (definitions, fill-in-blank)
+- Generates crossword grid
+- Creates printable PDF with answer key
+```
+
+#### Practice Materials
+```
+Teacher: "Generate 10 practice problems for guided practice"
+AI generates:
+- Problems aligned to learning goals
+- Scaffolded difficulty (easier → harder)
+- Answer key with worked solutions
+- Formatted worksheet PDF
+```
+
+### 5.5.5 Technical Considerations
+
+1. **Template System**: Pre-built templates for worksheets, puzzles, activities
+2. **Puzzle Algorithms**: Word search, crossword generation libraries
+3. **PDF Generation**: Server-side PDF creation with proper formatting
+4. **Content Alignment**: Generated materials must align with lesson goals/standards
+5. **Customization**: Teachers should be able to modify before finalizing
+
+### 5.5.6 Integration Points
+
+- **Lesson Components**: "Generate Materials" button on each component
+- **Export System**: Materials bundled with lesson export
+- **Google Drive**: Auto-save generated materials to unit folder
+- **Assessment System**: Practice problems can become quiz questions
+
+### 5.5.7 Open Questions
+
+| Question | Options | Notes |
+|----------|---------|-------|
+| Image generation? | DALL-E integration vs. stock images vs. none | Cost and quality tradeoffs |
+| Interactive content? | Static PDF vs. Google Forms vs. web app | Complexity vs. value |
+| Storage | Google Drive vs. local | Drive preferred for sharing |
+| Editing | In-app vs. export-and-edit | Export first, in-app later |
+
+### 5.5.8 Success Metrics
+
+| Metric | Target |
+|--------|--------|
+| Materials generated per lesson | > 2 average |
+| Teacher acceptance rate | > 60% used as-is or with minor edits |
+| Time saved per lesson | > 30 minutes |
+| Material quality rating | > 4/5 teacher satisfaction |
 
 ---
 
