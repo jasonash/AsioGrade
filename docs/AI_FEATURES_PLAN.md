@@ -496,6 +496,41 @@ interface VariantGenerationRequest {
 - Create lesson editor UI
 - Enable AI-assisted lesson structure generation
 - Follow Backward Design principles
+- **Implement unit-level materials storage for AI context**
+
+### 4.1.1 Unit-Level Materials (Critical Design Decision)
+
+**IMPORTANT:** Teaching materials (slides, notes, worksheets, etc.) are stored at the **unit level**, not the course level. This is intentional:
+
+1. **Pedagogical Reasoning:** Content from Unit 1 (e.g., "Introduction to Matter") shouldn't influence AI generation for Unit 5 (e.g., "Chemical Reactions"). Each unit has its own focused content.
+
+2. **AI Context:** When generating questions or lesson plans, the AI uses:
+   - **Standards** (what should be taught)
+   - **Unit materials** (what was actually taught in this unit)
+   - **Assessment data** (what students struggled with - Phase 4)
+
+3. **Folder Structure:**
+   ```
+   /units/{unit-id}/
+       ├── meta.json
+       ├── materials/           # Unit-specific teaching materials
+       │   ├── slides.pdf
+       │   ├── notes.docx
+       │   └── worksheet.pdf
+       ├── assessments/
+       └── lessons/
+   ```
+
+4. **Material Usage:**
+   - **Assessment Generation:** AI reads unit materials to generate questions relevant to what was taught
+   - **Lesson Planning:** AI uses materials as context for creating coherent lessons
+   - **NOT for:** Cross-unit content (each unit is independent)
+
+5. **Implementation Notes:**
+   - Materials are uploaded/linked per unit
+   - Text is extracted and cached for AI prompts
+   - Teachers control which materials are used as context
+   - Token budget considerations for large documents
 
 ### 4.2 Data Model
 
@@ -603,10 +638,16 @@ interface UDLNotes {
                 └── units/
                     └── {unit-id}/
                         ├── meta.json
+                        ├── materials/            # Unit teaching materials (for AI context)
+                        │   ├── slides.pdf
+                        │   ├── notes.docx
+                        │   └── ...
                         ├── assessments/
                         └── lessons/              # NEW
                             └── {lesson-id}.json
 ```
+
+**Note:** Materials are stored at the unit level, NOT course level. This ensures AI-generated content (questions, lessons) is contextually relevant to the specific unit being taught.
 
 ### 4.3 Lesson Generation Workflow
 
@@ -624,15 +665,24 @@ interface LessonGenerationContext {
   // Constraints
   durationMinutes: number;
 
+  // Unit materials context (extracted text from uploaded materials)
+  unitMaterialsContext?: string;  // Concatenated/summarized text from unit materials
+
   // Optional context
   priorKnowledge?: string;
   studentNeeds?: string;
-  availableMaterials?: string[];
+  availableMaterials?: string[];  // List of material names available in the unit
 
   // Analytics input (Phase 4)
   strugglingTopics?: string[];
 }
 ```
+
+**Unit Materials Usage:**
+When `unitMaterialsContext` is provided, AI generation uses it to:
+- Generate questions based on specific content taught (not just standards)
+- Create lessons that reference actual materials students have seen
+- Suggest activities that build on existing worksheets/slides
 
 #### 4.3.2 Step 2: Learning Goals Generation
 

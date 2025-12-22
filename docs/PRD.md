@@ -747,9 +747,9 @@ TeachingHelp uses a clear, minimal, and teacher-centered Google Drive folder str
                 ├── units/
                 │   └── {unit-id}/
                 │       ├── meta.json     # Unit metadata
+                │       ├── materials/    # Unit teaching materials (for AI context)
                 │       └── assessments/
                 │           └── {assessment-id}.json
-                ├── materials/            # Teaching materials
                 └── sections/
                     └── {section-id}/     # e.g., "period-1"
                         ├── meta.json     # Section metadata
