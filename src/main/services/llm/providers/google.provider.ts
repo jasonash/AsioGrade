@@ -306,11 +306,19 @@ export class GoogleProvider extends AbstractLLMProvider {
     if (error instanceof Error) {
       const message = error.message.toLowerCase()
 
-      if (message.includes('api key') || message.includes('401') || message.includes('invalid')) {
+      if (message.includes('api key') || message.includes('401') || message.includes('invalid key')) {
         throw this.createError('INVALID_API_KEY', 'Invalid Google API key', false, error)
       }
 
-      if (message.includes('429') || message.includes('rate') || message.includes('quota')) {
+      // Be specific about rate limiting - check for actual rate limit indicators
+      if (
+        message.includes('429') ||
+        message.includes('rate limit') ||
+        message.includes('rate_limit') ||
+        message.includes('quota exceeded') ||
+        message.includes('resource_exhausted') ||
+        message.includes('too many requests')
+      ) {
         throw this.createError(
           'RATE_LIMITED',
           'Rate limited by Google. Please try again later.',
@@ -319,7 +327,7 @@ export class GoogleProvider extends AbstractLLMProvider {
         )
       }
 
-      if (message.includes('context') || message.includes('too long')) {
+      if (message.includes('context') || message.includes('too long') || message.includes('token limit')) {
         throw this.createError(
           'CONTEXT_LENGTH_EXCEEDED',
           'Request exceeds model context length',
@@ -328,15 +336,16 @@ export class GoogleProvider extends AbstractLLMProvider {
         )
       }
 
-      if (message.includes('404') || message.includes('not found')) {
+      if (message.includes('404') || message.includes('not found') || message.includes('does not exist')) {
         throw this.createError('MODEL_NOT_FOUND', `Model "${this.model}" not found`, false, error)
       }
 
-      if (message.includes('network') || message.includes('econnrefused')) {
+      if (message.includes('network') || message.includes('econnrefused') || message.includes('enotfound')) {
         throw this.createError('NETWORK_ERROR', 'Network error connecting to Google', true, error)
       }
 
-      throw this.createError('PROVIDER_ERROR', error.message, false, error)
+      // Pass through the actual error message for debugging
+      throw this.createError('PROVIDER_ERROR', `Google API error: ${error.message}`, false, error)
     }
 
     throw this.createError('UNKNOWN_ERROR', 'An unknown error occurred', false, error)
