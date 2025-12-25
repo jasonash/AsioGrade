@@ -193,22 +193,28 @@ export const ANTHROPIC_MODELS: LLMModelInfo[] = [
 
 export const GOOGLE_MODELS: LLMModelInfo[] = [
   {
-    id: 'gemini-2.0-flash-exp',
+    id: 'gemini-2.5-flash',
+    name: 'Gemini 2.5 Flash',
+    contextWindow: 1000000,
+    description: 'Latest stable Gemini model - fast and capable'
+  },
+  {
+    id: 'gemini-2.5-pro',
+    name: 'Gemini 2.5 Pro',
+    contextWindow: 1000000,
+    description: 'Most powerful Gemini model with adaptive thinking'
+  },
+  {
+    id: 'gemini-2.5-flash-lite',
+    name: 'Gemini 2.5 Flash Lite',
+    contextWindow: 1000000,
+    description: 'Fast, low-cost, high-performance'
+  },
+  {
+    id: 'gemini-2.0-flash',
     name: 'Gemini 2.0 Flash',
     contextWindow: 1000000,
-    description: 'Latest and fastest Gemini model'
-  },
-  {
-    id: 'gemini-1.5-pro',
-    name: 'Gemini 1.5 Pro',
-    contextWindow: 2000000,
-    description: 'Most capable Gemini model'
-  },
-  {
-    id: 'gemini-1.5-flash',
-    name: 'Gemini 1.5 Flash',
-    contextWindow: 1000000,
-    description: 'Fast and efficient'
+    description: 'Previous generation, still available'
   }
 ]
 
