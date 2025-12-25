@@ -7,6 +7,7 @@
 
 import { llmService } from '../llm/llm.service'
 import { puzzleService } from '../puzzle.service'
+import sharp from 'sharp'
 import {
   SYSTEM_PROMPTS,
   MATERIAL_SYSTEM_PROMPTS,
@@ -24,7 +25,7 @@ import {
   buildPuzzleVocabularyPrompt,
   buildGraphicOrganizerPrompt,
   buildExitTicketPrompt,
-  buildDiagramPrompt
+  buildSVGDiagramPrompt
 } from './prompts'
 import {
   parseGeneratedQuestions,
@@ -829,44 +830,105 @@ class AIService {
   }
 
   /**
-   * Generate an educational diagram using Gemini image generation
-   * Requires Google/Gemini API key to be configured
+   * Generate an educational diagram using SVG code generation
+   * Uses text LLM to generate accurate SVG, then converts to PNG
    */
   async generateDiagram(
     request: MaterialGenerationRequest
   ): Promise<ServiceResult<DiagramGenerationResult>> {
     try {
-      // Check if image generation is available
-      if (!llmService.supportsImageGeneration()) {
-        return {
-          success: false,
-          error: 'Diagram generation requires a Google/Gemini API key. Please configure it in Settings.'
-        }
-      }
+      // Build the SVG generation prompt
+      const prompt = buildSVGDiagramPrompt(request)
 
-      // Build the diagram prompt
-      const prompt = buildDiagramPrompt(request)
-
-      // Generate the image
-      const result = await llmService.generateImage({
+      // Generate SVG code using text LLM
+      const result = await llmService.complete({
         prompt,
-        aspectRatio: '4:3' // Good for educational diagrams
+        systemPrompt: 'You are an expert SVG diagram generator. Output only valid SVG code with no additional text, markdown, or explanations.',
+        temperature: 0.3, // Lower temperature for more consistent output
+        maxTokens: 8000 // SVG can be verbose
       })
 
       if (!result.success) {
         return { success: false, error: result.error }
       }
 
+      // Extract and clean the SVG from the response
+      const svgCode = this.extractSVGFromResponse(result.data.content)
+      if (!svgCode) {
+        return {
+          success: false,
+          error: 'Failed to generate valid SVG diagram. The AI response did not contain valid SVG code.'
+        }
+      }
+
+      // Convert SVG to PNG using sharp
+      const pngResult = await this.convertSVGtoPNG(svgCode)
+      if (!pngResult.success) {
+        return { success: false, error: pngResult.error }
+      }
+
       return {
         success: true,
         data: {
-          imageBase64: result.data.imageBase64,
-          mimeType: result.data.mimeType,
-          promptUsed: result.data.promptUsed
+          imageBase64: pngResult.data,
+          mimeType: 'image/png',
+          promptUsed: prompt,
+          usage: result.data.usage
         }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Diagram generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Extract SVG code from LLM response, handling markdown code blocks
+   */
+  private extractSVGFromResponse(response: string): string | null {
+    // Try to find SVG in markdown code block first
+    const codeBlockMatch = response.match(/```(?:svg|xml)?\s*([\s\S]*?)```/)
+    if (codeBlockMatch) {
+      const content = codeBlockMatch[1].trim()
+      if (content.startsWith('<svg') && content.includes('</svg>')) {
+        return content
+      }
+    }
+
+    // Try to extract raw SVG
+    const svgMatch = response.match(/<svg[\s\S]*<\/svg>/i)
+    if (svgMatch) {
+      return svgMatch[0]
+    }
+
+    return null
+  }
+
+  /**
+   * Convert SVG string to PNG using sharp
+   */
+  private async convertSVGtoPNG(svgCode: string): Promise<ServiceResult<string>> {
+    try {
+      // Ensure SVG has proper dimensions for sharp
+      let processedSvg = svgCode
+
+      // Add width/height if only viewBox is specified
+      if (!svgCode.includes('width=') && svgCode.includes('viewBox')) {
+        processedSvg = svgCode.replace('<svg', '<svg width="800" height="600"')
+      }
+
+      // Convert SVG to PNG buffer
+      const svgBuffer = Buffer.from(processedSvg, 'utf-8')
+      const pngBuffer = await sharp(svgBuffer, { density: 150 })
+        .png()
+        .toBuffer()
+
+      // Convert to base64
+      const base64 = pngBuffer.toString('base64')
+
+      return { success: true, data: base64 }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to convert SVG to PNG'
       return { success: false, error: message }
     }
   }
@@ -878,12 +940,15 @@ class AIService {
     request: MaterialGenerationRequest
   ): Promise<ServiceResult<GeneratedMaterial>> {
     try {
-      // Generate the diagram image
+      // Generate the diagram using SVG approach
       const diagramResult = await this.generateDiagram(request)
 
       if (!diagramResult.success) {
         return { success: false, error: diagramResult.error }
       }
+
+      // Get the current provider/model info
+      const providerInfo = llmService.getCurrentProviderInfo()
 
       // Create the material with the diagram image embedded
       const material: GeneratedMaterial = {
@@ -899,7 +964,7 @@ class AIService {
           diagramImage: diagramResult.data.imageBase64
         },
         aiGenerated: true,
-        aiModel: 'gemini-2.0-flash-exp', // Image generation uses Gemini
+        aiModel: providerInfo?.model ?? 'unknown',
         generatedAt: new Date().toISOString(),
         // Store the image as base64 for download (with data URI prefix for direct use)
         pdfBuffer: `data:${diagramResult.data.mimeType};base64,${diagramResult.data.imageBase64}`,

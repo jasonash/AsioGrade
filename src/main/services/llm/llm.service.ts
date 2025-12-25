@@ -228,6 +228,20 @@ class LLMService {
   }
 
   /**
+   * Get info about the current default provider and model
+   */
+  getCurrentProviderInfo(): { provider: LLMProviderType; model: string } | null {
+    const config = storageService.getLLMProviders()
+    if (!config.default) return null
+
+    const providerConfig = config[config.default]
+    return {
+      provider: config.default,
+      model: providerConfig.model
+    }
+  }
+
+  /**
    * Check if image generation is available (Google provider configured)
    */
   supportsImageGeneration(): boolean {

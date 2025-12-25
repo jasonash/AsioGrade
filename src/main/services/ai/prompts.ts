@@ -936,3 +936,57 @@ ${request.additionalInstructions ? `\nSPECIFIC INSTRUCTIONS: ${request.additiona
 
 Create this educational diagram: A clear, labeled diagram showing ${request.topic} suitable for grade ${request.gradeLevel} ${request.subject} class. The diagram should be accurate, educational, and easy to understand.`
 }
+
+/**
+ * Build prompt for SVG-based diagram generation (using text LLM)
+ * This approach generates accurate, text-perfect diagrams as SVG code
+ */
+export function buildSVGDiagramPrompt(
+  request: MaterialGenerationRequest
+): string {
+  const style = request.options?.diagramStyle ?? 'labeled'
+
+  const styleInstructions = {
+    simple: 'minimalist with basic shapes and limited labels',
+    labeled: 'detailed with clear labels and annotations on all key parts',
+    detailed: 'comprehensive with extensive labels, annotations, and explanatory text'
+  }
+
+  return `You are an expert at creating educational SVG diagrams. Generate a complete, valid SVG diagram for the following educational topic.
+
+TOPIC: ${request.topic}
+SUBJECT: ${request.subject}
+GRADE LEVEL: ${request.gradeLevel}
+STYLE: ${styleInstructions[style]}
+${request.additionalInstructions ? `SPECIFIC REQUIREMENTS: ${request.additionalInstructions}` : ''}
+
+CRITICAL SVG REQUIREMENTS:
+1. Output ONLY valid SVG code - no markdown, no explanations, no code blocks
+2. Start with <svg and end with </svg>
+3. Use viewBox="0 0 800 600" for landscape orientation
+4. Use a white background: <rect width="100%" height="100%" fill="white"/>
+5. All text MUST be scientifically/factually accurate
+6. Use clear, readable fonts: font-family="Arial, sans-serif"
+7. Use appropriate font sizes: titles 24px, labels 14-16px, annotations 12px
+8. Use professional colors suitable for printing (avoid very light colors)
+9. Include a title at the top of the diagram
+10. Group related elements with <g> tags for organization
+
+DIAGRAM GUIDELINES:
+- For periodic tables: Use REAL element symbols (H, He, Li, etc.) with correct atomic numbers
+- For flowcharts: Use rectangles for processes, diamonds for decisions, arrows for flow
+- For cycles: Arrange elements in a circle with connecting arrows
+- For comparisons: Use side-by-side layouts or Venn diagrams
+- For hierarchies: Use tree structures with clear parent-child relationships
+- For anatomy/structure: Use accurate shapes with leader lines to labels
+
+COLOR PALETTE (print-friendly):
+- Primary: #2563eb (blue)
+- Secondary: #059669 (green)
+- Accent: #d97706 (orange)
+- Text: #1f2937 (dark gray)
+- Borders: #6b7280 (gray)
+- Background elements: #f3f4f6 (light gray)
+
+Generate the SVG diagram now. Remember: Output ONLY the SVG code, nothing else.`
+}
