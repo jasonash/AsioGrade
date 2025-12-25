@@ -855,9 +855,11 @@ class AIService {
       // Extract and clean the SVG from the response
       const svgCode = this.extractSVGFromResponse(result.data.content)
       if (!svgCode) {
+        // Provide helpful error with preview of what was returned
+        const preview = result.data.content.substring(0, 200).replace(/\n/g, ' ')
         return {
           success: false,
-          error: 'Failed to generate valid SVG diagram. The AI response did not contain valid SVG code.'
+          error: `Failed to generate valid SVG diagram. Response preview: "${preview}..."`
         }
       }
 
@@ -883,23 +885,52 @@ class AIService {
   }
 
   /**
-   * Extract SVG code from LLM response, handling markdown code blocks
+   * Extract SVG code from LLM response, handling various formats
    */
   private extractSVGFromResponse(response: string): string | null {
-    // Try to find SVG in markdown code block first
-    const codeBlockMatch = response.match(/```(?:svg|xml)?\s*([\s\S]*?)```/)
-    if (codeBlockMatch) {
-      const content = codeBlockMatch[1].trim()
-      if (content.startsWith('<svg') && content.includes('</svg>')) {
-        return content
+    // Log for debugging (can be removed later)
+    console.log('[SVG Extraction] Response length:', response.length)
+    console.log('[SVG Extraction] First 500 chars:', response.substring(0, 500))
+
+    // Method 1: Try to find SVG in markdown code block (```svg or ```xml or ```)
+    const codeBlockPatterns = [
+      /```svg\s*([\s\S]*?)```/i,
+      /```xml\s*([\s\S]*?)```/i,
+      /```\s*([\s\S]*?)```/
+    ]
+
+    for (const pattern of codeBlockPatterns) {
+      const match = response.match(pattern)
+      if (match) {
+        const content = match[1].trim()
+        if (content.includes('<svg') && content.includes('</svg>')) {
+          console.log('[SVG Extraction] Found SVG in code block')
+          // Extract just the SVG part in case there's extra text
+          const svgMatch = content.match(/<svg[\s\S]*<\/svg>/i)
+          if (svgMatch) {
+            return svgMatch[0]
+          }
+        }
       }
     }
 
-    // Try to extract raw SVG
-    const svgMatch = response.match(/<svg[\s\S]*<\/svg>/i)
+    // Method 2: Try to extract raw SVG directly from response
+    const svgMatch = response.match(/<svg[\s\S]*?<\/svg>/i)
     if (svgMatch) {
+      console.log('[SVG Extraction] Found raw SVG')
       return svgMatch[0]
     }
+
+    // Method 3: Check if response starts with XML declaration followed by SVG
+    const xmlSvgMatch = response.match(/<\?xml[^>]*\?>\s*(<svg[\s\S]*<\/svg>)/i)
+    if (xmlSvgMatch) {
+      console.log('[SVG Extraction] Found SVG with XML declaration')
+      return xmlSvgMatch[1]
+    }
+
+    // Log failure details for debugging
+    console.log('[SVG Extraction] Failed to find SVG. Contains <svg:', response.includes('<svg'))
+    console.log('[SVG Extraction] Contains </svg>:', response.includes('</svg>'))
 
     return null
   }
