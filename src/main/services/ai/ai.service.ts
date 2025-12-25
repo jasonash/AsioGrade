@@ -872,6 +872,48 @@ class AIService {
   }
 
   /**
+   * Generate a diagram and wrap it in a GeneratedMaterial
+   */
+  private async generateDiagramMaterial(
+    request: MaterialGenerationRequest
+  ): Promise<ServiceResult<GeneratedMaterial>> {
+    try {
+      // Generate the diagram image
+      const diagramResult = await this.generateDiagram(request)
+
+      if (!diagramResult.success) {
+        return { success: false, error: diagramResult.error }
+      }
+
+      // Create the material with the diagram image embedded
+      const material: GeneratedMaterial = {
+        id: crypto.randomUUID(),
+        lessonId: request.lessonId,
+        componentId: request.componentId,
+        type: 'diagram',
+        name: `${request.topic} Diagram`,
+        topic: request.topic,
+        content: {
+          title: `${request.topic} Diagram`,
+          diagramPrompt: diagramResult.data.promptUsed,
+          diagramImage: diagramResult.data.imageBase64
+        },
+        aiGenerated: true,
+        aiModel: 'gemini-2.0-flash-exp', // Image generation uses Gemini
+        generatedAt: new Date().toISOString(),
+        // Store the image as base64 for download (with data URI prefix for direct use)
+        pdfBuffer: `data:${diagramResult.data.mimeType};base64,${diagramResult.data.imageBase64}`,
+        usage: diagramResult.data.usage
+      }
+
+      return { success: true, data: material }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Diagram generation failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
    * Generate a word search puzzle
    */
   private async generateWordSearchMaterial(
@@ -1018,11 +1060,7 @@ class AIService {
         return this.generateCrosswordMaterial(request, standardsText)
 
       case 'diagram':
-        // Diagrams require separate image generation flow
-        return {
-          success: false,
-          error: 'Diagram generation requires using generateDiagram method directly'
-        }
+        return this.generateDiagramMaterial(request)
 
       default:
         return {
