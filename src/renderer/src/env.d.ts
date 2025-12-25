@@ -55,6 +55,18 @@ type InvokeChannel =
   | 'drive:createAssignment'
   | 'drive:updateAssignment'
   | 'drive:deleteAssignment'
+  // Google Drive - Lessons
+  | 'drive:listLessons'
+  | 'drive:getLesson'
+  | 'drive:createLesson'
+  | 'drive:updateLesson'
+  | 'drive:deleteLesson'
+  | 'drive:reorderLessons'
+  // Google Drive - Unit Materials
+  | 'drive:listUnitMaterials'
+  | 'drive:uploadUnitMaterial'
+  | 'drive:deleteUnitMaterial'
+  | 'drive:getUnitMaterialsContext'
   // Storage
   | 'storage:get'
   | 'storage:set'
@@ -78,15 +90,35 @@ type InvokeChannel =
   | 'ai:generateQuestionsStream'
   | 'ai:refineQuestion'
   | 'ai:chat'
+  | 'ai:extractQuestionsFromMaterial'
+  | 'ai:generateVariant'
+  | 'ai:convertFillInBlank'
+  // AI Lesson Generation
+  | 'ai:generateLessonGoals'
+  | 'ai:generateLessonStructure'
+  | 'ai:expandLessonComponent'
+  | 'ai:generateFullLesson'
+  // AI Material Generation
+  | 'ai:generateMaterial'
+  | 'ai:supportsImageGeneration'
+  // Material PDF Generation
+  | 'material:generatePDF'
   // Import utilities
   | 'import:fetchUrl'
   | 'import:openFileDialog'
   | 'import:readTextFile'
   | 'import:readPdfText'
+  | 'import:openMaterialFileDialog'
+  | 'import:extractTextFromFile'
   // PDF
   | 'pdf:parseScantron'
   | 'pdf:generateScantron'
   | 'pdf:exportTest'
+  | 'pdf:generateLessonPlan'
+  // File operations
+  | 'file:saveWithDialog'
+  // Shell operations
+  | 'shell:openExternal'
   // Grading
   | 'grade:processScantron'
   | 'grade:saveGrades'
@@ -107,6 +139,7 @@ type EventChannel =
   | 'llm:streamChunk'
   | 'grade:progress'
   | 'ai:questionStream'
+  | 'ai:lessonProgress'
 
 interface ElectronAPI {
   platform: NodeJS.Platform

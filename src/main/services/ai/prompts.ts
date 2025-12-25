@@ -19,7 +19,8 @@ import type { LearningGoal } from '../../../shared/types/lesson.types'
 import type {
   MaterialGenerationRequest,
   GraphicOrganizerTemplate,
-  PuzzleVocabularyRequest
+  PuzzleVocabularyRequest,
+  ReadingLevel
 } from '../../../shared/types/material.types'
 
 /**
@@ -683,6 +684,41 @@ GUIDELINES:
 // ============================================
 
 /**
+ * Build reading level adjustment instructions for material generation
+ */
+function buildReadingLevelInstructions(readingLevel?: ReadingLevel): string {
+  if (!readingLevel || readingLevel === 'on-grade') {
+    return ''
+  }
+
+  if (readingLevel === 'below-grade') {
+    return `
+READING LEVEL ADJUSTMENT - BELOW GRADE LEVEL:
+- Use simplified vocabulary and shorter sentences
+- Break complex ideas into smaller, digestible parts
+- Provide more context and scaffolding
+- Use common words instead of academic vocabulary where possible
+- Keep sentence structures simple (subject-verb-object)
+- Include visual supports or concrete examples when possible
+`
+  }
+
+  if (readingLevel === 'above-grade') {
+    return `
+READING LEVEL ADJUSTMENT - ABOVE GRADE LEVEL:
+- Use advanced vocabulary and complex sentence structures
+- Include challenging, higher-order thinking questions
+- Require synthesis and analysis of concepts
+- Use academic and domain-specific vocabulary
+- Include extension challenges and deeper explorations
+- Expect more sophisticated reasoning and explanations
+`
+  }
+
+  return ''
+}
+
+/**
  * Build the prompt for generating worksheet/practice problems
  */
 export function buildWorksheetPrompt(
@@ -692,12 +728,14 @@ export function buildWorksheetPrompt(
   const questionCount = request.options?.questionCount ?? 10
   const includeAnswerKey = request.options?.includeAnswerKey !== false
   const difficulty = request.options?.difficulty ?? 'mixed'
+  const readingLevelNote = buildReadingLevelInstructions(request.options?.readingLevel)
 
   const goalsText = request.learningGoals?.length
     ? `\nLEARNING GOALS:\n${request.learningGoals.map((g) => `- ${g.text}`).join('\n')}`
     : ''
 
   return `Create a practice worksheet for grade ${request.gradeLevel} ${request.subject} students on the topic: "${request.topic}".
+${readingLevelNote}
 
 STANDARDS:
 ${standardsText}
@@ -777,8 +815,10 @@ export function buildVocabularyListPrompt(
 ): string {
   const wordCount = request.options?.wordCount ?? 10
   const includeExamples = request.options?.includeExamples !== false
+  const readingLevelNote = buildReadingLevelInstructions(request.options?.readingLevel)
 
   return `Create a vocabulary study list for grade ${request.gradeLevel} ${request.subject} students on the topic: "${request.topic}".
+${readingLevelNote}
 
 STANDARDS:
 ${standardsText}
@@ -816,6 +856,7 @@ export function buildGraphicOrganizerPrompt(
 ): string {
   const template = request.options?.template ?? 'concept-map'
   const itemCount = request.options?.itemCount ?? 4
+  const readingLevelNote = buildReadingLevelInstructions(request.options?.readingLevel)
 
   const templateInstructions: Record<GraphicOrganizerTemplate, string> = {
     'venn-diagram': `Compare and contrast 2-3 items related to ${request.topic}. Include unique characteristics and shared traits.`,
@@ -833,7 +874,7 @@ export function buildGraphicOrganizerPrompt(
     : ''
 
   return `Create content for a ${template} graphic organizer for grade ${request.gradeLevel} ${request.subject} students on: "${request.topic}".
-
+${readingLevelNote}
 STANDARDS:
 ${standardsText}
 ${goalsText}
@@ -869,12 +910,14 @@ export function buildExitTicketPrompt(
   standardsText: string
 ): string {
   const questionCount = request.options?.exitTicketQuestions ?? 3
+  const readingLevelNote = buildReadingLevelInstructions(request.options?.readingLevel)
 
   const goalsText = request.learningGoals?.length
     ? `\nLEARNING GOALS:\n${request.learningGoals.map((g) => `- ${g.text}`).join('\n')}`
     : ''
 
   return `Create an exit ticket for grade ${request.gradeLevel} ${request.subject} students on: "${request.topic}".
+${readingLevelNote}
 
 STANDARDS:
 ${standardsText}

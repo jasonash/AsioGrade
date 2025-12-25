@@ -28,7 +28,6 @@ import GridOnIcon from '@mui/icons-material/GridOn'
 import ExtensionIcon from '@mui/icons-material/Extension'
 import ListAltIcon from '@mui/icons-material/ListAlt'
 import AccountTreeIcon from '@mui/icons-material/AccountTree'
-import ImageIcon from '@mui/icons-material/Image'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import CalculateIcon from '@mui/icons-material/Calculate'
 import { Modal } from '../ui'
@@ -36,7 +35,8 @@ import type {
   GeneratedMaterialType,
   MaterialOptions,
   GraphicOrganizerTemplate,
-  GeneratedMaterial
+  GeneratedMaterial,
+  ReadingLevel
 } from '../../../../shared/types/material.types'
 import type { Lesson, CourseSummary, UnitSummary, Standard } from '../../../../shared/types'
 
@@ -110,14 +110,9 @@ const MATERIAL_TYPE_OPTIONS: MaterialTypeOption[] = [
     description: 'Problems with solutions',
     icon: <CalculateIcon />,
     requiresImage: false
-  },
-  {
-    type: 'diagram',
-    label: 'Diagram',
-    description: 'AI-generated visual',
-    icon: <ImageIcon />,
-    requiresImage: true
   }
+  // Diagram generation hidden - SVG text generation unreliable
+  // TODO: Re-enable when proper image generation API is integrated
 ]
 
 const GRAPHIC_ORGANIZER_OPTIONS: { value: GraphicOrganizerTemplate; label: string }[] = [
@@ -145,6 +140,7 @@ export function MaterialGenerationModal({
 }: MaterialGenerationModalProps): ReactElement {
   const [selectedType, setSelectedType] = useState<GeneratedMaterialType | null>(null)
   const [options, setOptions] = useState<MaterialOptions>({
+    readingLevel: 'on-grade',
     questionCount: 10,
     includeAnswerKey: true,
     difficulty: 'mixed',
@@ -319,6 +315,20 @@ export function MaterialGenerationModal({
           sx={{ mb: 2 }}
         />
 
+        {/* Reading Level - applies to all material types */}
+        <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+          <InputLabel>Reading Level</InputLabel>
+          <Select
+            value={options.readingLevel ?? 'on-grade'}
+            label="Reading Level"
+            onChange={(e) => handleOptionChange('readingLevel', e.target.value as ReadingLevel)}
+          >
+            <MenuItem value="below-grade">Below Grade Level (Simplified)</MenuItem>
+            <MenuItem value="on-grade">On Grade Level</MenuItem>
+            <MenuItem value="above-grade">Above Grade Level (Advanced)</MenuItem>
+          </Select>
+        </FormControl>
+
         <Grid container spacing={2}>
           {/* Worksheet / Practice Problems options */}
           {(selectedType === 'worksheet' || selectedType === 'practice-problems') && (
@@ -480,26 +490,6 @@ export function MaterialGenerationModal({
                       {n} questions
                     </MenuItem>
                   ))}
-                </Select>
-              </FormControl>
-            </Grid>
-          )}
-
-          {/* Diagram options */}
-          {selectedType === 'diagram' && (
-            <Grid item xs={12}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Style</InputLabel>
-                <Select
-                  value={options.diagramStyle}
-                  label="Style"
-                  onChange={(e) =>
-                    handleOptionChange('diagramStyle', e.target.value as MaterialOptions['diagramStyle'])
-                  }
-                >
-                  <MenuItem value="simple">Simple</MenuItem>
-                  <MenuItem value="labeled">Labeled</MenuItem>
-                  <MenuItem value="detailed">Detailed</MenuItem>
                 </Select>
               </FormControl>
             </Grid>

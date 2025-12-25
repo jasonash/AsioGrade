@@ -2,12 +2,13 @@
  * LessonAIPanel Component
  *
  * AI assistant panel for lesson planning. Provides:
+ * - Generate a complete lesson (goals + structure + expansions) in one click
  * - Generate learning goals from standards
  * - Generate lesson structure from goals
  * - Expand individual components with details
  */
 
-import { type ReactElement, useState } from 'react'
+import { type ReactElement, useState, useEffect } from 'react'
 import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import Typography from '@mui/material/Typography'
@@ -16,6 +17,7 @@ import IconButton from '@mui/material/IconButton'
 import Chip from '@mui/material/Chip'
 import Divider from '@mui/material/Divider'
 import CircularProgress from '@mui/material/CircularProgress'
+import LinearProgress from '@mui/material/LinearProgress'
 import Alert from '@mui/material/Alert'
 import Collapse from '@mui/material/Collapse'
 import List from '@mui/material/List'
@@ -29,6 +31,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy'
 import FlagIcon from '@mui/icons-material/Flag'
 import ViewListIcon from '@mui/icons-material/ViewList'
 import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import type { ServiceResult } from '../../../../shared/types/common.types'
@@ -36,7 +39,9 @@ import type {
   LessonGenerationContext,
   LessonGoalsResult,
   LessonStructureResult,
-  ComponentExpansionResult
+  ComponentExpansionResult,
+  FullLessonResult,
+  LessonProgressEvent
 } from '../../../../shared/types/ai.types'
 import type {
   LearningGoal,
@@ -55,9 +60,14 @@ interface LessonAIPanelProps {
   onGoalsGenerated: (goals: LearningGoal[], successCriteria: string[]) => void
   onStructureGenerated: (components: LessonComponent[]) => void
   onComponentExpanded: (component: LessonComponent) => void
+  onFullLessonGenerated?: (
+    goals: LearningGoal[],
+    successCriteria: string[],
+    components: LessonComponent[]
+  ) => void
 }
 
-type GenerationStep = 'idle' | 'goals' | 'structure' | 'expand'
+type GenerationStep = 'idle' | 'goals' | 'structure' | 'expand' | 'full-lesson'
 
 export function LessonAIPanel({
   course,
@@ -66,7 +76,8 @@ export function LessonAIPanel({
   unitStandards,
   onGoalsGenerated,
   onStructureGenerated,
-  onComponentExpanded
+  onComponentExpanded,
+  onFullLessonGenerated
 }: LessonAIPanelProps): ReactElement {
   const [isExpanded, setIsExpanded] = useState(true)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -80,10 +91,23 @@ export function LessonAIPanel({
   const [pendingStructure, setPendingStructure] = useState<LessonComponent[] | null>(null)
   const [expandingComponentId, setExpandingComponentId] = useState<string | null>(null)
 
+  // Full lesson generation state
+  const [pendingFullLesson, setPendingFullLesson] = useState<FullLessonResult | null>(null)
+  const [fullLessonProgress, setFullLessonProgress] = useState<LessonProgressEvent | null>(null)
+
   // Selected standards for generation
   const [selectedStandards, setSelectedStandards] = useState<string[]>(
     lesson.standardRefs ?? unitStandards.map((s) => s.code)
   )
+
+  // Subscribe to lesson progress events
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.on('ai:lessonProgress', (event: unknown) => {
+      const progressEvent = event as LessonProgressEvent
+      setFullLessonProgress(progressEvent)
+    })
+    return unsubscribe
+  }, [])
 
   // Build context for AI generation
   const buildContext = (): LessonGenerationContext => ({
@@ -101,6 +125,77 @@ export function LessonAIPanel({
       .filter((s) => selectedStandards.includes(s.code))
       .map((s) => `${s.code}: ${s.description}`)
       .join('\n')
+  }
+
+  // Generate a complete lesson (goals + structure + expansions)
+  const handleGenerateFullLesson = async (): Promise<void> => {
+    setIsGenerating(true)
+    setGenerationStep('full-lesson')
+    setError(null)
+    setFullLessonProgress(null)
+
+    try {
+      const context = buildContext()
+
+      const result = await window.electronAPI.invoke<ServiceResult<FullLessonResult>>(
+        'ai:generateFullLesson',
+        context
+      )
+
+      if (!result.success) {
+        setError(result.error ?? 'Failed to generate lesson')
+      } else if (result.data) {
+        setPendingFullLesson(result.data)
+        setTokensUsed((prev) => prev + (result.data.usage?.totalTokens ?? 0))
+      } else {
+        setError('Failed to generate lesson: No data returned')
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Generation failed')
+    } finally {
+      setIsGenerating(false)
+      setGenerationStep('idle')
+      setFullLessonProgress(null)
+    }
+  }
+
+  // Accept the generated full lesson
+  const handleAcceptFullLesson = (): void => {
+    if (pendingFullLesson && onFullLessonGenerated) {
+      onFullLessonGenerated(
+        pendingFullLesson.goals,
+        pendingFullLesson.successCriteria,
+        pendingFullLesson.components
+      )
+      setPendingFullLesson(null)
+    }
+  }
+
+  // Reject the generated full lesson
+  const handleRejectFullLesson = (): void => {
+    setPendingFullLesson(null)
+  }
+
+  // Get progress message for full lesson generation
+  const getProgressMessage = (): string => {
+    if (!fullLessonProgress) return 'Starting...'
+
+    const { step, status, componentIndex, totalComponents } = fullLessonProgress
+
+    if (step === 'goals') {
+      return status === 'complete' ? 'Goals generated' : 'Generating learning goals...'
+    }
+    if (step === 'structure') {
+      return status === 'complete' ? 'Structure created' : 'Creating lesson structure...'
+    }
+    if (step === 'expansion') {
+      if (status === 'complete') return 'All components expanded'
+      if (componentIndex !== undefined && totalComponents) {
+        return `Expanding components (${componentIndex}/${totalComponents})...`
+      }
+      return 'Expanding components...'
+    }
+    return 'Generating...'
   }
 
   // Generate learning goals
@@ -324,6 +419,39 @@ export function LessonAIPanel({
           <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
             Quick Actions
           </Typography>
+
+          {/* Generate Full Lesson - Primary action */}
+          <Button
+            fullWidth
+            variant="contained"
+            color="primary"
+            startIcon={
+              isGenerating && generationStep === 'full-lesson' ? (
+                <CircularProgress size={18} color="inherit" />
+              ) : (
+                <AutoAwesomeIcon />
+              )
+            }
+            onClick={handleGenerateFullLesson}
+            disabled={isGenerating || selectedStandards.length === 0}
+            sx={{ mb: 1.5 }}
+          >
+            {isGenerating && generationStep === 'full-lesson'
+              ? 'Generating...'
+              : 'Generate Full Lesson'}
+          </Button>
+
+          {/* Progress indicator for full lesson generation */}
+          {isGenerating && generationStep === 'full-lesson' && (
+            <Box sx={{ mb: 1.5 }}>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+                {getProgressMessage()}
+              </Typography>
+              <LinearProgress />
+            </Box>
+          )}
+
+          {/* Step-by-step buttons */}
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             <Button
               size="small"
@@ -363,6 +491,69 @@ export function LessonAIPanel({
           <Alert severity="error" onClose={clearError} sx={{ m: 1 }}>
             {error}
           </Alert>
+        )}
+
+        {/* Pending Full Lesson */}
+        {pendingFullLesson && (
+          <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', bgcolor: 'success.main', color: 'success.contrastText' }}>
+            <Box
+              sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}
+            >
+              <Typography variant="subtitle2">
+                Generated Complete Lesson
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                <IconButton
+                  size="small"
+                  onClick={handleAcceptFullLesson}
+                  sx={{ color: 'inherit', bgcolor: 'rgba(255,255,255,0.2)', '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' } }}
+                >
+                  <CheckIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={handleRejectFullLesson}
+                  sx={{ color: 'inherit', bgcolor: 'rgba(255,255,255,0.2)', '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' } }}
+                >
+                  <CloseIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            </Box>
+            <Box sx={{ bgcolor: 'background.paper', borderRadius: 1, p: 1.5, color: 'text.primary' }}>
+              <Typography variant="body2" fontWeight={600} gutterBottom>
+                {pendingFullLesson.goals.length} Learning Goals
+              </Typography>
+              {pendingFullLesson.goals.slice(0, 2).map((goal) => (
+                <Typography key={goal.id} variant="caption" display="block" sx={{ mb: 0.5, pl: 1 }}>
+                  • {goal.text.length > 80 ? goal.text.slice(0, 80) + '...' : goal.text}
+                </Typography>
+              ))}
+              {pendingFullLesson.goals.length > 2 && (
+                <Typography variant="caption" color="text.secondary" sx={{ pl: 1 }}>
+                  +{pendingFullLesson.goals.length - 2} more goals
+                </Typography>
+              )}
+
+              <Divider sx={{ my: 1 }} />
+
+              <Typography variant="body2" fontWeight={600} gutterBottom>
+                {pendingFullLesson.components.length} Lesson Components
+              </Typography>
+              {pendingFullLesson.components.map((comp) => (
+                <Typography key={comp.id} variant="caption" display="block" sx={{ mb: 0.25, pl: 1 }}>
+                  • {comp.title} ({comp.estimatedMinutes} min)
+                </Typography>
+              ))}
+
+              <Divider sx={{ my: 1 }} />
+
+              <Typography variant="caption" color="text.secondary">
+                Total: {pendingFullLesson.components.reduce((sum, c) => sum + c.estimatedMinutes, 0)} minutes
+                {' | '}
+                {pendingFullLesson.usage?.totalTokens?.toLocaleString()} tokens used
+              </Typography>
+            </Box>
+          </Box>
         )}
 
         {/* Pending Goals */}

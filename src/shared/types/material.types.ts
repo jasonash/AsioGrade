@@ -100,9 +100,17 @@ export const GRAPHIC_ORGANIZER_LABELS: Record<GraphicOrganizerTemplate, string> 
 // ============================================================
 
 /**
+ * Reading level adjustment for differentiation
+ */
+export type ReadingLevel = 'below-grade' | 'on-grade' | 'above-grade'
+
+/**
  * Options specific to each material type
  */
 export interface MaterialOptions {
+  // Differentiation (applies to all material types)
+  readingLevel?: ReadingLevel // Adjust vocabulary/complexity for different learners
+
   // Worksheet / Practice Problems
   questionCount?: number // Number of questions (default: 10)
   includeAnswerKey?: boolean // Include answer key (default: true)

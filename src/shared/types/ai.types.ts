@@ -395,6 +395,27 @@ export interface ComponentExpansionResult {
 }
 
 /**
+ * Result of full lesson generation (goals + structure + expansions)
+ */
+export interface FullLessonResult {
+  goals: LearningGoal[]
+  successCriteria: string[]
+  components: LessonComponent[]
+  usage: LLMUsage
+}
+
+/**
+ * Progress event for lesson generation streaming
+ */
+export interface LessonProgressEvent {
+  step: 'goals' | 'structure' | 'expansion'
+  status: 'generating' | 'complete' | 'error'
+  componentIndex?: number // For expansion progress
+  totalComponents?: number
+  error?: string
+}
+
+/**
  * Request to suggest activities for a component type
  */
 export interface ActivitySuggestionRequest {

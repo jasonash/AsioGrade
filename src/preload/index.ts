@@ -111,6 +111,7 @@ const validInvokeChannels = [
   'ai:generateLessonGoals',
   'ai:generateLessonStructure',
   'ai:expandLessonComponent',
+  'ai:generateFullLesson',
 
   // AI Material Generation
   'ai:generateMaterial',
@@ -160,7 +161,8 @@ const validEventChannels = [
   'sync:complete',
   'llm:streamChunk',
   'grade:progress',
-  'ai:questionStream'
+  'ai:questionStream',
+  'ai:lessonProgress'
 ] as const
 
 type InvokeChannel = (typeof validInvokeChannels)[number]

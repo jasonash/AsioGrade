@@ -63,7 +63,9 @@ import type {
   LessonGoalsResult,
   LessonStructureResult,
   ComponentExpansionRequest,
-  ComponentExpansionResult
+  ComponentExpansionResult,
+  FullLessonResult,
+  LessonProgressEvent
 } from '../../../shared/types/ai.types'
 import type { LearningGoal, LessonComponent } from '../../../shared/types/lesson.types'
 import type {
@@ -575,6 +577,128 @@ class AIService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Component expansion failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate a complete lesson in one call (goals + structure + expansions)
+   * Sends progress events to the renderer via IPC
+   */
+  async generateFullLesson(
+    context: LessonGenerationContext,
+    standardsText: string,
+    sender?: Electron.WebContents
+  ): Promise<ServiceResult<FullLessonResult>> {
+    try {
+      // Helper to send progress events
+      const sendProgress = (event: LessonProgressEvent): void => {
+        sender?.send('ai:lessonProgress', event)
+      }
+
+      // Step 1: Generate learning goals
+      sendProgress({ step: 'goals', status: 'generating' })
+      const goalsResult = await this.generateLearningGoals(context, standardsText)
+
+      if (!goalsResult.success) {
+        sendProgress({ step: 'goals', status: 'error', error: goalsResult.error })
+        return { success: false, error: `Goals generation failed: ${goalsResult.error}` }
+      }
+      if (!goalsResult.data) {
+        sendProgress({ step: 'goals', status: 'error', error: 'No data returned' })
+        return { success: false, error: 'Goals generation failed: No data returned' }
+      }
+      sendProgress({ step: 'goals', status: 'complete' })
+
+      // Step 2: Generate lesson structure
+      sendProgress({ step: 'structure', status: 'generating' })
+      const structureResult = await this.generateLessonStructure(
+        context,
+        goalsResult.data.goals,
+        standardsText
+      )
+
+      if (!structureResult.success) {
+        sendProgress({ step: 'structure', status: 'error', error: structureResult.error })
+        return { success: false, error: `Structure generation failed: ${structureResult.error}` }
+      }
+      if (!structureResult.data) {
+        sendProgress({ step: 'structure', status: 'error', error: 'No data returned' })
+        return { success: false, error: 'Structure generation failed: No data returned' }
+      }
+      sendProgress({ step: 'structure', status: 'complete' })
+
+      // Step 3: Expand all components in parallel
+      const components = structureResult.data.components
+      sendProgress({
+        step: 'expansion',
+        status: 'generating',
+        componentIndex: 0,
+        totalComponents: components.length
+      })
+
+      const expandedComponents: LessonComponent[] = []
+      let expansionUsage: LLMUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+
+      // Expand components in parallel batches
+      const expansionPromises = components.map(async (comp, index) => {
+        const expansion = await this.expandComponent(
+          {
+            component: comp,
+            context,
+            goals: goalsResult.data.goals
+          },
+          standardsText
+        )
+
+        // Send progress for each completed component
+        sendProgress({
+          step: 'expansion',
+          status: 'generating',
+          componentIndex: index + 1,
+          totalComponents: components.length
+        })
+
+        if (expansion.success && expansion.data) {
+          expansionUsage.inputTokens += expansion.data.usage?.inputTokens ?? 0
+          expansionUsage.outputTokens += expansion.data.usage?.outputTokens ?? 0
+          return expansion.data.expandedComponent
+        }
+        // If expansion fails, return the original component
+        return comp
+      })
+
+      const expanded = await Promise.all(expansionPromises)
+      expandedComponents.push(...expanded)
+      expansionUsage.totalTokens = expansionUsage.inputTokens + expansionUsage.outputTokens
+
+      sendProgress({ step: 'expansion', status: 'complete' })
+
+      // Aggregate total usage
+      const totalUsage: LLMUsage = {
+        inputTokens:
+          (goalsResult.data.usage?.inputTokens ?? 0) +
+          (structureResult.data.usage?.inputTokens ?? 0) +
+          expansionUsage.inputTokens,
+        outputTokens:
+          (goalsResult.data.usage?.outputTokens ?? 0) +
+          (structureResult.data.usage?.outputTokens ?? 0) +
+          expansionUsage.outputTokens,
+        totalTokens: 0
+      }
+      totalUsage.totalTokens = totalUsage.inputTokens + totalUsage.outputTokens
+
+      return {
+        success: true,
+        data: {
+          goals: goalsResult.data.goals,
+          successCriteria: goalsResult.data.successCriteria,
+          components: expandedComponents,
+          usage: totalUsage
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Full lesson generation failed'
       return { success: false, error: message }
     }
   }

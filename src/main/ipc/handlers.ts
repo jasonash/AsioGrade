@@ -1027,6 +1027,27 @@ function registerAIHandlers(): void {
     }
   )
 
+  // Generate a complete lesson (goals + structure + expansions) in one call
+  ipcMain.handle(
+    'ai:generateFullLesson',
+    async (event, context: LessonGenerationContext) => {
+      try {
+        const standardsResult = await driveService.getAllStandardsForCourse(context.courseId)
+        if (!standardsResult.success) {
+          return { success: false, error: 'Failed to load standards' }
+        }
+
+        const standardsText = buildStandardsText(standardsResult.data, context.standardRefs)
+
+        // Pass the event sender for progress updates
+        return aiService.generateFullLesson(context, standardsText, event.sender)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Full lesson generation failed'
+        return { success: false, error: message }
+      }
+    }
+  )
+
   // ============================================================
   // Phase 5: Material Generation
   // ============================================================
