@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow, dialog } from 'electron'
+import { ipcMain, BrowserWindow, dialog, shell } from 'electron'
 import { writeFile } from 'fs/promises'
 import path from 'path'
 import { storageService } from '../services/storage.service'
@@ -1124,6 +1124,17 @@ function registerFileHandlers(): void {
       }
     }
   )
+
+  // Open external URL in default browser
+  ipcMain.handle('shell:openExternal', async (_event, url: string) => {
+    try {
+      await shell.openExternal(url)
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to open URL'
+      return { success: false, error: message }
+    }
+  })
 }
 
 /**

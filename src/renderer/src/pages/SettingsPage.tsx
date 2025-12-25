@@ -29,9 +29,11 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import CheckIcon from '@mui/icons-material/Check'
 import CloseIcon from '@mui/icons-material/Close'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import type { LLMProviderType, LLMProvidersConfig } from '../../../shared/types/llm.types'
 import { getProviderName, getModelsForProvider } from '../../../shared/types/llm.types'
 import { useAuthStore } from '../stores'
+import { APIKeyHelpModal } from '../components/settings'
 
 type SettingsSection = 'general' | 'ai-providers' | 'google-account' | 'about'
 
@@ -73,6 +75,9 @@ export function SettingsPage(): ReactElement {
     anthropic: { apiKey: '', showApiKey: false, testing: false, testResult: null },
     google: { apiKey: '', showApiKey: false, testing: false, testResult: null }
   })
+
+  // Help modal state
+  const [helpProvider, setHelpProvider] = useState<LLMProviderType | null>(null)
 
   const { user, logout } = useAuthStore()
 
@@ -367,9 +372,19 @@ export function SettingsPage(): ReactElement {
 
         {/* API Key Input */}
         <Box sx={{ mb: 2.5 }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            API Key
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+            <Typography variant="body2" color="text.secondary">
+              API Key
+            </Typography>
+            <IconButton
+              size="small"
+              onClick={() => setHelpProvider(provider)}
+              sx={{ p: 0.25 }}
+              title={`How to get a ${getProviderName(provider)} API key`}
+            >
+              <HelpOutlineIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
             <TextField
               type={state.showApiKey ? 'text' : 'password'}
@@ -700,6 +715,15 @@ export function SettingsPage(): ReactElement {
         {renderSidebar()}
         <Box sx={{ flex: 1, minWidth: 0 }}>{renderContent()}</Box>
       </Box>
+
+      {/* API Key Help Modal */}
+      {helpProvider && (
+        <APIKeyHelpModal
+          isOpen={!!helpProvider}
+          onClose={() => setHelpProvider(null)}
+          provider={helpProvider}
+        />
+      )}
     </Box>
   )
 }

@@ -136,6 +136,9 @@ const validInvokeChannels = [
   // File operations
   'file:saveWithDialog',
 
+  // Shell operations
+  'shell:openExternal',
+
   // Grading
   'grade:processScantron',
   'grade:saveGrades',
