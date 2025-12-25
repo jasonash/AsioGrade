@@ -888,11 +888,19 @@ class AIService {
    * Extract SVG code from LLM response, handling various formats
    */
   private extractSVGFromResponse(response: string): string | null {
-    // Log for debugging (can be removed later)
+    // Log for debugging
     console.log('[SVG Extraction] Response length:', response.length)
-    console.log('[SVG Extraction] First 500 chars:', response.substring(0, 500))
+    console.log('[SVG Extraction] Contains <svg:', response.includes('<svg'))
+    console.log('[SVG Extraction] Contains </svg>:', response.includes('</svg>'))
 
-    // Method 1: Try to find SVG in markdown code block (```svg or ```xml or ```)
+    // Method 1: Try to find complete SVG (greedy match to last </svg>)
+    const completeSvgMatch = response.match(/<svg[\s\S]*<\/svg>/i)
+    if (completeSvgMatch) {
+      console.log('[SVG Extraction] Found complete SVG')
+      return completeSvgMatch[0]
+    }
+
+    // Method 2: Try to find SVG in markdown code block
     const codeBlockPatterns = [
       /```svg\s*([\s\S]*?)```/i,
       /```xml\s*([\s\S]*?)```/i,
@@ -903,35 +911,55 @@ class AIService {
       const match = response.match(pattern)
       if (match) {
         const content = match[1].trim()
-        if (content.includes('<svg') && content.includes('</svg>')) {
+        const svgMatch = content.match(/<svg[\s\S]*<\/svg>/i)
+        if (svgMatch) {
           console.log('[SVG Extraction] Found SVG in code block')
-          // Extract just the SVG part in case there's extra text
-          const svgMatch = content.match(/<svg[\s\S]*<\/svg>/i)
-          if (svgMatch) {
-            return svgMatch[0]
-          }
+          return svgMatch[0]
         }
       }
     }
 
-    // Method 2: Try to extract raw SVG directly from response
-    const svgMatch = response.match(/<svg[\s\S]*?<\/svg>/i)
-    if (svgMatch) {
-      console.log('[SVG Extraction] Found raw SVG')
-      return svgMatch[0]
+    // Method 3: Handle truncated SVG - if it starts with <svg but has no closing tag
+    if (response.includes('<svg') && !response.includes('</svg>')) {
+      console.log('[SVG Extraction] SVG appears truncated, attempting repair')
+      const svgStart = response.indexOf('<svg')
+      let svgContent = response.substring(svgStart)
+
+      // Try to close any open tags and add closing </svg>
+      // Count open tags that need closing
+      const openTags: string[] = []
+      const tagRegex = /<(\w+)[^>]*(?<!\/)>/g
+      const closeTagRegex = /<\/(\w+)>/g
+
+      let match
+      while ((match = tagRegex.exec(svgContent)) !== null) {
+        openTags.push(match[1])
+      }
+      while ((match = closeTagRegex.exec(svgContent)) !== null) {
+        const idx = openTags.lastIndexOf(match[1])
+        if (idx !== -1) openTags.splice(idx, 1)
+      }
+
+      // Close remaining open tags in reverse order
+      for (let i = openTags.length - 1; i >= 0; i--) {
+        if (openTags[i] !== 'svg') {
+          svgContent += `</${openTags[i]}>`
+        }
+      }
+      svgContent += '</svg>'
+
+      console.log('[SVG Extraction] Repaired truncated SVG')
+      return svgContent
     }
 
-    // Method 3: Check if response starts with XML declaration followed by SVG
+    // Method 4: Check if response starts with XML declaration
     const xmlSvgMatch = response.match(/<\?xml[^>]*\?>\s*(<svg[\s\S]*<\/svg>)/i)
     if (xmlSvgMatch) {
       console.log('[SVG Extraction] Found SVG with XML declaration')
       return xmlSvgMatch[1]
     }
 
-    // Log failure details for debugging
-    console.log('[SVG Extraction] Failed to find SVG. Contains <svg:', response.includes('<svg'))
-    console.log('[SVG Extraction] Contains </svg>:', response.includes('</svg>'))
-
+    console.log('[SVG Extraction] Failed to extract SVG')
     return null
   }
 
