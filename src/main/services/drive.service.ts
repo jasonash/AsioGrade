@@ -3325,6 +3325,7 @@ class DriveService {
         successCriteria: input.successCriteria ?? existing.successCriteria,
         components: input.components ?? existing.components,
         materials: input.materials ?? existing.materials,
+        generatedMaterials: input.generatedMaterials ?? existing.generatedMaterials,
         udlNotes: input.udlNotes ?? existing.udlNotes,
         status: input.status ?? existing.status,
         aiGenerated: input.aiGenerated ?? existing.aiGenerated,
