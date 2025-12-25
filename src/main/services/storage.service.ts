@@ -112,7 +112,7 @@ const defaults: StoreSchema = {
     },
     google: {
       apiKey: null,
-      model: 'gemini-pro'
+      model: 'gemini-2.0-flash-exp'
     },
     temperature: 0.7
   },
