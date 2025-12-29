@@ -19,21 +19,33 @@ interface QuestionListProps {
   standards?: Standard[]
   onQuestionsChange: (questions: MultipleChoiceQuestion[]) => void
   readOnly?: boolean
+  variantEditMode?: boolean // Allow editing individual questions without add/delete
+  onVariantQuestionEdit?: (question: MultipleChoiceQuestion) => void
 }
 
 export function QuestionList({
   questions,
   standards = [],
   onQuestionsChange,
-  readOnly = false
+  readOnly = false,
+  variantEditMode = false,
+  onVariantQuestionEdit
 }: QuestionListProps): ReactElement {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [isAddingNew, setIsAddingNew] = useState(false)
+
+  // In variant edit mode, we can edit but not add/delete
+  const canEdit = !readOnly || variantEditMode
+  const canAddDelete = !readOnly && !variantEditMode
 
   const handleSaveQuestion = (savedQuestion: MultipleChoiceQuestion): void => {
     if (isAddingNew) {
       onQuestionsChange([...questions, savedQuestion])
       setIsAddingNew(false)
+    } else if (variantEditMode && onVariantQuestionEdit) {
+      // In variant mode, use the special callback
+      onVariantQuestionEdit(savedQuestion)
+      setEditingQuestionId(null)
     } else {
       onQuestionsChange(
         questions.map((q) => (q.id === savedQuestion.id ? savedQuestion : q))
@@ -70,7 +82,7 @@ export function QuestionList({
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Add your first question to get started
           </Typography>
-          {!readOnly && (
+          {canAddDelete && (
             <Button
               variant="contained"
               startIcon={<AddIcon />}
@@ -173,7 +185,7 @@ export function QuestionList({
                 </Box>
 
                 {/* Actions */}
-                {!readOnly && (
+                {canEdit && (
                   <Box
                     className="question-actions"
                     sx={{
@@ -190,14 +202,16 @@ export function QuestionList({
                     >
                       <EditIcon fontSize="small" />
                     </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={() => handleDeleteQuestion(question.id)}
-                      title="Delete question"
-                      sx={{ color: 'error.main' }}
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
+                    {canAddDelete && (
+                      <IconButton
+                        size="small"
+                        onClick={() => handleDeleteQuestion(question.id)}
+                        title="Delete question"
+                        sx={{ color: 'error.main' }}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    )}
                   </Box>
                 )}
               </Box>
@@ -218,7 +232,7 @@ export function QuestionList({
       </Collapse>
 
       {/* Add button (when not adding and has questions) */}
-      {!isAddingNew && !editingQuestionId && questions.length > 0 && !readOnly && (
+      {!isAddingNew && !editingQuestionId && questions.length > 0 && canAddDelete && (
         <Button
           variant="outlined"
           startIcon={<AddIcon />}

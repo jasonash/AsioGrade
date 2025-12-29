@@ -8,6 +8,7 @@ import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import Chip from '@mui/material/Chip'
 import Divider from '@mui/material/Divider'
+import Tooltip from '@mui/material/Tooltip'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -77,10 +78,12 @@ export function AssessmentViewPage({
     generatingVariant,
     generatingVersions,
     error,
+    setCurrentCourseId,
     getAssessment,
     updateAssessment,
     deleteAssessment,
     deleteVariant,
+    updateVariantQuestion,
     generateVersions,
     clearVersions,
     clearError
@@ -101,6 +104,7 @@ export function AssessmentViewPage({
 
   // Fetch full assessment details and standards when component mounts
   useEffect(() => {
+    setCurrentCourseId(course.id)
     getAssessment(assessmentSummary.id)
     fetchAllCollections(course.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
@@ -193,6 +197,12 @@ export function AssessmentViewPage({
       setIsDeleteVariantModalOpen(false)
       setVariantToDelete(null)
     }
+  }
+
+  // Handler for editing a question within a variant
+  const handleVariantQuestionEdit = async (question: MultipleChoiceQuestion): Promise<void> => {
+    if (!selectedVariantId) return
+    await updateVariantQuestion(selectedVariantId, question)
   }
 
   // Handler for generating randomized versions (A/B/C/D)
@@ -377,14 +387,18 @@ export function AssessmentViewPage({
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {currentAssessment?.status === 'draft' && (
               <>
-                <Button
-                  variant="outlined"
-                  startIcon={generatingVariant ? <CircularProgress size={16} /> : <TuneIcon />}
-                  onClick={() => setIsVariantModalOpen(true)}
-                  disabled={generatingVariant || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0}
-                >
-                  {generatingVariant ? 'Generating...' : 'Generate Variant'}
-                </Button>
+                <Tooltip title="Create alternate versions for differentiated instruction (optional)">
+                  <span>
+                    <Button
+                      variant="outlined"
+                      startIcon={generatingVariant ? <CircularProgress size={16} /> : <TuneIcon />}
+                      onClick={() => setIsVariantModalOpen(true)}
+                      disabled={generatingVariant || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0}
+                    >
+                      {generatingVariant ? 'Generating...' : 'Add DOK Variant'}
+                    </Button>
+                  </span>
+                </Tooltip>
                 {/* Hide Generate Versions button for quizzes - they don't support versions */}
                 {!isQuiz && (
                   <Button
@@ -525,17 +539,27 @@ export function AssessmentViewPage({
 
       {/* Variant Selector - Show when variants exist */}
       {currentAssessment?.variants && currentAssessment.variants.length > 0 && (
-        <VariantSelector
-          variants={currentAssessment.variants}
-          selectedVariantId={selectedVariantId}
-          onSelectVariant={(id) => {
-            setSelectedVariantId(id)
-            // Clear version selection when switching to variant
-            if (id !== null) setSelectedVersionId(null)
-          }}
-          onDeleteVariant={currentAssessment.status === 'draft' ? handleDeleteVariantClick : undefined}
-          disabled={loading || generatingVariant || generatingVersions}
-        />
+        <Box sx={{ mb: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <Typography variant="subtitle2" color="text.secondary">
+              DOK Variants (Optional)
+            </Typography>
+            <Tooltip title="DOK variants allow differentiated instruction. Students assigned a DOK level receive the matching variant; others get the base assessment.">
+              <HelpOutlineIcon sx={{ fontSize: 16, color: 'text.disabled', cursor: 'help' }} />
+            </Tooltip>
+          </Box>
+          <VariantSelector
+            variants={currentAssessment.variants}
+            selectedVariantId={selectedVariantId}
+            onSelectVariant={(id) => {
+              setSelectedVariantId(id)
+              // Clear version selection when switching to variant
+              if (id !== null) setSelectedVersionId(null)
+            }}
+            onDeleteVariant={currentAssessment.status === 'draft' ? handleDeleteVariantClick : undefined}
+            disabled={loading || generatingVariant || generatingVersions}
+          />
+        </Box>
       )}
 
       {/* Version Selector - Show when versions exist (and not viewing a variant) */}
@@ -579,7 +603,9 @@ export function AssessmentViewPage({
             questions={displayedQuestions as MultipleChoiceQuestion[]}
             standards={allStandards}
             onQuestionsChange={handleQuestionsChange}
-            readOnly={currentAssessment?.status === 'published' || isViewingVariant || isViewingVersion}
+            readOnly={currentAssessment?.status === 'published' || isViewingVersion}
+            variantEditMode={isViewingVariant && currentAssessment?.status === 'draft'}
+            onVariantQuestionEdit={handleVariantQuestionEdit}
           />
 
           {currentAssessment?.status === 'published' && (
@@ -593,13 +619,23 @@ export function AssessmentViewPage({
             </Typography>
           )}
 
-          {isViewingVariant && (
+          {isViewingVariant && currentAssessment?.status === 'draft' && (
             <Typography
               variant="body2"
               color="text.secondary"
               sx={{ mt: 2, fontStyle: 'italic' }}
             >
-              Viewing a DOK variant. Switch to the base assessment to edit questions.
+              Viewing a DOK variant. You can edit questions, but adding or deleting is only available on the base assessment.
+            </Typography>
+          )}
+
+          {isViewingVariant && currentAssessment?.status === 'published' && (
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 2, fontStyle: 'italic' }}
+            >
+              This assessment has been published. Variant questions cannot be edited.
             </Typography>
           )}
 

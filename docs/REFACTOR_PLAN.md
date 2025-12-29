@@ -54,6 +54,10 @@ Phase 8
     ▼
 Phase 9
 (Gradebook MVP)
+    │
+    ▼
+Phase 10
+(QR Code Reliability)
 ```
 
 ### Parallelizable Work
@@ -816,6 +820,129 @@ Student,Student ID,Assessment 1,Assessment 2,...,Average
 - [ ] Averages calculate correctly
 - [ ] CSV export works
 - [ ] Empty grades shown as "-" or "N/A"
+
+---
+
+## Phase 10: QR Code Reliability (Short Key System)
+
+**Goal:** Replace verbose QR code data with short lookup keys for dramatically improved scan reliability.
+
+### Problem Statement
+Current QR codes encode full JSON data:
+```json
+{"v":2,"aid":"abc123...","sid":"xyz789...","fmt":"quiz","dok":4,"ver":"A"}
+```
+This results in:
+- Large, dense QR codes that are hard to scan from printed/copied documents
+- Scan failures on grainy prints or low-quality scans
+- Limited ability to add metadata (long assessment names, etc.)
+
+### Solution: Short Key Lookup System
+
+Store all scantron metadata in a local SQLite database, encode only a short unique key in the QR code.
+
+### 10.1 Database Schema
+
+```sql
+-- Scantron lookup table
+CREATE TABLE scantron_keys (
+  key TEXT PRIMARY KEY,           -- Short unique key (8 chars)
+  assignment_id TEXT NOT NULL,
+  student_id TEXT NOT NULL,
+  format TEXT,                    -- 'quiz' | 'scantron'
+  dok_level INTEGER,
+  version_id TEXT,
+  created_at TEXT NOT NULL,
+  -- Can add more fields without affecting QR size
+  assessment_title TEXT,
+  student_name TEXT,
+  teacher_notes TEXT
+);
+
+CREATE INDEX idx_assignment ON scantron_keys(assignment_id);
+CREATE INDEX idx_student ON scantron_keys(student_id);
+```
+
+### 10.2 Key Generation
+
+```typescript
+// Generate short, unique, scannable key
+function generateScantronKey(): string {
+  // Use alphanumeric chars that scan well (avoid 0/O, 1/l confusion)
+  const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'
+  let key = ''
+  for (let i = 0; i < 8; i++) {
+    key += chars[Math.floor(Math.random() * chars.length)]
+  }
+  return key
+}
+```
+
+### 10.3 New QR Format
+
+**Before (v2):**
+```json
+{"v":2,"aid":"abc123","sid":"xyz789","fmt":"quiz","dok":4,"ver":"A"}
+```
+
+**After (v3):**
+```json
+{"v":3,"k":"A7XB3K9M"}
+```
+Or even simpler:
+```
+TH:A7XB3K9M
+```
+(Prefix "TH:" for TeachingHelp to identify our QR codes)
+
+### 10.4 Implementation Steps
+
+1. **Add SQLite database**
+   - Install `better-sqlite3` package
+   - Create `scantron-lookup.service.ts`
+   - Initialize DB on app startup
+
+2. **Update PDF generation**
+   - When generating scantrons, create DB record for each student
+   - Encode only the short key in QR code
+
+3. **Update grading service**
+   - On QR decode, lookup full data from DB
+   - Fall back to v2 parsing for backwards compatibility
+
+4. **Migration strategy**
+   - Support both v2 (full data) and v3 (short key) formats
+   - New scantrons use v3, old ones still work
+
+### 10.5 Benefits
+
+| Aspect | Before | After |
+|--------|--------|-------|
+| QR Data Size | ~80-150 chars | ~15 chars |
+| QR Module Size | Small, dense | Large, easy to scan |
+| Error Correction | Limited room | Maximum available |
+| Scan Success Rate | ~60-70% | Expected 95%+ |
+| Long Names Support | Problematic | No limit |
+| Future Fields | Increases QR size | No impact |
+
+### 10.6 Files to Create/Modify
+
+**New Files:**
+- `src/main/services/scantron-lookup.service.ts` - SQLite operations
+- `src/main/db/schema.sql` - Database schema
+
+**Modified Files:**
+- `src/main/services/pdf.service.ts` - Use short keys in QR generation
+- `src/main/services/grade.service.ts` - Lookup data from DB
+- `package.json` - Add `better-sqlite3` dependency
+
+### 10.7 Testing Checklist
+- [ ] Database initializes on first run
+- [ ] Keys are generated and stored when creating scantrons
+- [ ] QR codes contain only short keys
+- [ ] Grading successfully looks up full data from key
+- [ ] Backwards compatible with v2 QR codes
+- [ ] Scan success rate improved on test documents
 
 ---
 

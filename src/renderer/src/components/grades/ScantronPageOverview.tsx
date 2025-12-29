@@ -72,7 +72,7 @@ export function ScantronPageOverview({
       }
 
       if (page.qrData) {
-        const studentName = studentMap.get(page.qrData.sid) || `Unknown (${page.qrData.sid})`
+        const studentName = studentMap.get(page.qrData.studentId) || `Unknown (${page.qrData.studentId})`
         return {
           pageNumber: page.pageNumber,
           status: 'valid' as PageStatus,

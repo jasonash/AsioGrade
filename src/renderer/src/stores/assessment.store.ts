@@ -6,7 +6,8 @@ import type {
   UpdateAssessmentInput,
   AssessmentVariant,
   VariantStrategy,
-  AssessmentVersion
+  AssessmentVersion,
+  MultipleChoiceQuestion
 } from '../../../shared/types'
 import type { ServiceResult } from '../../../shared/types/common.types'
 import type { DOKLevel } from '../../../shared/types/roster.types'
@@ -39,6 +40,7 @@ interface AssessmentState {
     subject: string
   ) => Promise<AssessmentVariant | null>
   deleteVariant: (variantId: string) => Promise<boolean>
+  updateVariantQuestion: (variantId: string, question: MultipleChoiceQuestion) => Promise<boolean>
   generateVersions: (assessmentId: string, courseId: string) => Promise<AssessmentVersion[] | null>
   clearVersions: (assessmentId: string, courseId: string) => Promise<boolean>
   setCurrentAssessment: (assessment: Assessment | null) => void
@@ -335,6 +337,65 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to delete variant'
+      set({ error: message, loading: false })
+      return false
+    }
+  },
+
+  updateVariantQuestion: async (variantId: string, question: MultipleChoiceQuestion) => {
+    const { currentAssessment, currentCourseId } = get()
+
+    if (!currentAssessment || !currentCourseId) {
+      set({ error: 'No assessment loaded' })
+      return false
+    }
+
+    const variantIndex = (currentAssessment.variants ?? []).findIndex((v) => v.id === variantId)
+    if (variantIndex === -1) {
+      set({ error: 'Variant not found' })
+      return false
+    }
+
+    set({ loading: true, error: null })
+
+    try {
+      const variant = currentAssessment.variants![variantIndex]
+
+      // Update the question in the variant
+      const updatedQuestions = variant.questions.map((q) =>
+        q.id === question.id ? question : q
+      )
+
+      // Create updated variant with isModified flag
+      const updatedVariant: AssessmentVariant = {
+        ...variant,
+        questions: updatedQuestions,
+        isModified: true
+      }
+
+      // Update variants array
+      const updatedVariants = [...(currentAssessment.variants ?? [])]
+      updatedVariants[variantIndex] = updatedVariant
+
+      // Save the updated assessment
+      const result = await window.electronAPI.invoke<ServiceResult<Assessment>>(
+        'drive:updateAssessment',
+        {
+          id: currentAssessment.id,
+          courseId: currentCourseId,
+          variants: updatedVariants
+        }
+      )
+
+      if (result.success) {
+        set({ currentAssessment: result.data, loading: false })
+        return true
+      } else {
+        set({ error: result.error, loading: false })
+        return false
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update variant question'
       set({ error: message, loading: false })
       return false
     }

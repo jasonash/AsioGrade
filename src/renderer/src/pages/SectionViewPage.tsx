@@ -251,6 +251,9 @@ export function SectionViewPage({ course, section, onBack, onAssignmentSelect, o
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         sectionId={section.id}
+        courseName={course.name}
+        sectionName={section.name}
+        academicYear={course.academicYear}
       />
 
       {/* Delete Confirmation Modal */}

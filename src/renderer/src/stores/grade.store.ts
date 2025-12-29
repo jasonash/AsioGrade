@@ -441,11 +441,12 @@ export const useGradeStore = create<GradeState>((set, get) => ({
     const updatedUnidentified = unidentifiedPages.filter((p) => p.pageNumber !== pageNumber)
 
     // Update parsed page to mark it as assigned
+    // Use ResolvedScantronData format (v3 compatible)
     const updatedParsedPages = parsedPages.map((p) => {
       if (p.pageNumber === pageNumber && parsedPage) {
         return {
           ...p,
-          qrData: { v: 1 as const, aid: currentAssignmentId, sid: studentId },
+          qrData: { assignmentId: currentAssignmentId, studentId },
           qrError: undefined,
           success: true
         }

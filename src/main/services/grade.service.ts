@@ -14,7 +14,8 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { BrowserWindow } from 'electron'
 import { driveService } from './drive.service'
-import type { GradeProgressEvent } from '../../shared/types'
+import { scantronLookupService } from './scantron-lookup.service'
+import type { GradeProgressEvent, ResolvedScantronData, ScantronQRDataV1V2 } from '../../shared/types'
 // Note: registrationService removed - phone scan deskewing is not reliably supported
 
 // Initialize zxing-wasm for Node.js environment
@@ -73,7 +74,6 @@ import type {
   GradeStats,
   GradeOverride,
   SaveGradesInput,
-  ScantronQRData,
   BubbleDetectionOptions,
   ServiceResult,
   Assignment,
@@ -86,7 +86,8 @@ import type {
   Gradebook,
   GradebookEntry,
   GradebookAssessment,
-  GradeInfo
+  GradeInfo,
+  Question
 } from '../../shared/types'
 
 // Log OpenCV load status at module initialization
@@ -112,6 +113,7 @@ const LAYOUT = {
   LETTER_WIDTH: 612,
   LETTER_HEIGHT: 792
 }
+
 
 // Default bubble detection options
 const DEFAULT_DETECTION_OPTIONS: Required<BubbleDetectionOptions> = {
@@ -356,7 +358,7 @@ class GradeService {
     const dpiScale = imageWidth / LAYOUT.LETTER_WIDTH
 
     // Read QR code
-    let qrData: ScantronQRData | null = null
+    let qrData: ResolvedScantronData | null = null
     let qrError: string | undefined
 
     console.log(`[GradeService] Page ${pageNumber}: Reading QR code (dpiScale: ${dpiScale.toFixed(2)})...`)
@@ -367,7 +369,7 @@ class GradeService {
         flags.push('qr_error')
         console.log(`[GradeService] Page ${pageNumber}: QR code not found`)
       } else {
-        console.log(`[GradeService] Page ${pageNumber}: QR code found - student: ${qrData.sid}`)
+        console.log(`[GradeService] Page ${pageNumber}: QR code found - student: ${qrData.studentId}`)
       }
     } catch (error) {
       qrError = error instanceof Error ? error.message : 'QR code read error'
@@ -411,8 +413,9 @@ class GradeService {
 
   /**
    * Try to decode QR code from image data using zxing-wasm
+   * Returns ResolvedScantronData which normalizes v1/v2/v3 formats
    */
-  private async tryDecodeQR(data: Buffer, width: number, height: number): Promise<ScantronQRData | null> {
+  private async tryDecodeQR(data: Buffer, width: number, height: number): Promise<ResolvedScantronData | null> {
     // Ensure zxing-wasm is initialized
     await initZXing()
 
@@ -451,11 +454,40 @@ class GradeService {
         const qrText = results[0].text
         console.log('[GradeService] zxing decoded QR text:', qrText)
 
-        try {
-          const parsed = JSON.parse(qrText) as ScantronQRData
-          if (parsed.v === 1) {
-            return parsed
+        // Try v3 format first (short key: "TH:XXXXXXXX")
+        if (scantronLookupService.isV3Format(qrText)) {
+          const key = scantronLookupService.parseQRString(qrText)
+          if (key) {
+            const lookup = scantronLookupService.getLookup(key)
+            if (lookup) {
+              console.log('[GradeService] v3 QR resolved from database:', lookup.studentId)
+              return {
+                assignmentId: lookup.assignmentId,
+                studentId: lookup.studentId,
+                format: lookup.format,
+                dokLevel: lookup.dokLevel,
+                versionId: lookup.versionId
+              }
+            }
+            console.log('[GradeService] v3 QR key not found in database:', key)
           }
+          return null
+        }
+
+        // Try v1/v2 JSON format
+        try {
+          const parsed = JSON.parse(qrText) as ScantronQRDataV1V2
+          // Accept both v1 (standard scantron) and v2 (quiz format with DOK/version)
+          if (parsed.v === 1 || parsed.v === 2) {
+            return {
+              assignmentId: parsed.aid,
+              studentId: parsed.sid,
+              format: parsed.fmt,
+              dokLevel: parsed.dok,
+              versionId: parsed.ver
+            }
+          }
+          console.log('[GradeService] Unknown QR version:', parsed.v)
         } catch {
           console.log('[GradeService] QR text is not valid JSON:', qrText)
         }
@@ -469,70 +501,134 @@ class GradeService {
 
   /**
    * Extract QR code from scantron image
-   * Uses 2x upscaling for best detection reliability (validated: 5/5 success rate)
+   * Tries multiple strategies for robust detection:
+   * 1. Full page scan at different scales
+   * 2. Region-specific extraction (quiz QR in top-left, standard in different location)
+   * 3. Multiple image processing techniques (sharpen, threshold, normalize)
+   * Returns ResolvedScantronData which normalizes v1/v2/v3 formats
    */
-  private async extractQRCode(imageBuffer: Buffer, _dpiScale: number): Promise<ScantronQRData | null> {
+  private async extractQRCode(imageBuffer: Buffer, dpiScale: number): Promise<ResolvedScantronData | null> {
     // Get original dimensions for scaling
     const metadata = await sharp(imageBuffer).metadata()
     const originalWidth = metadata.width || 1275
+    const originalHeight = metadata.height || 1650
 
-    // Try 2x scaled image first - this has the best detection rate
-    console.log('[GradeService] Scanning 2x scaled image for QR code...')
+    // Strategy 1: Try full page at 2x scale (fastest if QR is clear)
+    console.log('[GradeService] Strategy 1: Full page 2x scale...')
+    let result = await this.tryQRWithProcessing(imageBuffer, originalWidth, 2, false)
+    if (result) return result
+
+    // Strategy 2: Extract just the top-left region where quiz QR codes are located
+    // Quiz QR is at (36, 36) with size 50 at 72 DPI
+    // At current DPI: position and size scale accordingly
+    console.log('[GradeService] Strategy 2: Quiz QR region extraction...')
+    const qrRegionSize = Math.floor(120 * dpiScale) // Extract 120pt square (generous margin)
+    const qrRegionX = Math.floor(20 * dpiScale) // Start slightly before expected position
+    const qrRegionY = Math.floor(20 * dpiScale)
+
     try {
-      const { data, info } = await sharp(imageBuffer)
-        .resize({ width: originalWidth * 2 })
-        .grayscale()
-        .raw()
-        .toBuffer({ resolveWithObject: true })
+      const qrRegion = await sharp(imageBuffer)
+        .extract({
+          left: Math.max(0, qrRegionX),
+          top: Math.max(0, qrRegionY),
+          width: Math.min(qrRegionSize, originalWidth - qrRegionX),
+          height: Math.min(qrRegionSize, originalHeight - qrRegionY)
+        })
+        .toBuffer()
 
-      const result = await this.tryDecodeQR(data, info.width, info.height)
+      // Try the region with multiple processing techniques
+      result = await this.tryQRWithProcessing(qrRegion, qrRegionSize, 3, false) // 3x scale for small region
       if (result) {
-        console.log('[GradeService] QR code found in 2x scaled image')
+        console.log('[GradeService] QR found in quiz region')
+        return result
+      }
+
+      // Try with sharpening
+      result = await this.tryQRWithProcessing(qrRegion, qrRegionSize, 3, true)
+      if (result) {
+        console.log('[GradeService] QR found in quiz region (sharpened)')
         return result
       }
     } catch (error) {
-      console.log('[GradeService] Error scanning 2x scaled image:', error)
+      console.log('[GradeService] Error extracting quiz QR region:', error)
     }
 
-    // Try 2x scaled + rotated 180 degrees (for upside-down pages)
-    console.log('[GradeService] Trying 2x scaled + rotated 180 degrees...')
+    // Strategy 3: Try full page rotated 180 degrees (upside down)
+    console.log('[GradeService] Strategy 3: Full page rotated 180°...')
     try {
-      const { data, info } = await sharp(imageBuffer)
-        .rotate(180)
-        .resize({ width: originalWidth * 2 })
-        .grayscale()
-        .raw()
-        .toBuffer({ resolveWithObject: true })
-
-      const result = await this.tryDecodeQR(data, info.width, info.height)
+      const rotatedBuffer = await sharp(imageBuffer).rotate(180).toBuffer()
+      result = await this.tryQRWithProcessing(rotatedBuffer, originalWidth, 2, false)
       if (result) {
-        console.log('[GradeService] QR code found in rotated 2x scaled image')
+        console.log('[GradeService] QR found (page was upside down)')
         return result
       }
     } catch (error) {
-      console.log('[GradeService] Error scanning rotated image:', error)
+      console.log('[GradeService] Error with rotated scan:', error)
     }
 
-    // Fallback: try original size with normalized contrast
-    console.log('[GradeService] Trying normalized contrast at original size...')
-    try {
-      const { data, info } = await sharp(imageBuffer)
-        .grayscale()
-        .normalize()
-        .raw()
-        .toBuffer({ resolveWithObject: true })
-
-      const result = await this.tryDecodeQR(data, info.width, info.height)
+    // Strategy 4: Try different scales on full page
+    console.log('[GradeService] Strategy 4: Trying multiple scales...')
+    for (const scale of [1.5, 2.5, 3]) {
+      result = await this.tryQRWithProcessing(imageBuffer, originalWidth, scale, false)
       if (result) {
-        console.log('[GradeService] QR code found with normalized contrast')
+        console.log(`[GradeService] QR found at ${scale}x scale`)
+        return result
+      }
+    }
+
+    // Strategy 5: Try with aggressive image processing
+    console.log('[GradeService] Strategy 5: Aggressive processing...')
+    result = await this.tryQRWithProcessing(imageBuffer, originalWidth, 2, true)
+    if (result) {
+      console.log('[GradeService] QR found with sharpening')
+      return result
+    }
+
+    // Strategy 6: Try with thresholding (binarization)
+    console.log('[GradeService] Strategy 6: Thresholded image...')
+    try {
+      const thresholdedBuffer = await sharp(imageBuffer)
+        .grayscale()
+        .threshold(128)
+        .toBuffer()
+      result = await this.tryQRWithProcessing(thresholdedBuffer, originalWidth, 2, false)
+      if (result) {
+        console.log('[GradeService] QR found with thresholding')
         return result
       }
     } catch (error) {
       // Continue
     }
 
-    console.log('[GradeService] No QR code found')
+    console.log('[GradeService] No QR code found after all strategies')
     return null
+  }
+
+  /**
+   * Try to decode QR with specific processing options
+   */
+  private async tryQRWithProcessing(
+    imageBuffer: Buffer,
+    baseWidth: number,
+    scale: number,
+    sharpen: boolean
+  ): Promise<ResolvedScantronData | null> {
+    try {
+      let pipeline = sharp(imageBuffer)
+        .resize({ width: Math.floor(baseWidth * scale) })
+        .grayscale()
+
+      if (sharpen) {
+        pipeline = pipeline.sharpen({ sigma: 1.5 })
+      }
+
+      pipeline = pipeline.normalize()
+
+      const { data, info } = await pipeline.raw().toBuffer({ resolveWithObject: true })
+      return await this.tryDecodeQR(data, info.width, info.height)
+    } catch (error) {
+      return null
+    }
   }
 
 
@@ -792,6 +888,32 @@ class GradeService {
     SAMPLE_SIZE: 20 // Size of square sample region
   }
 
+  // Quiz layout constants for normalized image (at 150 DPI)
+  // Quiz format: questions on top, horizontal bubble rows at bottom
+  // 72 DPI values × (150/72) = × 2.083
+  private static readonly QUIZ_NORMALIZED_LAYOUT = {
+    WIDTH: 1275, // 8.5" × 150 DPI
+    HEIGHT: 1650, // 11" × 150 DPI
+    MARGIN: 75, // 36pt × 150/72
+    // Bubble grid at bottom: bubbleGridY = 792 - 36 - 85 = 671pt at 72 DPI
+    // At 150 DPI: 671 × 150/72 = 1398
+    BUBBLE_GRID_Y: 1398,
+    // Grid starts at bubbleGridY + 16pt = 687pt → 1431 at 150 DPI
+    GRID_START_Y: 1431,
+    // Bubble center Y for row 0 = gridStartY + 8pt = 695pt → 1448 at 150 DPI
+    FIRST_ROW_BUBBLE_Y: 1448,
+    ROW_HEIGHT: 58, // 28pt × 150/72
+    QUESTIONS_PER_ROW: 4,
+    // Content width = 612 - 2*36 = 540pt, question width = 540/4 = 135pt → 281 at 150 DPI
+    QUESTION_WIDTH: 281,
+    // Bubble start offset from cellX: 24pt → 50 at 150 DPI
+    BUBBLE_START_OFFSET: 50,
+    // Bubble spacing: 26pt → 54 at 150 DPI
+    BUBBLE_SPACING: 54,
+    BUBBLE_RADIUS: 15, // 7pt × 150/72
+    SAMPLE_SIZE: 20 // Size of square sample region
+  }
+
   /**
    * Parse a scantron page using position-based bubble detection
    *
@@ -863,7 +985,7 @@ class GradeService {
     }
 
     // Step 3: Read QR code
-    let qrData: ScantronQRData | null = null
+    let qrData: ResolvedScantronData | null = null
     let qrError: string | undefined
 
     // Calculate DPI scale for QR extraction
@@ -877,7 +999,7 @@ class GradeService {
         flags.push('qr_error')
         console.log(`[GradeService] Page ${pageNumber}: QR code not found`)
       } else {
-        console.log(`[GradeService] Page ${pageNumber}: QR code found - student: ${qrData.sid}`)
+        console.log(`[GradeService] Page ${pageNumber}: QR code found - student: ${qrData.studentId}`)
       }
     } catch (error) {
       qrError = error instanceof Error ? error.message : 'QR code read error'
@@ -899,12 +1021,21 @@ class GradeService {
     }
 
     // Step 5: Detect bubbles using position-based sampling
-    console.log(`[GradeService] Page ${pageNumber}: Detecting bubbles (position-based)...`)
-    const detectedBubbles = await this.detectBubblesPositionBased(
-      processBuffer,
-      expectedQuestionCount,
-      true // Always treat as normalized after rotation correction
-    )
+    // Use quiz-specific detection if QR indicates quiz format
+    const isQuizFormat = qrData?.format === 'quiz'
+    console.log(`[GradeService] Page ${pageNumber}: Detecting bubbles (${isQuizFormat ? 'quiz' : 'standard'} format)...`)
+
+    const detectedBubbles = isQuizFormat
+      ? await this.detectQuizBubblesPositionBased(
+          processBuffer,
+          expectedQuestionCount,
+          true // Always treat as normalized after rotation correction
+        )
+      : await this.detectBubblesPositionBased(
+          processBuffer,
+          expectedQuestionCount,
+          true // Always treat as normalized after rotation correction
+        )
 
     // Check for issues
     let overallConfidence = 0.8 // Start with reasonable confidence
@@ -1307,6 +1438,137 @@ class GradeService {
   }
 
   /**
+   * Detect bubbles for QUIZ format using position-based region sampling
+   * Quiz layout: horizontal rows at bottom of page (4 questions per row)
+   */
+  private async detectQuizBubblesPositionBased(
+    imageBuffer: Buffer,
+    questionCount: number,
+    isNormalized: boolean
+  ): Promise<DetectedBubble[]> {
+    const layout = GradeService.QUIZ_NORMALIZED_LAYOUT
+
+    // Load image as grayscale
+    const { data, info } = await sharp(imageBuffer)
+      .grayscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true })
+
+    // Calculate scale factor if image isn't normalized
+    const scaleX = info.width / layout.WIDTH
+    const scaleY = info.height / layout.HEIGHT
+    const scale = isNormalized ? 1 : Math.min(scaleX, scaleY)
+
+    // Scaled layout values for quiz format
+    const firstRowBubbleY = Math.floor(layout.FIRST_ROW_BUBBLE_Y * scale)
+    const rowHeight = Math.floor(layout.ROW_HEIGHT * scale)
+    const bubbleSpacing = Math.floor(layout.BUBBLE_SPACING * scale)
+    const questionWidth = Math.floor(layout.QUESTION_WIDTH * scale)
+    const bubbleStartOffset = Math.floor(layout.BUBBLE_START_OFFSET * scale)
+    const margin = Math.floor(layout.MARGIN * scale)
+    const sampleSize = Math.floor(layout.SAMPLE_SIZE * scale)
+    const halfSample = Math.floor(sampleSize / 2)
+
+    // Collect all bubble intensities for adaptive thresholding
+    const allIntensities: { questionNumber: number; choice: number; intensity: number }[] = []
+
+    // First pass: sample all bubble positions (quiz layout: rows of 4 questions)
+    for (let q = 0; q < questionCount; q++) {
+      const row = Math.floor(q / layout.QUESTIONS_PER_ROW)
+      const col = q % layout.QUESTIONS_PER_ROW
+
+      // Cell position for this question
+      const cellX = margin + col * questionWidth
+      const bubbleY = firstRowBubbleY + row * rowHeight
+
+      for (let c = 0; c < 4; c++) { // A, B, C, D
+        // Bubble X position: cellX + bubbleStartOffset + c * bubbleSpacing
+        const bubbleX = cellX + bubbleStartOffset + c * bubbleSpacing
+
+        // Sample rectangular region centered on bubble
+        const intensity = this.sampleRegionIntensity(
+          data,
+          info.width,
+          info.height,
+          bubbleX,
+          bubbleY,
+          halfSample
+        )
+
+        allIntensities.push({ questionNumber: q + 1, choice: c, intensity })
+      }
+    }
+
+    // Calculate adaptive threshold
+    const threshold = this.calculateAdaptiveThreshold(allIntensities, questionCount)
+
+    // Second pass: classify bubbles based on threshold
+    const bubbles: DetectedBubble[] = []
+    const choiceLabels = ['A', 'B', 'C', 'D'] as const
+
+    for (let q = 0; q < questionCount; q++) {
+      const row = Math.floor(q / layout.QUESTIONS_PER_ROW)
+      const col = q % layout.QUESTIONS_PER_ROW
+
+      const cellX = margin + col * questionWidth
+      const bubbleY = firstRowBubbleY + row * rowHeight
+
+      const bubbleDetections: BubbleDetection[] = []
+
+      for (let c = 0; c < 4; c++) {
+        const bubbleX = cellX + bubbleStartOffset + c * bubbleSpacing
+
+        // Find the intensity we already calculated
+        const intensityData = allIntensities.find(
+          (d) => d.questionNumber === q + 1 && d.choice === c
+        )
+        const intensity = intensityData?.intensity ?? 255
+
+        // Classify: lower intensity = darker = filled
+        const filled = intensity < threshold.fillThreshold
+        const confidence = this.calculateBubbleConfidence(intensity, threshold)
+
+        bubbleDetections.push({
+          id: choiceLabels[c],
+          filled,
+          confidence,
+          x: bubbleX,
+          y: bubbleY,
+          radius: Math.floor(layout.BUBBLE_RADIUS * scale),
+          fillPercentage: 1 - intensity / 255
+        })
+      }
+
+      // Determine selected answer
+      const filledBubbles = bubbleDetections.filter((b) => b.filled)
+      let selected: string | null = null
+      let multipleDetected = false
+
+      if (filledBubbles.length === 1) {
+        selected = filledBubbles[0].id
+      } else if (filledBubbles.length > 1) {
+        // Multiple bubbles filled - pick the darkest one but flag it
+        const darkest = filledBubbles.reduce((a, b) =>
+          a.fillPercentage > b.fillPercentage ? a : b
+        )
+        selected = darkest.id
+        multipleDetected = true
+      }
+
+      bubbles.push({
+        questionNumber: q + 1,
+        row,
+        column: col,
+        bubbles: bubbleDetections,
+        selected,
+        multipleDetected
+      })
+    }
+
+    return bubbles
+  }
+
+  /**
    * Sample the mean intensity of a rectangular region
    */
   private sampleRegionIntensity(
@@ -1412,14 +1674,26 @@ class GradeService {
     const studentMap = new Map(roster.students.map((s) => [s.id, s]))
     const gradedStudentIds = new Set<string>()
 
-    // Build answer key from assessment (both Map for internal use and array for export)
-    const answerKeyMap = new Map<number, string>()
-    const answerKeyArray: AnswerKeyEntry[] = []
+    // Helper to get questions for a specific DOK level
+    // If a variant exists for the DOK level, use variant questions; otherwise use base
+    const getQuestionsForDOK = (dokLevel?: number): Question[] => {
+      if (dokLevel && assessment.variants) {
+        const variant = assessment.variants.find(v => v.dokLevel === dokLevel)
+        if (variant) {
+          console.log(`[GradeService] Using DOK ${dokLevel} variant questions (${variant.questions.length} questions)`)
+          return variant.questions
+        }
+      }
+      return assessment.questions
+    }
+
+    // Build base answer key for export (default/most common case)
+    // Individual student grading will use DOK-specific answer keys
+    const baseAnswerKeyArray: AnswerKeyEntry[] = []
     assessment.questions.forEach((q, index) => {
       if (q.type === 'multiple_choice') {
         const questionNumber = index + 1
-        answerKeyMap.set(questionNumber, q.correctAnswer.toUpperCase())
-        answerKeyArray.push({
+        baseAnswerKeyArray.push({
           questionNumber,
           questionId: q.id,
           correctAnswer: q.correctAnswer.toUpperCase(),
@@ -1479,17 +1753,29 @@ class GradeService {
       }
 
       // Mark this student as graded
-      gradedStudentIds.add(page.qrData.sid)
+      gradedStudentIds.add(page.qrData.studentId)
 
       // Check if student exists
-      const student = studentMap.get(page.qrData.sid)
+      const student = studentMap.get(page.qrData.studentId)
       if (!student) {
         flags.push({
           type: 'student_not_found',
-          message: `Student ID ${page.qrData.sid} not found in roster`
+          message: `Student ID ${page.qrData.studentId} not found in roster`
         })
         needsReview = true
       }
+
+      // Get questions based on student's DOK level (from QR code)
+      const studentDOK = page.qrData.dokLevel
+      const questionsForStudent = getQuestionsForDOK(studentDOK)
+
+      // Build answer key map for this student's questions
+      const studentAnswerKeyMap = new Map<number, string>()
+      questionsForStudent.forEach((q, index) => {
+        if (q.type === 'multiple_choice') {
+          studentAnswerKeyMap.set(index + 1, q.correctAnswer.toUpperCase())
+        }
+      })
 
       // Calculate answers and score
       const answers: AnswerResult[] = []
@@ -1497,8 +1783,8 @@ class GradeService {
       let totalPoints = 0
 
       for (const bubble of page.answers) {
-        const question = assessment.questions[bubble.questionNumber - 1]
-        const correctAnswer = answerKeyMap.get(bubble.questionNumber)
+        const question = questionsForStudent[bubble.questionNumber - 1]
+        const correctAnswer = studentAnswerKeyMap.get(bubble.questionNumber)
         const isCorrect = bubble.selected?.toUpperCase() === correctAnswer
 
         if (isCorrect) {
@@ -1550,8 +1836,8 @@ class GradeService {
       const percentage = page.answers.length > 0 ? (rawScore / page.answers.length) * 100 : 0
 
       const record: GradeRecord = {
-        id: `${assignment.id}-${page.qrData.sid}`,
-        studentId: page.qrData.sid,
+        id: `${assignment.id}-${page.qrData.studentId}`,
+        studentId: page.qrData.studentId,
         assignmentId: assignment.id,
         versionId: 'A' as VersionId, // All students get version 'A' for now
         gradedAt: new Date().toISOString(),
@@ -1582,7 +1868,7 @@ class GradeService {
       stats
     }
 
-    return { grades, unidentifiedPages, answerKey: answerKeyArray }
+    return { grades, unidentifiedPages, answerKey: baseAnswerKeyArray }
   }
 
   /**

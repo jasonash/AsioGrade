@@ -1,0 +1,33 @@
+⏺ Great question - let me clarify the workflow:
+
+  Variants are completely optional. Here's the intended workflow:
+
+  Standard Workflow (No Variants)
+
+  1. Create an assessment with questions
+  2. Optionally generate A/B/C/D versions (randomizes question/answer order for different test copies)
+  3. Publish and assign to sections
+  4. All students get the same questions (just shuffled if you used versions)
+
+  DOK Variant Workflow (For Differentiated Instruction)
+
+  This is for teachers who want to give different difficulty levels to different students based on their DOK (Depth of Knowledge) level:
+
+  1. Create base assessment with questions
+  2. Optionally generate DOK variants for specific student groups:
+    - DOK 1 (Recall) - simpler questions or easier distractors
+    - DOK 2 (Skill/Concept) - standard difficulty
+    - DOK 3 (Strategic) - more complex reasoning
+    - DOK 4 (Extended) - highest complexity
+  3. Students assigned a DOK level in their roster get the matching variant
+  4. Students without a DOK level get the base assessment
+
+  When to Use Variants
+
+  - Skip variants for standard tests where everyone gets the same assessment
+  - Use variants when you want to differentiate:
+    - Struggling students get DOK 1 (simpler)
+    - Advanced students get DOK 3/4 (more challenging)
+    - Same learning objectives, adjusted complexity
+
+  Does this clarify things? Would you like me to update any UI text to make this workflow clearer, or is there a different workflow you had in mind?

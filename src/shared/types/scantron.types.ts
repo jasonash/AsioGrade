@@ -19,8 +19,9 @@ export type ScantronFormat = 'quiz'
  *
  * v1: Basic identification (aid, sid, fmt)
  * v2: Added DOK level and version for grading lookup
+ * v3: Short key lookup system (just a key, all data in SQLite)
  */
-export interface ScantronQRData {
+export interface ScantronQRDataV1V2 {
   v: 1 | 2 // Schema version (1 = legacy, 2 = with DOK/version)
   aid: string // Assignment ID
   sid: string // Student ID
@@ -28,6 +29,32 @@ export interface ScantronQRData {
   // v2 fields (optional for backwards compatibility)
   dok?: DOKLevel // Student's DOK level for this assessment
   ver?: VersionId // Version assigned to this student (A/B/C/D)
+}
+
+/**
+ * v3 QR data is just a short string: "TH:XXXXXXXX"
+ * All metadata is stored in SQLite and looked up by key
+ */
+export interface ScantronQRDataV3 {
+  v: 3
+  k: string // Short 8-character key
+}
+
+/**
+ * Union type for all QR data versions
+ */
+export type ScantronQRData = ScantronQRDataV1V2 | ScantronQRDataV3
+
+/**
+ * Resolved scantron data (after looking up v3 keys from database)
+ * This is what the grading service uses after resolving QR data
+ */
+export interface ResolvedScantronData {
+  assignmentId: string
+  studentId: string
+  format?: ScantronFormat
+  dokLevel?: DOKLevel
+  versionId?: VersionId
 }
 
 /**

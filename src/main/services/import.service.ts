@@ -280,7 +280,7 @@ class ImportService {
   }
 
   /**
-   * Show native file dialog for selecting document files (PDF, DOCX, TXT)
+   * Show native file dialog for selecting document files (PDF, DOCX, TXT, Images)
    * Used for importing existing assessments/materials
    */
   async openMaterialFileDialog(): Promise<ServiceResult<string | null>> {
@@ -291,10 +291,11 @@ class ImportService {
         title: 'Select Material to Import',
         properties: ['openFile'],
         filters: [
-          { name: 'All Supported', extensions: ['pdf', 'docx', 'doc', 'txt'] },
+          { name: 'All Supported', extensions: ['pdf', 'docx', 'doc', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'webp'] },
           { name: 'PDF Files', extensions: ['pdf'] },
           { name: 'Word Documents', extensions: ['docx', 'doc'] },
-          { name: 'Text Files', extensions: ['txt'] }
+          { name: 'Text Files', extensions: ['txt'] },
+          { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'] }
         ]
       }
 

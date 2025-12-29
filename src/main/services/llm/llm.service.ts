@@ -24,9 +24,14 @@ import type {
   LLMProviderStatus,
   LLMError,
   ImageGenerationRequest,
-  ImageGenerationResponse
+  ImageGenerationResponse,
+  VisionExtractionRequest,
+  VisionExtractionResponse
 } from '../../../shared/types/llm.types'
 import type { ServiceResult } from '../../../shared/types/common.types'
+import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
 class LLMService {
   private providers: Map<LLMProviderType, BaseLLMProvider> = new Map()
@@ -289,6 +294,122 @@ class LLMService {
       const response = await provider.generateImage!(request)
       return { success: true, data: response }
     } catch (error) {
+      return {
+        success: false,
+        error: this.formatError(error)
+      }
+    }
+  }
+
+  /**
+   * Extract text from an image using vision capabilities
+   * All three providers (OpenAI GPT-4o, Anthropic Claude, Google Gemini) support vision
+   */
+  async extractTextFromImage(
+    request: VisionExtractionRequest
+  ): Promise<ServiceResult<VisionExtractionResponse>> {
+    try {
+      this.refreshProviders()
+
+      const config = storageService.getLLMProviders()
+      const providerId = request.provider ?? config.default
+
+      if (!providerId) {
+        return {
+          success: false,
+          error: 'No LLM provider configured. Please add an API key in Settings.'
+        }
+      }
+
+      const provider = this.providers.get(providerId)
+      if (!provider?.isConfigured()) {
+        return {
+          success: false,
+          error: `${getProviderName(providerId)} is not configured. Please add an API key in Settings.`
+        }
+      }
+
+      const prompt = request.prompt ??
+        'Extract all text from this image. Preserve the original formatting, paragraphs, and structure as much as possible. If there are tables, lists, or special formatting, represent them clearly. Only output the extracted text, no additional commentary.'
+
+      let extractedText: string
+      const model = provider.getModel()
+
+      // Call the appropriate provider's vision API
+      if (providerId === 'anthropic') {
+        const anthropicClient = new Anthropic({ apiKey: provider.getApiKey()! })
+        const response = await anthropicClient.messages.create({
+          model,
+          max_tokens: 4096,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: request.mimeType,
+                  data: request.imageBase64
+                }
+              },
+              { type: 'text', text: prompt }
+            ]
+          }]
+        })
+        const textContent = response.content.find(block => block.type === 'text')
+        extractedText = textContent?.type === 'text' ? textContent.text : ''
+
+      } else if (providerId === 'openai') {
+        const openaiClient = new OpenAI({ apiKey: provider.getApiKey()! })
+        const response = await openaiClient.chat.completions.create({
+          model,
+          max_tokens: 4096,
+          messages: [{
+            role: 'user',
+            content: [
+              {
+                type: 'image_url',
+                image_url: {
+                  url: `data:${request.mimeType};base64,${request.imageBase64}`
+                }
+              },
+              { type: 'text', text: prompt }
+            ]
+          }]
+        })
+        extractedText = response.choices[0]?.message?.content ?? ''
+
+      } else if (providerId === 'google') {
+        const googleClient = new GoogleGenerativeAI(provider.getApiKey()!)
+        const genModel = googleClient.getGenerativeModel({ model })
+        const response = await genModel.generateContent([
+          {
+            inlineData: {
+              mimeType: request.mimeType,
+              data: request.imageBase64
+            }
+          },
+          prompt
+        ])
+        extractedText = response.response.text()
+
+      } else {
+        return {
+          success: false,
+          error: `Unsupported provider for vision: ${providerId}`
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          extractedText,
+          model,
+          provider: providerId
+        }
+      }
+    } catch (error) {
+      console.error('Vision extraction error:', error)
       return {
         success: false,
         error: this.formatError(error)

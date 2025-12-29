@@ -9,6 +9,7 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import DescriptionIcon from '@mui/icons-material/Description'
 import SlideshowIcon from '@mui/icons-material/Slideshow'
 import TextSnippetIcon from '@mui/icons-material/TextSnippet'
+import ImageIcon from '@mui/icons-material/Image'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import ErrorIcon from '@mui/icons-material/Error'
@@ -34,6 +35,11 @@ function getMaterialIcon(type: CourseMaterialType): ReactElement {
       return <SlideshowIcon sx={{ color: '#ff9800' }} />
     case 'txt':
       return <TextSnippetIcon sx={{ color: '#757575' }} />
+    case 'jpg':
+    case 'png':
+    case 'gif':
+    case 'webp':
+      return <ImageIcon sx={{ color: '#4caf50' }} />
     default:
       return <DescriptionIcon />
   }
@@ -51,6 +57,13 @@ function getTypeLabel(type: CourseMaterialType): string {
       return 'PowerPoint'
     case 'txt':
       return 'Text'
+    case 'jpg':
+    case 'png':
+    case 'gif':
+    case 'webp':
+      return 'Image'
+    default:
+      return 'File'
   }
 }
 

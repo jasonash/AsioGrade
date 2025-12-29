@@ -94,6 +94,14 @@ export function VariantSelector({
                   variant="outlined"
                   sx={{ fontSize: '0.65rem', height: 18 }}
                 />
+                {variant.isModified && (
+                  <Chip
+                    label="Modified"
+                    size="small"
+                    color="secondary"
+                    sx={{ fontSize: '0.65rem', height: 18 }}
+                  />
+                )}
                 {onDeleteVariant && (
                   <Tooltip title="Delete variant">
                     <IconButton

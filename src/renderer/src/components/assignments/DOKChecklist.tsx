@@ -29,11 +29,11 @@ interface DOKChecklistProps {
 }
 
 // DOK level colors
-const DOK_COLORS: Record<DOKLevel, 'success' | 'info' | 'warning' | 'secondary'> = {
+const DOK_COLORS: Record<DOKLevel, 'success' | 'info' | 'warning' | 'error'> = {
   1: 'success',
   2: 'info',
   3: 'warning',
-  4: 'secondary'
+  4: 'error'
 }
 
 export function DOKChecklist({

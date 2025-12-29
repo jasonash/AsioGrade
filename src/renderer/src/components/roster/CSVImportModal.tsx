@@ -18,12 +18,15 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import DownloadIcon from '@mui/icons-material/Download'
 import { Modal } from '../ui'
 import { useRosterStore } from '../../stores'
-import type { CreateStudentInput } from '../../../../shared/types'
+import type { CreateStudentInput, DOKLevel } from '../../../../shared/types'
 
 interface CSVImportModalProps {
   isOpen: boolean
   onClose: () => void
   sectionId: string
+  courseName: string
+  sectionName: string
+  academicYear: string
   onSuccess?: (count: number) => void
 }
 
@@ -32,6 +35,7 @@ interface ParsedStudent {
   lastName: string
   email?: string
   studentNumber?: string
+  dokLevel?: DOKLevel
   valid: boolean
   error?: string
 }
@@ -40,6 +44,9 @@ export function CSVImportModal({
   isOpen,
   onClose,
   sectionId,
+  courseName,
+  sectionName,
+  academicYear,
   onSuccess
 }: CSVImportModalProps): ReactElement {
   const { importStudents, error: storeError, clearError } = useRosterStore()
@@ -58,20 +65,24 @@ export function CSVImportModal({
   }, [clearError])
 
   const downloadTemplate = useCallback(async () => {
-    const templateContent = `firstName,lastName,email,studentNumber
-John,Smith,john.smith@school.edu,12345
-Jane,Doe,jane.doe@school.edu,12346
+    const templateContent = `firstName,lastName,email,studentNumber,dokLevel
+John,Smith,john.smith@school.edu,12345,2
+Jane,Doe,jane.doe@school.edu,12346,3
 `
     // Convert to base64 for the save dialog
     const base64Data = btoa(templateContent)
 
+    // Build filename from course/section/year (sanitize for filesystem)
+    const sanitize = (str: string): string => str.replace(/[^a-zA-Z0-9-_]/g, '_')
+    const filename = `${sanitize(courseName)}_${sanitize(sectionName)}_${sanitize(academicYear)}_students.csv`
+
     // Use save dialog (remembers last directory)
     await window.electronAPI.invoke('file:saveWithDialog', {
       data: base64Data,
-      defaultFilename: 'student_roster_template.csv',
+      defaultFilename: filename,
       filters: [{ name: 'CSV Files', extensions: ['csv'] }]
     })
-  }, [])
+  }, [courseName, sectionName, academicYear])
 
   const parseCSV = useCallback((content: string): ParsedStudent[] => {
     const lines = content.trim().split('\n')
@@ -92,6 +103,9 @@ Jane,Doe,jane.doe@school.edu,12346
     const studentNumberIdx = header.findIndex(
       (h) => h === 'studentnumber' || h === 'student number' || h === 'id' || h === 'student id'
     )
+    const dokIdx = header.findIndex(
+      (h) => h === 'doklevel' || h === 'dok level' || h === 'dok'
+    )
 
     if (firstNameIdx === -1 || lastNameIdx === -1) {
       throw new Error('CSV must have "firstName" and "lastName" columns')
@@ -110,6 +124,15 @@ Jane,Doe,jane.doe@school.edu,12346
       const email = emailIdx !== -1 ? values[emailIdx] : undefined
       const studentNumber = studentNumberIdx !== -1 ? values[studentNumberIdx] : undefined
 
+      // Parse DOK level (1-4), default to undefined if invalid or missing
+      let dokLevel: DOKLevel | undefined
+      if (dokIdx !== -1 && values[dokIdx]) {
+        const parsed = parseInt(values[dokIdx], 10)
+        if (parsed >= 1 && parsed <= 4) {
+          dokLevel = parsed as DOKLevel
+        }
+      }
+
       const valid = firstName.length > 0 && lastName.length > 0
 
       students.push({
@@ -117,6 +140,7 @@ Jane,Doe,jane.doe@school.edu,12346
         lastName,
         email: email || undefined,
         studentNumber: studentNumber || undefined,
+        dokLevel,
         valid,
         error: valid ? undefined : 'Missing first or last name'
       })
@@ -164,7 +188,8 @@ Jane,Doe,jane.doe@school.edu,12346
       firstName: s.firstName,
       lastName: s.lastName,
       email: s.email,
-      studentNumber: s.studentNumber
+      studentNumber: s.studentNumber,
+      dokLevel: s.dokLevel
     }))
 
     const count = await importStudents(sectionId, inputs)
@@ -207,6 +232,9 @@ Jane,Doe,jane.doe@school.edu,12346
               </Typography>
               <Typography component="li" variant="body2" color="text.secondary">
                 <code>studentNumber</code> (optional)
+              </Typography>
+              <Typography component="li" variant="body2" color="text.secondary">
+                <code>dokLevel</code> (optional, 1-4, defaults to 2)
               </Typography>
             </Box>
           </Box>
@@ -293,6 +321,7 @@ Jane,Doe,jane.doe@school.edu,12346
                     <TableCell sx={{ fontWeight: 500 }}>Name</TableCell>
                     <TableCell sx={{ fontWeight: 500 }}>Email</TableCell>
                     <TableCell sx={{ fontWeight: 500 }}>Student #</TableCell>
+                    <TableCell sx={{ fontWeight: 500 }}>DOK</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -316,6 +345,11 @@ Jane,Doe,jane.doe@school.edu,12346
                       <TableCell>
                         <Typography variant="body2" color="text.secondary">
                           {student.studentNumber || '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2" color="text.secondary">
+                          {student.dokLevel || '-'}
                         </Typography>
                       </TableCell>
                     </TableRow>

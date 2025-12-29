@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipc/handlers'
 import { storageService } from './services/storage.service'
+import { scantronLookupService } from './services/scantron-lookup.service'
 
 function createWindow(): void {
   // Get saved window state
@@ -63,6 +64,9 @@ app.whenReady().then(() => {
   // Set app user model id for Windows
   electronApp.setAppUserModelId('com.teachinghelp')
 
+  // Initialize scantron lookup database (v3 QR codes)
+  scantronLookupService.initialize()
+
   // Register IPC handlers
   registerIpcHandlers()
 
@@ -83,4 +87,9 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+// Clean up database connection on quit
+app.on('quit', () => {
+  scantronLookupService.close()
 })

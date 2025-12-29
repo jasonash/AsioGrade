@@ -136,6 +136,31 @@ export interface ImageGenerationResponse {
 
 export type LLMImageResult = ServiceResult<ImageGenerationResponse>
 
+// ============================================================
+// Vision/Image Analysis Types
+// ============================================================
+
+/**
+ * Request for extracting text from an image using vision models
+ */
+export interface VisionExtractionRequest {
+  imageBase64: string
+  mimeType: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+  prompt?: string // Custom prompt, defaults to text extraction
+  provider?: LLMProviderType
+}
+
+/**
+ * Response from vision text extraction
+ */
+export interface VisionExtractionResponse {
+  extractedText: string
+  model: string
+  provider: LLMProviderType
+}
+
+export type VisionExtractionResult = ServiceResult<VisionExtractionResponse>
+
 // Available models per provider
 export const OPENAI_MODELS: LLMModelInfo[] = [
   {

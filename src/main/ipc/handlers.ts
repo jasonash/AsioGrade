@@ -10,6 +10,7 @@ import { importService } from '../services/import.service'
 import { pdfService } from '../services/pdf.service'
 import { gradeService } from '../services/grade.service'
 import { randomizationService } from '../services/randomization.service'
+import { scantronLookupService } from '../services/scantron-lookup.service'
 import type {
   CreateCourseInput,
   UpdateCourseInput,
@@ -78,6 +79,9 @@ export function registerIpcHandlers(): void {
 
   // Material handlers
   registerMaterialHandlers()
+
+  // Scantron lookup handlers (database management)
+  registerScantronLookupHandlers()
 }
 
 function registerAuthHandlers(): void {
@@ -841,13 +845,20 @@ function registerPDFHandlers(): void {
           return { success: false, error: 'No active students in section' }
         }
 
-        // Generate quiz PDF
+        // Build variants array for DOK-based question selection
+        const variants = (assessment.variants ?? []).map((v) => ({
+          dokLevel: v.dokLevel,
+          questions: v.questions
+        }))
+
+        // Generate quiz PDF with DOK variant support
         const result = await pdfService.generateQuizPDF(
           students,
           request.assignmentId,
           assessment.title,
           course.name,
           assessment.questions,
+          variants,
           request.options
         )
 
@@ -1216,4 +1227,65 @@ function buildMaterialContext(
   }
 
   return sections.join('\n\n')
+}
+
+function registerScantronLookupHandlers(): void {
+  // ============================================================
+  // Scantron Lookup Database Operations (Phase 10: QR Code Reliability)
+  // ============================================================
+
+  // Initialize the scantron lookup database (called on app startup)
+  ipcMain.handle('scantronLookup:initialize', async () => {
+    try {
+      scantronLookupService.initialize()
+      return { success: true }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to initialize scantron lookup database'
+      return { success: false, error: message }
+    }
+  })
+
+  // Get database statistics
+  ipcMain.handle('scantronLookup:getStats', async () => {
+    try {
+      const stats = scantronLookupService.getStats()
+      return { success: true, data: stats }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get scantron lookup stats'
+      return { success: false, error: message }
+    }
+  })
+
+  // Clean up old records (optional maintenance)
+  ipcMain.handle('scantronLookup:cleanup', async (_event, olderThanDays: number = 365) => {
+    try {
+      const deletedCount = scantronLookupService.cleanupOldRecords(olderThanDays)
+      return { success: true, data: { deletedCount } }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to clean up old records'
+      return { success: false, error: message }
+    }
+  })
+
+  // Get database file path (for backup purposes)
+  ipcMain.handle('scantronLookup:getDbPath', async () => {
+    try {
+      const path = scantronLookupService.getDatabasePath()
+      return { success: true, data: { path } }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get database path'
+      return { success: false, error: message }
+    }
+  })
+
+  // Delete lookup records for an assignment (when regenerating scantrons)
+  ipcMain.handle('scantronLookup:deleteByAssignment', async (_event, assignmentId: string) => {
+    try {
+      const deletedCount = scantronLookupService.deleteByAssignment(assignmentId)
+      return { success: true, data: { deletedCount } }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete lookup records'
+      return { success: false, error: message }
+    }
+  })
 }

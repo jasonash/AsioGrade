@@ -34,10 +34,13 @@ import type {
   CreateMaterialInput,
   UpdateMaterialInput
 } from '../../shared/types'
-import { getTypeFromExtension, getMimeType } from '../../shared/types'
+import { getTypeFromExtension, getMimeType, isImageType } from '../../shared/types'
 import { importService } from './import.service'
+import { llmService } from './llm/llm.service'
+import type { VisionExtractionRequest } from '../../shared/types/llm.types'
 import { readFile, stat } from 'fs/promises'
 import path from 'path'
+import { Readable } from 'stream'
 
 // App config stored in Google Drive
 interface AppConfig {
@@ -2714,15 +2717,42 @@ class DriveService {
       if (!materialType) {
         return {
           success: false,
-          error: 'Unsupported file type. Supported types: PDF, DOC, DOCX, PPT, PPTX, TXT'
+          error: 'Unsupported file type. Supported types: PDF, DOC, DOCX, PPT, PPTX, TXT, JPG, PNG, GIF, WEBP'
         }
       }
 
       // Extract text from file
-      const extractResult = await importService.extractTextFromFile(filePath)
-      const extractedText = extractResult.success ? extractResult.data : ''
-      const extractionStatus = extractResult.success ? 'complete' as const : 'failed' as const
-      const extractionError = extractResult.success ? undefined : extractResult.error
+      let extractedText = ''
+      let extractionStatus: 'complete' | 'failed' = 'failed'
+      let extractionError: string | undefined
+
+      if (isImageType(materialType)) {
+        // Use AI vision for image files
+        const fileBuffer = await readFile(filePath)
+        const imageBase64 = fileBuffer.toString('base64')
+        const mimeType = getMimeType(materialType) as VisionExtractionRequest['mimeType']
+
+        const visionResult = await llmService.extractTextFromImage({
+          imageBase64,
+          mimeType
+        })
+
+        if (visionResult.success) {
+          extractedText = visionResult.data.extractedText
+          extractionStatus = 'complete'
+        } else {
+          extractionError = visionResult.error
+        }
+      } else {
+        // Use standard extraction for documents
+        const extractResult = await importService.extractTextFromFile(filePath)
+        if (extractResult.success) {
+          extractedText = extractResult.data
+          extractionStatus = 'complete'
+        } else {
+          extractionError = extractResult.error
+        }
+      }
 
       // Ensure materials folder exists
       const materialsFolderId = await this.ensureSubfolder(courseFolderId, 'materials')
@@ -2736,6 +2766,9 @@ class DriveService {
       const fileBuffer = await readFile(filePath)
       const mimeType = getMimeType(materialType)
 
+      // Convert buffer to readable stream (googleapis requires a stream for media uploads)
+      const fileStream = Readable.from(fileBuffer)
+
       const originalFileResponse = await drive.files.create({
         requestBody: {
           name: `${materialId}${path.extname(filePath)}`,
@@ -2744,7 +2777,7 @@ class DriveService {
         },
         media: {
           mimeType,
-          body: fileBuffer as unknown as string // Type workaround for googleapis
+          body: fileStream
         },
         fields: 'id'
       })

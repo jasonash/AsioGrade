@@ -79,7 +79,7 @@ export function CourseMaterialsSection({
         </Box>
 
         <Button
-          variant="outlined"
+          variant="contained"
           size="small"
           startIcon={<AddIcon />}
           onClick={() => setIsUploadModalOpen(true)}

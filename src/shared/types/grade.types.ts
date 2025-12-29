@@ -6,7 +6,7 @@
 
 import type { QuestionType } from './question.types'
 import type { VersionId } from './assignment.types'
-import type { ScantronQRData } from './scantron.types'
+import type { ResolvedScantronData } from './scantron.types'
 
 // ============================================================
 // Grade Flag Types
@@ -196,11 +196,12 @@ export interface DetectedBubble {
 
 /**
  * Result of parsing a single scantron page
+ * Note: qrData now uses ResolvedScantronData which normalizes v1/v2/v3 QR formats
  */
 export interface ParsedScantron {
   pageNumber: number
   success: boolean
-  qrData: ScantronQRData | null
+  qrData: ResolvedScantronData | null
   qrError?: string
   ocrStudentName?: string // OCR-extracted student name (used when QR fails)
   answers: DetectedBubble[]

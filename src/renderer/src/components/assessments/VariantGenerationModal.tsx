@@ -120,10 +120,19 @@ export function VariantGenerationModal({
       size="lg"
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-        <Typography variant="body2" color="text.secondary">
-          Generate a variant of this assessment targeted at a specific Depth of Knowledge (DOK) level.
-          This allows you to differentiate instruction for students at different ability levels.
-        </Typography>
+        <Alert severity="info" sx={{ '& .MuiAlert-message': { width: '100%' } }}>
+          <Typography variant="body2" fontWeight={600} gutterBottom>
+            DOK Variants are Optional
+          </Typography>
+          <Typography variant="body2">
+            Use variants for <strong>differentiated instruction</strong> when you want to give different
+            difficulty levels to different students. Students assigned a DOK level in their roster will
+            automatically receive the matching variant; all other students receive the base assessment.
+          </Typography>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            <strong>Skip this</strong> if all students should take the same assessment.
+          </Typography>
+        </Alert>
 
         {storeError && (
           <Alert severity="error" onClose={clearError}>

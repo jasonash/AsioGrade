@@ -10,7 +10,14 @@ import type { Entity } from './common.types'
 /**
  * Supported file types for course materials
  */
-export type CourseMaterialType = 'pdf' | 'doc' | 'docx' | 'ppt' | 'pptx' | 'txt'
+export type CourseMaterialType = 'pdf' | 'doc' | 'docx' | 'ppt' | 'pptx' | 'txt' | 'jpg' | 'png' | 'gif' | 'webp'
+
+/**
+ * Check if a material type is an image (requires AI extraction)
+ */
+export function isImageType(type: CourseMaterialType): boolean {
+  return type === 'jpg' || type === 'png' || type === 'gif' || type === 'webp'
+}
 
 /**
  * Status of text extraction from a material
@@ -99,6 +106,14 @@ export function getMimeType(type: CourseMaterialType): string {
       return 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
     case 'txt':
       return 'text/plain'
+    case 'jpg':
+      return 'image/jpeg'
+    case 'png':
+      return 'image/png'
+    case 'gif':
+      return 'image/gif'
+    case 'webp':
+      return 'image/webp'
     default:
       return 'application/octet-stream'
   }
@@ -121,6 +136,14 @@ export function getTypeFromMime(mimeType: string): CourseMaterialType | null {
       return 'pptx'
     case 'text/plain':
       return 'txt'
+    case 'image/jpeg':
+      return 'jpg'
+    case 'image/png':
+      return 'png'
+    case 'image/gif':
+      return 'gif'
+    case 'image/webp':
+      return 'webp'
     default:
       return null
   }
@@ -144,6 +167,15 @@ export function getTypeFromExtension(filePath: string): CourseMaterialType | nul
       return 'pptx'
     case 'txt':
       return 'txt'
+    case 'jpg':
+    case 'jpeg':
+      return 'jpg'
+    case 'png':
+      return 'png'
+    case 'gif':
+      return 'gif'
+    case 'webp':
+      return 'webp'
     default:
       return null
   }
