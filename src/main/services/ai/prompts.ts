@@ -72,10 +72,14 @@ GUIDELINES FOR DISTRACTORS:
 
 /**
  * Build the user prompt for question generation
+ * @param request - The question generation request
+ * @param standardsText - The formatted standards text
+ * @param materialContext - Optional extracted text from course materials
  */
 export function buildQuestionGenerationPrompt(
   request: QuestionGenerationRequest,
-  standardsText: string
+  standardsText: string,
+  materialContext?: string
 ): string {
   const difficultyNote = request.difficulty === 'mixed'
     ? 'Include a mix of easy, medium, and hard questions'
@@ -89,11 +93,26 @@ export function buildQuestionGenerationPrompt(
     ? `\n- Avoid these topics: ${request.avoidTopics.join(', ')}`
     : ''
 
+  // Build material context section if materials provided
+  const materialSection = materialContext
+    ? `\nCOURSE MATERIALS (use as source content for questions):
+${materialContext}
+
+IMPORTANT: Base questions on the content from the course materials above when applicable.
+Questions should assess understanding of the material while aligning to the standards.\n`
+    : ''
+
+  // Build custom prompt section if provided
+  const customPromptSection = request.customPrompt?.trim()
+    ? `\nTEACHER INSTRUCTIONS:
+${request.customPrompt.trim()}\n`
+    : ''
+
   return `Generate ${request.questionCount} multiple choice questions for grade ${request.gradeLevel} ${request.subject}.
 
 STANDARDS TO ASSESS:
 ${standardsText}
-
+${materialSection}${customPromptSection}
 REQUIREMENTS:
 - Question types: ${request.questionTypes.join(', ')}
 - ${difficultyNote}${focusNote}${avoidNote}

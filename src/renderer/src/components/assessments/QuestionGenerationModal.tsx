@@ -2,7 +2,7 @@
  * QuestionGenerationModal Component
  *
  * Modal for configuring AI question generation parameters.
- * Shows course standards for selection.
+ * Shows course standards and materials for selection.
  */
 
 import { type ReactElement, useState, useEffect } from 'react'
@@ -14,8 +14,13 @@ import MenuItem from '@mui/material/MenuItem'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
 import CircularProgress from '@mui/material/CircularProgress'
+import Accordion from '@mui/material/Accordion'
+import AccordionSummary from '@mui/material/AccordionSummary'
+import AccordionDetails from '@mui/material/AccordionDetails'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import DescriptionIcon from '@mui/icons-material/Description'
 import { Modal } from '../ui'
-import { useAIStore } from '../../stores'
+import { useAIStore, useCourseMaterialStore } from '../../stores'
 import type { Standard } from '../../../../shared/types'
 import type {
   QuestionDifficulty,
@@ -42,18 +47,29 @@ export function QuestionGenerationModal({
   standards
 }: QuestionGenerationModalProps): ReactElement {
   const { generateQuestions, isGenerating } = useAIStore()
+  const { materials, fetchMaterials } = useCourseMaterialStore()
 
   const [questionCount, setQuestionCount] = useState(5)
   const [selectedStandards, setSelectedStandards] = useState<Set<string>>(new Set())
+  const [selectedMaterials, setSelectedMaterials] = useState<Set<string>>(new Set())
   const [difficulty, setDifficulty] = useState<QuestionDifficulty>('mixed')
   const [focusTopics, setFocusTopics] = useState('')
+  const [customPrompt, setCustomPrompt] = useState('')
 
-  // Initialize standards as selected when modal opens
+  // Fetch materials and initialize standards when modal opens
   useEffect(() => {
     if (isOpen) {
       setSelectedStandards(new Set(standards.map((s) => s.code)))
+      setSelectedMaterials(new Set())
+      setCustomPrompt('')
+      fetchMaterials(courseId)
     }
-  }, [isOpen, standards])
+  }, [isOpen, standards, courseId, fetchMaterials])
+
+  // Filter to only show materials with successful extraction
+  const availableMaterials = materials.filter(
+    (m) => m.extractionStatus === 'complete'
+  )
 
   const handleStandardToggle = (code: string): void => {
     setSelectedStandards((prev) => {
@@ -67,12 +83,32 @@ export function QuestionGenerationModal({
     })
   }
 
+  const handleMaterialToggle = (id: string): void => {
+    setSelectedMaterials((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
   const handleSelectAll = (): void => {
     setSelectedStandards(new Set(standards.map((s) => s.code)))
   }
 
   const handleSelectNone = (): void => {
     setSelectedStandards(new Set())
+  }
+
+  const handleSelectAllMaterials = (): void => {
+    setSelectedMaterials(new Set(availableMaterials.map((m) => m.id)))
+  }
+
+  const handleSelectNoMaterials = (): void => {
+    setSelectedMaterials(new Set())
   }
 
   const handleGenerate = async (): Promise<void> => {
@@ -87,7 +123,10 @@ export function QuestionGenerationModal({
       difficulty,
       gradeLevel,
       subject,
-      focusTopics: focusTopics ? focusTopics.split(',').map((t) => t.trim()) : undefined
+      focusTopics: focusTopics ? focusTopics.split(',').map((t) => t.trim()) : undefined,
+      // Phase 4: Include selected materials and custom prompt
+      materialIds: selectedMaterials.size > 0 ? [...selectedMaterials] : undefined,
+      customPrompt: customPrompt.trim() || undefined
     }
 
     await generateQuestions(request)
@@ -169,6 +208,62 @@ export function QuestionGenerationModal({
           )}
         </Box>
 
+        {/* Course Materials Section (Phase 4) */}
+        {availableMaterials.length > 0 && (
+          <Accordion defaultExpanded={false}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <DescriptionIcon fontSize="small" color="action" />
+                <Typography variant="subtitle2">
+                  Course Materials ({selectedMaterials.size}/{availableMaterials.length} selected)
+                </Typography>
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Select materials to use as context for question generation
+              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mb: 1 }}>
+                <Button size="small" onClick={handleSelectAllMaterials}>
+                  All
+                </Button>
+                <Button size="small" onClick={handleSelectNoMaterials}>
+                  None
+                </Button>
+              </Box>
+              <Box
+                sx={{
+                  maxHeight: 150,
+                  overflowY: 'auto',
+                  border: 1,
+                  borderColor: 'divider',
+                  borderRadius: 1,
+                  p: 1
+                }}
+              >
+                {availableMaterials.map((material) => (
+                  <FormControlLabel
+                    key={material.id}
+                    control={
+                      <Checkbox
+                        checked={selectedMaterials.has(material.id)}
+                        onChange={() => handleMaterialToggle(material.id)}
+                        size="small"
+                      />
+                    }
+                    label={
+                      <Typography variant="body2">
+                        {material.name}
+                      </Typography>
+                    }
+                    sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}
+                  />
+                ))}
+              </Box>
+            </AccordionDetails>
+          </Accordion>
+        )}
+
         {/* Difficulty */}
         <TextField
           select
@@ -189,6 +284,17 @@ export function QuestionGenerationModal({
           onChange={(e) => setFocusTopics(e.target.value)}
           placeholder="e.g., photosynthesis, cell division"
           helperText="Comma-separated list of topics to emphasize"
+        />
+
+        {/* Custom Prompt (Phase 4) */}
+        <TextField
+          label="Custom Instructions (optional)"
+          value={customPrompt}
+          onChange={(e) => setCustomPrompt(e.target.value)}
+          placeholder="e.g., Focus on application questions, avoid vocabulary-only questions, include real-world scenarios..."
+          helperText="Additional instructions for the AI when generating questions"
+          multiline
+          rows={2}
         />
 
         {/* Actions */}

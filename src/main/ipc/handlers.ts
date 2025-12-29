@@ -749,7 +749,16 @@ function registerAIHandlers(): void {
         // Build standards text from selected refs
         const standardsText = buildStandardsText(standardsResult.data, request.standardRefs)
 
-        return aiService.generateQuestions(request, standardsText)
+        // Fetch materials if materialIds provided (Phase 4)
+        let materialContext: string | undefined
+        if (request.materialIds && request.materialIds.length > 0) {
+          const materialsResult = await driveService.getCourseMaterialsByIds(request.materialIds)
+          if (materialsResult.success && materialsResult.data.length > 0) {
+            materialContext = buildMaterialContext(materialsResult.data)
+          }
+        }
+
+        return aiService.generateQuestions(request, standardsText, materialContext)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Generation failed'
         return { success: false, error: message }
@@ -769,7 +778,16 @@ function registerAIHandlers(): void {
 
         const standardsText = buildStandardsText(standardsResult.data, request.standardRefs)
 
-        return aiService.generateQuestionsWithStream(request, standardsText, event.sender)
+        // Fetch materials if materialIds provided (Phase 4)
+        let materialContext: string | undefined
+        if (request.materialIds && request.materialIds.length > 0) {
+          const materialsResult = await driveService.getCourseMaterialsByIds(request.materialIds)
+          if (materialsResult.success && materialsResult.data.length > 0) {
+            materialContext = buildMaterialContext(materialsResult.data)
+          }
+        }
+
+        return aiService.generateQuestionsWithStream(request, standardsText, event.sender, materialContext)
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Generation failed'
         return { success: false, error: message }
@@ -942,4 +960,29 @@ function buildStandardsText(
   return matchedStandards.length > 0
     ? matchedStandards.join('\n')
     : 'No specific standards provided. Generate general assessment questions for the subject and grade level.'
+}
+
+/**
+ * Helper to build material context from course materials (Phase 4)
+ * Concatenates extracted text from materials with headers
+ */
+function buildMaterialContext(
+  materials: import('../../shared/types').CourseMaterial[]
+): string {
+  const sections: string[] = []
+
+  for (const material of materials) {
+    // Only include materials with successfully extracted text
+    if (material.extractionStatus === 'complete' && material.extractedText) {
+      // Truncate very long materials to avoid token limits
+      const maxLength = 8000
+      const text = material.extractedText.length > maxLength
+        ? material.extractedText.slice(0, maxLength) + '\n[... content truncated for length ...]'
+        : material.extractedText
+
+      sections.push(`--- Material: ${material.name} ---\n${text}`)
+    }
+  }
+
+  return sections.join('\n\n')
 }

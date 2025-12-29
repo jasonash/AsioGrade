@@ -45,11 +45,16 @@ class AIService {
   /**
    * Generate questions with streaming progress updates
    * Sends events to renderer via IPC
+   * @param request - The question generation request
+   * @param standardsText - Formatted standards text
+   * @param sender - Electron WebContents for IPC
+   * @param materialContext - Optional extracted text from course materials
    */
   async generateQuestionsWithStream(
     request: QuestionGenerationRequest,
     standardsText: string,
-    sender: Electron.WebContents
+    sender: Electron.WebContents,
+    materialContext?: string
   ): Promise<ServiceResult<GeneratedQuestion[]>> {
     try {
       // Send start event
@@ -59,8 +64,8 @@ class AIService {
       }
       sender.send('ai:questionStream', startEvent)
 
-      // Build the prompt
-      const prompt = buildQuestionGenerationPrompt(request, standardsText)
+      // Build the prompt with optional material context
+      const prompt = buildQuestionGenerationPrompt(request, standardsText, materialContext)
 
       // Stream the response
       let fullContent = ''
@@ -135,13 +140,17 @@ class AIService {
 
   /**
    * Generate questions without streaming (for non-interactive use)
+   * @param request - The question generation request
+   * @param standardsText - Formatted standards text
+   * @param materialContext - Optional extracted text from course materials
    */
   async generateQuestions(
     request: QuestionGenerationRequest,
-    standardsText: string
+    standardsText: string,
+    materialContext?: string
   ): Promise<ServiceResult<GeneratedQuestion[]>> {
     try {
-      const prompt = buildQuestionGenerationPrompt(request, standardsText)
+      const prompt = buildQuestionGenerationPrompt(request, standardsText, materialContext)
 
       const result = await llmService.complete({
         prompt,

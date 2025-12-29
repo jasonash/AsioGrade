@@ -36,6 +36,12 @@ export interface QuestionGenerationRequest {
   // Grade level (from course)
   gradeLevel: string
   subject: string
+
+  // Course materials for context (Phase 4)
+  materialIds?: string[]
+
+  // Custom teacher instructions (Phase 4)
+  customPrompt?: string
 }
 
 /**
