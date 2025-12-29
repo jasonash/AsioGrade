@@ -16,6 +16,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import ScoreIcon from '@mui/icons-material/Score'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
 import TuneIcon from '@mui/icons-material/Tune'
+import ShuffleIcon from '@mui/icons-material/Shuffle'
 import { useAssessmentStore, useStandardsStore } from '../stores'
 import { ConfirmModal } from '../components/ui'
 import {
@@ -23,14 +24,17 @@ import {
   QuestionList,
   AIAssistantPanel,
   VariantGenerationModal,
-  VariantSelector
+  VariantSelector,
+  VersionSelector
 } from '../components/assessments'
 import type {
   CourseSummary,
   AssessmentSummary,
   AssessmentType,
   Standard,
-  MultipleChoiceQuestion
+  MultipleChoiceQuestion,
+  VersionId,
+  Question
 } from '../../../shared/types'
 import type { DOKLevel } from '../../../shared/types/roster.types'
 
@@ -70,11 +74,14 @@ export function AssessmentViewPage({
     currentAssessment,
     loading,
     generatingVariant,
+    generatingVersions,
     error,
     getAssessment,
     updateAssessment,
     deleteAssessment,
     deleteVariant,
+    generateVersions,
+    clearVersions,
     clearError
   } = useAssessmentStore()
   const { allCollections, fetchAllCollections } = useStandardsStore()
@@ -85,6 +92,9 @@ export function AssessmentViewPage({
   const [isDeleteVariantModalOpen, setIsDeleteVariantModalOpen] = useState(false)
   const [variantToDelete, setVariantToDelete] = useState<string | null>(null)
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
+  const [selectedVersionId, setSelectedVersionId] = useState<VersionId | null>(null)
+  const [isGenerateVersionsModalOpen, setIsGenerateVersionsModalOpen] = useState(false)
+  const [isClearVersionsModalOpen, setIsClearVersionsModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
 
@@ -184,6 +194,29 @@ export function AssessmentViewPage({
     }
   }
 
+  // Handler for generating randomized versions (A/B/C/D)
+  const handleGenerateVersions = async (): Promise<void> => {
+    if (!currentAssessment) return
+
+    const versions = await generateVersions(currentAssessment.id, course.id)
+    if (versions) {
+      setIsGenerateVersionsModalOpen(false)
+      // Optionally select version A after generating
+      setSelectedVersionId('A')
+    }
+  }
+
+  // Handler for clearing versions
+  const handleClearVersions = async (): Promise<void> => {
+    if (!currentAssessment) return
+
+    const success = await clearVersions(currentAssessment.id, course.id)
+    if (success) {
+      setIsClearVersionsModalOpen(false)
+      setSelectedVersionId(null)
+    }
+  }
+
   // Get all standards from all collections for alignment
   const getAllStandards = (): Standard[] => {
     const standards: Standard[] = []
@@ -211,16 +244,59 @@ export function AssessmentViewPage({
     return currentAssessment.variants.map((v) => v.dokLevel)
   }, [currentAssessment?.variants])
 
-  // Get the currently displayed questions (base or variant)
+  // Get the currently displayed questions (base, variant, or versioned)
   const displayedQuestions = useMemo(() => {
     if (!currentAssessment) return []
-    if (!selectedVariantId) return currentAssessment.questions
-    const variant = currentAssessment.variants?.find((v) => v.id === selectedVariantId)
-    return variant?.questions ?? currentAssessment.questions
-  }, [currentAssessment, selectedVariantId])
 
-  // Check if viewing a variant
+    // If viewing a DOK variant
+    if (selectedVariantId) {
+      const variant = currentAssessment.variants?.find((v) => v.id === selectedVariantId)
+      return variant?.questions ?? currentAssessment.questions
+    }
+
+    // If viewing a randomized version (A/B/C/D)
+    if (selectedVersionId) {
+      const version = currentAssessment.versions?.find((v) => v.versionId === selectedVersionId)
+      if (version) {
+        // Create question map
+        const questionMap = new Map(currentAssessment.questions.map((q) => [q.id, q]))
+
+        // Reorder questions according to version
+        const reorderedQuestions: Question[] = []
+        for (const qId of version.questionOrder) {
+          const question = questionMap.get(qId)
+          if (!question) continue
+
+          // For multiple choice questions, also reorder choices
+          if (question.type === 'multiple_choice' && question.choices) {
+            const choiceOrder = version.choiceOrders[qId]
+            if (choiceOrder) {
+              const choiceMap = new Map(question.choices.map((c) => [c.id, c]))
+              const reorderedChoices = choiceOrder
+                .map((id) => choiceMap.get(id))
+                .filter((c): c is NonNullable<typeof c> => c !== undefined)
+
+              reorderedQuestions.push({
+                ...question,
+                choices: reorderedChoices
+              })
+            } else {
+              reorderedQuestions.push(question)
+            }
+          } else {
+            reorderedQuestions.push(question)
+          }
+        }
+        return reorderedQuestions
+      }
+    }
+
+    return currentAssessment.questions
+  }, [currentAssessment, selectedVariantId, selectedVersionId])
+
+  // Check if viewing a variant or version
   const isViewingVariant = selectedVariantId !== null
+  const isViewingVersion = selectedVersionId !== null
 
   // Calculate stats based on displayed questions
   const totalPoints = displayedQuestions.reduce((sum, q) => sum + q.points, 0)
@@ -290,16 +366,28 @@ export function AssessmentViewPage({
             )}
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {currentAssessment?.status === 'draft' && (
               <>
                 <Button
                   variant="outlined"
                   startIcon={generatingVariant ? <CircularProgress size={16} /> : <TuneIcon />}
                   onClick={() => setIsVariantModalOpen(true)}
-                  disabled={generatingVariant || (currentAssessment?.questions.length ?? 0) === 0}
+                  disabled={generatingVariant || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0}
                 >
                   {generatingVariant ? 'Generating...' : 'Generate Variant'}
+                </Button>
+                <Button
+                  variant="outlined"
+                  startIcon={generatingVersions ? <CircularProgress size={16} /> : <ShuffleIcon />}
+                  onClick={() => setIsGenerateVersionsModalOpen(true)}
+                  disabled={generatingVariant || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0}
+                >
+                  {generatingVersions
+                    ? 'Generating...'
+                    : currentAssessment?.versions?.length
+                      ? 'Regenerate Versions'
+                      : 'Generate Versions'}
                 </Button>
                 <Button
                   variant="contained"
@@ -307,7 +395,7 @@ export function AssessmentViewPage({
                   startIcon={<PublishIcon />}
                   onClick={handlePublish}
                   disabled={
-                    isPublishing || (currentAssessment?.questions.length ?? 0) === 0
+                    isPublishing || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0
                   }
                 >
                   {isPublishing ? 'Publishing...' : 'Publish'}
@@ -342,7 +430,7 @@ export function AssessmentViewPage({
 
       {/* Stats cards */}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <HelpOutlineIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
@@ -356,7 +444,7 @@ export function AssessmentViewPage({
           </Paper>
         </Grid>
 
-        <Grid size={{ xs: 12, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <ScoreIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
@@ -370,12 +458,12 @@ export function AssessmentViewPage({
           </Paper>
         </Grid>
 
-        <Grid size={{ xs: 12, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 4, md: 2.4 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <MenuBookIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
               <Typography variant="body2" color="text.secondary">
-                Standards Aligned
+                Standards
               </Typography>
             </Box>
             <Typography variant="h4" fontWeight={700}>
@@ -384,7 +472,7 @@ export function AssessmentViewPage({
           </Paper>
         </Grid>
 
-        <Grid size={{ xs: 12, sm: 3 }}>
+        <Grid size={{ xs: 6, sm: 6, md: 2.4 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <TuneIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
@@ -397,6 +485,20 @@ export function AssessmentViewPage({
             </Typography>
           </Paper>
         </Grid>
+
+        <Grid size={{ xs: 6, sm: 6, md: 2.4 }}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <ShuffleIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+              <Typography variant="body2" color="text.secondary">
+                Versions
+              </Typography>
+            </Box>
+            <Typography variant="h4" fontWeight={700}>
+              {currentAssessment?.versions?.length ?? 0}
+            </Typography>
+          </Paper>
+        </Grid>
       </Grid>
 
       <Divider />
@@ -406,16 +508,31 @@ export function AssessmentViewPage({
         <VariantSelector
           variants={currentAssessment.variants}
           selectedVariantId={selectedVariantId}
-          onSelectVariant={setSelectedVariantId}
+          onSelectVariant={(id) => {
+            setSelectedVariantId(id)
+            // Clear version selection when switching to variant
+            if (id !== null) setSelectedVersionId(null)
+          }}
           onDeleteVariant={currentAssessment.status === 'draft' ? handleDeleteVariantClick : undefined}
-          disabled={loading || generatingVariant}
+          disabled={loading || generatingVariant || generatingVersions}
+        />
+      )}
+
+      {/* Version Selector - Show when versions exist (and not viewing a variant) */}
+      {currentAssessment?.versions && currentAssessment.versions.length > 0 && !selectedVariantId && (
+        <VersionSelector
+          versions={currentAssessment.versions}
+          baseQuestions={currentAssessment.questions}
+          selectedVersionId={selectedVersionId}
+          onSelectVersion={setSelectedVersionId}
+          disabled={loading || generatingVersions}
         />
       )}
 
       {/* Questions section with AI Assistant */}
       <Grid container spacing={3}>
         {/* Questions List */}
-        <Grid size={{ xs: 12, md: currentAssessment?.status === 'draft' && !isViewingVariant ? 8 : 12 }}>
+        <Grid size={{ xs: 12, md: currentAssessment?.status === 'draft' && !isViewingVariant && !isViewingVersion ? 8 : 12 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
             <Typography variant="h6" fontWeight={600}>
               Questions
@@ -428,13 +545,21 @@ export function AssessmentViewPage({
                 variant="outlined"
               />
             )}
+            {isViewingVersion && (
+              <Chip
+                label={`Version ${selectedVersionId} (Read Only)`}
+                size="small"
+                color="primary"
+                variant="outlined"
+              />
+            )}
           </Box>
 
           <QuestionList
             questions={displayedQuestions as MultipleChoiceQuestion[]}
             standards={allStandards}
             onQuestionsChange={handleQuestionsChange}
-            readOnly={currentAssessment?.status === 'published' || isViewingVariant}
+            readOnly={currentAssessment?.status === 'published' || isViewingVariant || isViewingVersion}
           />
 
           {currentAssessment?.status === 'published' && (
@@ -457,10 +582,20 @@ export function AssessmentViewPage({
               Viewing a DOK variant. Switch to the base assessment to edit questions.
             </Typography>
           )}
+
+          {isViewingVersion && (
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 2, fontStyle: 'italic' }}
+            >
+              Viewing Version {selectedVersionId} with shuffled questions and choices. Switch to Original Order to edit.
+            </Typography>
+          )}
         </Grid>
 
-        {/* AI Assistant Panel - Only show for draft assessments when not viewing a variant */}
-        {currentAssessment?.status === 'draft' && !isViewingVariant && (
+        {/* AI Assistant Panel - Only show for draft assessments when not viewing a variant or version */}
+        {currentAssessment?.status === 'draft' && !isViewingVariant && !isViewingVersion && (
           <Grid size={{ xs: 12, md: 4 }}>
             <AIAssistantPanel
               courseId={course.id}
@@ -532,6 +667,34 @@ export function AssessmentViewPage({
         confirmText={isDeleting ? 'Deleting...' : 'Delete'}
         variant="destructive"
         isLoading={isDeleting}
+      />
+
+      {/* Generate Versions Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isGenerateVersionsModalOpen}
+        onClose={() => setIsGenerateVersionsModalOpen(false)}
+        onConfirm={handleGenerateVersions}
+        title={currentAssessment?.versions?.length ? 'Regenerate Versions' : 'Generate Versions'}
+        message={
+          currentAssessment?.versions?.length
+            ? 'This will replace the existing A/B/C/D versions with new randomized versions. Are you sure?'
+            : 'This will generate 4 randomized versions (A, B, C, D) of the assessment with shuffled question order and answer choices. Each version will have a different answer key.'
+        }
+        confirmText={generatingVersions ? 'Generating...' : 'Generate'}
+        variant="default"
+        isLoading={generatingVersions}
+      />
+
+      {/* Clear Versions Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isClearVersionsModalOpen}
+        onClose={() => setIsClearVersionsModalOpen(false)}
+        onConfirm={handleClearVersions}
+        title="Clear Versions"
+        message="Are you sure you want to remove all randomized versions? This action cannot be undone."
+        confirmText={loading ? 'Clearing...' : 'Clear'}
+        variant="destructive"
+        isLoading={loading}
       />
     </Box>
   )

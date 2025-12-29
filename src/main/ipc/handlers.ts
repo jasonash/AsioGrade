@@ -9,6 +9,7 @@ import { aiService } from '../services/ai'
 import { importService } from '../services/import.service'
 import { pdfService } from '../services/pdf.service'
 import { gradeService } from '../services/grade.service'
+import { randomizationService } from '../services/randomization.service'
 import type {
   CreateCourseInput,
   UpdateCourseInput,
@@ -491,6 +492,59 @@ function registerDriveHandlers(): void {
     'drive:deleteAssessment',
     async (_event, assessmentId: string, courseId: string) => {
       return driveService.deleteAssessment(assessmentId, courseId)
+    }
+  )
+
+  // Generate randomized versions (A/B/C/D) for an assessment
+  ipcMain.handle(
+    'assessment:generateVersions',
+    async (_event, assessmentId: string, courseId: string) => {
+      try {
+        // Get the assessment
+        const assessmentResult = await driveService.getAssessment(assessmentId)
+        if (!assessmentResult.success) {
+          return { success: false, error: assessmentResult.error }
+        }
+
+        // Generate versions
+        const versions = randomizationService.generateVersions(assessmentResult.data)
+
+        // Update assessment with versions
+        const updated = await driveService.updateAssessment({
+          id: assessmentId,
+          courseId,
+          versions
+        })
+
+        return updated
+      } catch (error) {
+        console.error('Failed to generate versions:', error)
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to generate versions'
+        }
+      }
+    }
+  )
+
+  // Clear versions from an assessment
+  ipcMain.handle(
+    'assessment:clearVersions',
+    async (_event, assessmentId: string, courseId: string) => {
+      try {
+        const updated = await driveService.updateAssessment({
+          id: assessmentId,
+          courseId,
+          versions: []
+        })
+        return { success: true, data: updated }
+      } catch (error) {
+        console.error('Failed to clear versions:', error)
+        return {
+          success: false,
+          error: error instanceof Error ? error.message : 'Failed to clear versions'
+        }
+      }
     }
   )
 

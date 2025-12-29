@@ -8,12 +8,34 @@
 import type { Entity, AssessmentType, AssessmentPurpose } from './common.types'
 import type { Question } from './question.types'
 import type { DOKLevel } from './roster.types'
+import type { VersionId } from './assignment.types'
 
 // Assessment status
 export type AssessmentStatus = 'draft' | 'published'
 
 // DOK-based variant strategy
 export type VariantStrategy = 'questions' | 'distractors'
+
+/**
+ * A randomized version of an assessment
+ * Contains the shuffled order of questions and choices
+ */
+export interface AssessmentVersion {
+  versionId: VersionId
+  questionOrder: string[] // Question IDs in shuffled order
+  choiceOrders: Record<string, string[]> // questionId -> choice IDs in shuffled order
+}
+
+/**
+ * Answer key entry for a specific randomized version
+ * (Different from AnswerKeyEntry in grade.types.ts which is for grading)
+ */
+export interface VersionAnswerKeyEntry {
+  questionNumber: number // 1-indexed position in this version
+  questionId: string
+  correctChoiceId: string // Original choice ID (e.g., 'a', 'b', 'c', 'd')
+  correctLetter: string // Letter in this version (e.g., 'A', 'B', 'C', 'D')
+}
 
 /**
  * A DOK-based variant of an assessment
@@ -44,8 +66,8 @@ export interface Assessment extends Entity {
   // DOK-based variants (Phase 5)
   variants?: AssessmentVariant[]
 
-  // Placeholder for future features
-  // versions?: TestVersions
+  // Randomized versions A/B/C/D (Phase 6)
+  versions?: AssessmentVersion[]
 }
 
 /**
@@ -88,6 +110,7 @@ export interface UpdateAssessmentInput {
   questions?: Question[]
   status?: AssessmentStatus
   variants?: AssessmentVariant[]
+  versions?: AssessmentVersion[]
 }
 
 // Re-export common types for convenience

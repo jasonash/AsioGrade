@@ -49,6 +49,9 @@ type InvokeChannel =
   | 'drive:createAssessment'
   | 'drive:updateAssessment'
   | 'drive:deleteAssessment'
+  // Assessment Randomization (Versions A/B/C/D)
+  | 'assessment:generateVersions'
+  | 'assessment:clearVersions'
   // Google Drive - Assignments
   | 'drive:listAssignments'
   | 'drive:getAssignment'

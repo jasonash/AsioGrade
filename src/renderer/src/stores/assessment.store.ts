@@ -5,7 +5,8 @@ import type {
   CreateAssessmentInput,
   UpdateAssessmentInput,
   AssessmentVariant,
-  VariantStrategy
+  VariantStrategy,
+  AssessmentVersion
 } from '../../../shared/types'
 import type { ServiceResult } from '../../../shared/types/common.types'
 import type { DOKLevel } from '../../../shared/types/roster.types'
@@ -18,6 +19,7 @@ interface AssessmentState {
   currentCourseId: string | null
   loading: boolean
   generatingVariant: boolean
+  generatingVersions: boolean
   error: string | null
 
   // Actions
@@ -37,6 +39,8 @@ interface AssessmentState {
     subject: string
   ) => Promise<AssessmentVariant | null>
   deleteVariant: (variantId: string) => Promise<boolean>
+  generateVersions: (assessmentId: string, courseId: string) => Promise<AssessmentVersion[] | null>
+  clearVersions: (assessmentId: string, courseId: string) => Promise<boolean>
   setCurrentAssessment: (assessment: Assessment | null) => void
   clearError: () => void
   clearAssessments: () => void
@@ -49,6 +53,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   currentCourseId: null,
   loading: false,
   generatingVariant: false,
+  generatingVersions: false,
   error: null,
 
   // Actions
@@ -330,6 +335,54 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to delete variant'
+      set({ error: message, loading: false })
+      return false
+    }
+  },
+
+  generateVersions: async (assessmentId: string, courseId: string) => {
+    set({ generatingVersions: true, error: null })
+
+    try {
+      const result = await window.electronAPI.invoke<ServiceResult<Assessment>>(
+        'assessment:generateVersions',
+        assessmentId,
+        courseId
+      )
+
+      if (result.success) {
+        set({ currentAssessment: result.data, generatingVersions: false })
+        return result.data.versions ?? null
+      } else {
+        set({ error: result.error, generatingVersions: false })
+        return null
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate versions'
+      set({ error: message, generatingVersions: false })
+      return null
+    }
+  },
+
+  clearVersions: async (assessmentId: string, courseId: string) => {
+    set({ loading: true, error: null })
+
+    try {
+      const result = await window.electronAPI.invoke<ServiceResult<Assessment>>(
+        'assessment:clearVersions',
+        assessmentId,
+        courseId
+      )
+
+      if (result.success) {
+        set({ currentAssessment: result.data, loading: false })
+        return true
+      } else {
+        set({ error: result.error, loading: false })
+        return false
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to clear versions'
       set({ error: message, loading: false })
       return false
     }
