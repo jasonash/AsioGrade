@@ -37,6 +37,7 @@ interface ScantronGenerationModalProps {
   isOpen: boolean
   onClose: () => void
   assignment: AssignmentSummary | null
+  sectionName?: string
 }
 
 interface FormData {
@@ -57,7 +58,8 @@ const VERSION_IDS: VersionId[] = ['A', 'B', 'C', 'D']
 export function ScantronGenerationModal({
   isOpen,
   onClose,
-  assignment
+  assignment,
+  sectionName
 }: ScantronGenerationModalProps): ReactElement {
   const { generateScantron, generatingScantron, error: storeError, clearError } = useAssignmentStore()
 
@@ -238,10 +240,13 @@ export function ScantronGenerationModal({
       })
 
       // Use save dialog (remembers last directory)
+      // Build filename with section name if available
       const filePrefix = isQuiz ? 'quiz' : 'scantron'
+      const sanitizedTitle = assignment.assessmentTitle.replace(/[^a-zA-Z0-9]/g, '-')
+      const sanitizedSection = sectionName ? `-${sectionName.replace(/[^a-zA-Z0-9]/g, '-')}` : ''
       const saveResult = await window.electronAPI.invoke<{ success: boolean }>('file:saveWithDialog', {
         data: result.pdfBase64,
-        defaultFilename: `${filePrefix}-${assignment.assessmentTitle.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`,
+        defaultFilename: `${filePrefix}-${sanitizedTitle}${sanitizedSection}.pdf`,
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
       })
 

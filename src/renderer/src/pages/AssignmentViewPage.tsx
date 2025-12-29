@@ -335,6 +335,7 @@ export function AssignmentViewPage({
         isOpen={isScantronModalOpen}
         onClose={() => setIsScantronModalOpen(false)}
         assignment={assignmentSummary}
+        sectionName={section.name}
       />
 
       {/* Scantron Upload Modal */}
