@@ -702,6 +702,27 @@ function registerPDFHandlers(): void {
       }
       const assignment = assignmentResult.data
 
+      // Get section for name
+      const sectionResult = await driveService.getSection(request.sectionId)
+      if (!sectionResult.success) {
+        return { success: false, error: sectionResult.error }
+      }
+      const section = sectionResult.data
+
+      // Get course for name
+      const courseResult = await driveService.getCourse(section.courseId)
+      if (!courseResult.success) {
+        return { success: false, error: courseResult.error }
+      }
+      const course = courseResult.data
+
+      // Get assessment for title
+      const assessmentResult = await driveService.getAssessment(assignment.assessmentId)
+      if (!assessmentResult.success) {
+        return { success: false, error: assessmentResult.error }
+      }
+      const assessment = assessmentResult.data
+
       // Get roster for student info
       const rosterResult = await driveService.getRoster(request.sectionId)
       if (!rosterResult.success) {
@@ -737,12 +758,15 @@ function registerPDFHandlers(): void {
         return { success: false, error: 'No active students in section' }
       }
 
-      // Generate PDF
+      // Generate PDF with assessment title, course name, and section name
       const result = await pdfService.generateScantronPDF(
         students,
         request.assignmentId,
         assignment.questionCount,
-        request.options
+        request.options,
+        assessment.title,
+        course.name,
+        section.name
       )
 
       // Convert Buffer to base64 for IPC transfer
@@ -857,6 +881,7 @@ function registerPDFHandlers(): void {
           request.assignmentId,
           assessment.title,
           course.name,
+          section.name,
           assessment.questions,
           variants,
           request.options

@@ -52,7 +52,8 @@ class PDFService {
     questionCount: number,
     options: ScantronOptions,
     assessmentTitle?: string,
-    courseName?: string
+    courseName?: string,
+    sectionName?: string
   ): Promise<ScantronGenerationResult> {
     try {
       const { width, height } = this.getPageDimensions(options.paperSize)
@@ -101,7 +102,19 @@ class PDFService {
         const qrString = scantronLookupService.formatKeyForQR(shortKey)
 
         // Generate the page with short key QR
-        await this.generateStudentPage(doc, student, qrString, questionCount, options, width, height, dateStr)
+        await this.generateStudentPage(
+          doc,
+          student,
+          qrString,
+          questionCount,
+          options,
+          width,
+          height,
+          dateStr,
+          assessmentTitle,
+          courseName,
+          sectionName
+        )
       }
 
       // Finalize PDF
@@ -143,6 +156,7 @@ class PDFService {
     assignmentId: string,
     quizTitle: string,
     courseName: string,
+    sectionName: string,
     baseQuestions: Question[],
     variants: { dokLevel: number; questions: Question[] }[],
     options: ScantronOptions
@@ -205,6 +219,7 @@ class PDFService {
           qrString,
           quizTitle,
           courseName,
+          sectionName,
           studentQuestions,
           options,
           width,
@@ -252,6 +267,7 @@ class PDFService {
     qrString: string,
     quizTitle: string,
     courseName: string,
+    sectionName: string,
     questions: Question[],
     options: ScantronOptions,
     pageWidth: number,
@@ -268,6 +284,7 @@ class PDFService {
       qrString,
       quizTitle,
       courseName,
+      sectionName,
       date,
       pageWidth
     )
@@ -313,6 +330,7 @@ class PDFService {
     qrString: string,
     quizTitle: string,
     courseName: string,
+    sectionName: string,
     date: string,
     pageWidth: number
   ): Promise<number> {
@@ -327,12 +345,14 @@ class PDFService {
     })
     doc.image(qrDataUrl, QUIZ_MARGIN, y, { width: qrSize, height: qrSize })
 
-    // Title and course name next to QR
+    // Title, course name, and section name next to QR
     const titleX = QUIZ_MARGIN + qrSize + 10
     doc.font('Helvetica-Bold').fontSize(12)
     doc.text(quizTitle, titleX, y + 3)
     doc.font('Helvetica').fontSize(9)
     doc.text(courseName, titleX, y + 17)
+    doc.font('Helvetica').fontSize(8)
+    doc.text(sectionName, titleX, y + 29)
 
     // Student name and date on the right (single line format)
     const fieldX = pageWidth - QUIZ_MARGIN - 180
@@ -512,7 +532,10 @@ class PDFService {
     options: ScantronOptions,
     pageWidth: number,
     pageHeight: number,
-    date: string
+    date: string,
+    assessmentTitle?: string,
+    courseName?: string,
+    sectionName?: string
   ): Promise<void> {
     // Draw registration marks first (in corners)
     this.drawRegistrationMarks(doc, pageWidth, pageHeight)
@@ -520,7 +543,16 @@ class PDFService {
     let currentY = MARGIN
 
     // Draw header
-    currentY = this.drawHeader(doc, student, date, currentY, pageWidth)
+    currentY = this.drawHeader(
+      doc,
+      student,
+      date,
+      currentY,
+      pageWidth,
+      assessmentTitle,
+      courseName,
+      sectionName
+    )
 
     // Draw QR code and instructions side by side
     currentY = await this.drawQRAndInstructions(
@@ -554,17 +586,31 @@ class PDFService {
     student: ScantronStudentInfo,
     date: string,
     startY: number,
-    pageWidth: number
+    pageWidth: number,
+    assessmentTitle?: string,
+    courseName?: string,
+    sectionName?: string
   ): number {
     let y = startY
 
-    // Title
+    // Title - use assessment title if provided, otherwise generic
     doc.font('Helvetica-Bold').fontSize(16)
-    doc.text('SCANTRON ANSWER SHEET', MARGIN, y, {
+    doc.text(assessmentTitle || 'SCANTRON ANSWER SHEET', MARGIN, y, {
       width: pageWidth - 2 * MARGIN,
       align: 'center'
     })
-    y += 25
+    y += 20
+
+    // Course and section name (if provided)
+    if (courseName || sectionName) {
+      doc.font('Helvetica').fontSize(10)
+      const subtitle = [courseName, sectionName].filter(Boolean).join(' - ')
+      doc.text(subtitle, MARGIN, y, {
+        width: pageWidth - 2 * MARGIN,
+        align: 'center'
+      })
+      y += 15
+    }
 
     // Divider line
     doc
