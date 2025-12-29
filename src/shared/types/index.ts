@@ -10,7 +10,8 @@
 export type * from './common.types'
 export type * from './course.types'
 export type * from './section.types'
-export type * from './roster.types'
+// Roster types has runtime values (DOK constants) so use regular export
+export * from './roster.types'
 export type * from './standards.types'
 export type * from './question.types'
 export type * from './assessment.types'

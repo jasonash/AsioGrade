@@ -4,9 +4,15 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
+import FormControl from '@mui/material/FormControl'
+import InputLabel from '@mui/material/InputLabel'
+import Select from '@mui/material/Select'
+import MenuItem from '@mui/material/MenuItem'
+import Typography from '@mui/material/Typography'
 import { Modal } from '../ui'
 import { useRosterStore } from '../../stores'
-import type { Student, CreateStudentInput, UpdateStudentInput } from '../../../../shared/types'
+import type { Student, CreateStudentInput, UpdateStudentInput, DOKLevel } from '../../../../shared/types'
+import { DOK_LABELS, DOK_DESCRIPTIONS, DOK_LEVELS } from '../../../../shared/types'
 
 interface StudentFormModalProps {
   isOpen: boolean
@@ -22,6 +28,7 @@ interface FormData {
   email: string
   studentNumber: string
   notes: string
+  dokLevel: DOKLevel
 }
 
 interface FormErrors {
@@ -45,7 +52,8 @@ export function StudentFormModal({
     lastName: '',
     email: '',
     studentNumber: '',
-    notes: ''
+    notes: '',
+    dokLevel: 2
   })
 
   const [errors, setErrors] = useState<FormErrors>({})
@@ -60,7 +68,8 @@ export function StudentFormModal({
           lastName: student.lastName,
           email: student.email ?? '',
           studentNumber: student.studentNumber ?? '',
-          notes: student.notes ?? ''
+          notes: student.notes ?? '',
+          dokLevel: student.dokLevel ?? 2
         })
       } else {
         setFormData({
@@ -68,7 +77,8 @@ export function StudentFormModal({
           lastName: '',
           email: '',
           studentNumber: '',
-          notes: ''
+          notes: '',
+          dokLevel: 2
         })
       }
       setErrors({})
@@ -77,7 +87,7 @@ export function StudentFormModal({
   }, [isOpen, student, clearError])
 
   const handleChange = useCallback(
-    (field: keyof FormData, value: string) => {
+    (field: keyof FormData, value: string | DOKLevel) => {
       setFormData((prev) => ({ ...prev, [field]: value }))
       if (errors[field as keyof FormErrors]) {
         setErrors((prev) => ({ ...prev, [field]: undefined }))
@@ -122,7 +132,8 @@ export function StudentFormModal({
           lastName: formData.lastName.trim(),
           email: formData.email.trim() || undefined,
           studentNumber: formData.studentNumber.trim() || undefined,
-          notes: formData.notes.trim() || undefined
+          notes: formData.notes.trim() || undefined,
+          dokLevel: formData.dokLevel
         }
         result = await updateStudent(sectionId, input)
       } else {
@@ -131,7 +142,8 @@ export function StudentFormModal({
           lastName: formData.lastName.trim(),
           email: formData.email.trim() || undefined,
           studentNumber: formData.studentNumber.trim() || undefined,
-          notes: formData.notes.trim() || undefined
+          notes: formData.notes.trim() || undefined,
+          dokLevel: formData.dokLevel
         }
         result = await addStudent(sectionId, input)
       }
@@ -211,6 +223,31 @@ export function StudentFormModal({
           size="small"
           fullWidth
         />
+
+        {/* DOK Level */}
+        <FormControl fullWidth size="small">
+          <InputLabel id="dok-level-label">DOK Level</InputLabel>
+          <Select
+            labelId="dok-level-label"
+            value={formData.dokLevel}
+            onChange={(e) => handleChange('dokLevel', e.target.value as DOKLevel)}
+            label="DOK Level"
+            disabled={isSubmitting}
+          >
+            {DOK_LEVELS.map((level) => (
+              <MenuItem key={level} value={level}>
+                <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+                  <Typography variant="body2">
+                    {level} - {DOK_LABELS[level]}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {DOK_DESCRIPTIONS[level]}
+                  </Typography>
+                </Box>
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
         {/* Notes */}
         <TextField

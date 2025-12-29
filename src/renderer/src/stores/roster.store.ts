@@ -3,7 +3,8 @@ import type {
   Roster,
   Student,
   CreateStudentInput,
-  UpdateStudentInput
+  UpdateStudentInput,
+  DOKLevel
 } from '../../../shared/types'
 import type { ServiceResult } from '../../../shared/types/common.types'
 
@@ -18,6 +19,7 @@ interface RosterState {
   fetchRoster: (sectionId: string) => Promise<void>
   addStudent: (sectionId: string, input: CreateStudentInput) => Promise<Student | null>
   updateStudent: (sectionId: string, input: UpdateStudentInput) => Promise<Student | null>
+  updateStudentDOK: (sectionId: string, studentId: string, dokLevel: DOKLevel) => Promise<boolean>
   deleteStudent: (sectionId: string, studentId: string) => Promise<boolean>
   importStudents: (sectionId: string, students: CreateStudentInput[]) => Promise<number>
   clearRoster: () => void
@@ -103,6 +105,38 @@ export const useRosterStore = create<RosterState>((set, get) => ({
       const message = error instanceof Error ? error.message : 'Failed to update student'
       set({ error: message, loading: false })
       return null
+    }
+  },
+
+  updateStudentDOK: async (sectionId: string, studentId: string, dokLevel: DOKLevel) => {
+    // Don't set loading to true for inline DOK updates to avoid UI flicker
+    set({ error: null })
+
+    try {
+      const result = await window.electronAPI.invoke<ServiceResult<Student>>(
+        'drive:updateStudent',
+        sectionId,
+        { id: studentId, dokLevel }
+      )
+
+      if (result.success) {
+        // Update the roster in place without full refresh for better UX
+        const roster = get().roster
+        if (roster) {
+          const updatedStudents = roster.students.map((s) =>
+            s.id === studentId ? { ...s, dokLevel } : s
+          )
+          set({ roster: { ...roster, students: updatedStudents } })
+        }
+        return true
+      } else {
+        set({ error: result.error })
+        return false
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update DOK level'
+      set({ error: message })
+      return false
     }
   },
 

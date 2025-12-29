@@ -1134,7 +1134,19 @@ class DriveService {
         }
       }
 
-      return { success: true, data: roster }
+      // Migrate existing students to include dokLevel (default: 2)
+      const migratedStudents = roster.students.map((student) => ({
+        ...student,
+        dokLevel: student.dokLevel ?? 2
+      }))
+
+      return {
+        success: true,
+        data: {
+          ...roster,
+          students: migratedStudents
+        }
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to get roster'
       return { success: false, error: message }
@@ -1263,6 +1275,7 @@ class DriveService {
         studentNumber: input.studentNumber,
         notes: input.notes,
         active: true,
+        dokLevel: input.dokLevel ?? 2, // Default to DOK level 2
         createdAt: now,
         updatedAt: now
       }
@@ -1316,6 +1329,7 @@ class DriveService {
         studentNumber: input.studentNumber ?? existing.studentNumber,
         notes: input.notes ?? existing.notes,
         active: input.active ?? existing.active,
+        dokLevel: input.dokLevel ?? existing.dokLevel,
         updatedAt: now
       }
 

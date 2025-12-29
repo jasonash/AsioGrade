@@ -16,7 +16,7 @@ import { useRosterStore, useAssignmentStore } from '../stores'
 import { StudentList, StudentFormModal, CSVImportModal } from '../components/roster'
 import { AssignmentCard, AssignmentCreationModal } from '../components/assignments'
 import { ConfirmModal } from '../components/ui'
-import type { Student, CourseSummary, SectionSummary, AssignmentSummary } from '../../../shared/types'
+import type { Student, CourseSummary, SectionSummary, AssignmentSummary, DOKLevel } from '../../../shared/types'
 
 interface SectionViewPageProps {
   course: CourseSummary
@@ -26,7 +26,7 @@ interface SectionViewPageProps {
 }
 
 export function SectionViewPage({ course, section, onBack, onAssignmentSelect }: SectionViewPageProps): ReactElement {
-  const { roster, loading, error, fetchRoster, deleteStudent, clearRoster } = useRosterStore()
+  const { roster, loading, error, fetchRoster, deleteStudent, updateStudentDOK, clearRoster } = useRosterStore()
   const {
     assignments,
     loading: assignmentsLoading,
@@ -64,6 +64,10 @@ export function SectionViewPage({ course, section, onBack, onAssignmentSelect }:
     if (success) {
       setDeletingStudent(null)
     }
+  }
+
+  const handleUpdateDOK = async (studentId: string, dokLevel: DOKLevel): Promise<void> => {
+    await updateStudentDOK(section.id, studentId, dokLevel)
   }
 
   const activeStudentCount = roster?.students.filter((s) => s.active).length ?? 0
@@ -140,6 +144,7 @@ export function SectionViewPage({ course, section, onBack, onAssignmentSelect }:
           students={roster.students}
           onEdit={(student) => setEditingStudent(student)}
           onDelete={(student) => setDeletingStudent(student)}
+          onUpdateDOK={handleUpdateDOK}
         />
       )}
 
