@@ -18,6 +18,7 @@ export type * from './assessment.types'
 export type * from './assignment.types'
 export type * from './scantron.types'
 export type * from './grade.types'
+export type * from './gradebook.types'
 export type * from './ai.types'
 
 // Course material types has runtime values (helper functions) so use regular export

@@ -1,6 +1,6 @@
 import { useState, type ReactElement } from 'react'
 import { Layout, type NavItem } from './components/layout'
-import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, StandardsViewPage, AssessmentViewPage, AssignmentViewPage } from './pages'
+import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, StandardsViewPage, AssessmentViewPage, AssignmentViewPage, GradebookPage } from './pages'
 import { CourseCreationModal } from './components/courses'
 import { useUIStore, useCourseStore, useSectionStore, useAssessmentStore, useAssignmentStore } from './stores'
 import type { CourseSummary, SectionSummary, AssessmentSummary, AssignmentSummary } from '../../shared/types'
@@ -38,11 +38,14 @@ function App(): ReactElement {
   // State for standards view
   const [viewingStandards, setViewingStandards] = useState(false)
 
+  // State for gradebook view
+  const [viewingGradebook, setViewingGradebook] = useState(false)
+
   // State for course creation modal (can be triggered from sidebar)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   const handleNavigate = (nav: NavItem): void => {
-    // Clear current course, section, assessment, assignment, and standards view when navigating away
+    // Clear current course, section, assessment, assignment, and standards/gradebook views when navigating away
     if (currentCourse) {
       setCurrentCourse(null)
     }
@@ -58,6 +61,9 @@ function App(): ReactElement {
     if (viewingStandards) {
       setViewingStandards(false)
     }
+    if (viewingGradebook) {
+      setViewingGradebook(false)
+    }
     setActiveNav(nav)
   }
 
@@ -67,6 +73,7 @@ function App(): ReactElement {
     setCurrentAssessment(null)
     setCurrentAssignment(null)
     setViewingStandards(false)
+    setViewingGradebook(false)
     setActiveNav('dashboard')
     // Fetch sections for this course
     fetchSections(course.id)
@@ -77,6 +84,7 @@ function App(): ReactElement {
     setCurrentCourse(course)
     setCurrentSection(section)
     setCurrentAssignment(null)
+    setViewingGradebook(false)
     setActiveNav('dashboard')
     // Note: Sidebar handles its own section caching, no need to fetch here
   }
@@ -129,6 +137,17 @@ function App(): ReactElement {
       )
     }
 
+    // Show gradebook view if viewing gradebook for a section
+    if (activeNav === 'dashboard' && viewingGradebook && currentSection && currentCourse) {
+      return (
+        <GradebookPage
+          course={currentCourse}
+          section={currentSection}
+          onBack={() => setViewingGradebook(false)}
+        />
+      )
+    }
+
     // Show section view if a section is selected
     if (activeNav === 'dashboard' && currentSection && currentCourse) {
       return (
@@ -137,6 +156,7 @@ function App(): ReactElement {
           section={currentSection}
           onBack={() => setCurrentSection(null)}
           onAssignmentSelect={(assignment) => setCurrentAssignment(assignment)}
+          onGradebookClick={() => setViewingGradebook(true)}
         />
       )
     }

@@ -82,7 +82,11 @@ import type {
   VersionId,
   UnidentifiedPage,
   PageType,
-  AnswerKeyEntry
+  AnswerKeyEntry,
+  Gradebook,
+  GradebookEntry,
+  GradebookAssessment,
+  GradeInfo
 } from '../../shared/types'
 
 // Log OpenCV load status at module initialization
@@ -1857,6 +1861,184 @@ class GradeService {
         success: false,
         error: message
       }
+    }
+  }
+
+  // ============================================================
+  // Gradebook Methods
+  // ============================================================
+
+  /**
+   * Get gradebook for a section
+   * Aggregates grades from all assignments into a table view
+   */
+  async getGradebook(sectionId: string): Promise<ServiceResult<Gradebook>> {
+    try {
+      // Get section info
+      const sectionResult = await driveService.getSection(sectionId)
+      if (!sectionResult.success) {
+        return { success: false, error: sectionResult.error }
+      }
+      const section = sectionResult.data
+
+      // Get course info
+      const courseResult = await driveService.getCourse(section.courseId)
+      if (!courseResult.success) {
+        return { success: false, error: courseResult.error }
+      }
+      const course = courseResult.data
+
+      // Get roster
+      const rosterResult = await driveService.getRoster(sectionId)
+      if (!rosterResult.success) {
+        return { success: false, error: rosterResult.error }
+      }
+      const roster = rosterResult.data
+      const activeStudents = roster.students.filter((s) => s.active)
+
+      // Get all assignments for this section
+      const assignmentsResult = await driveService.listAssignments(sectionId)
+      if (!assignmentsResult.success) {
+        return { success: false, error: assignmentsResult.error }
+      }
+      const assignments = assignmentsResult.data
+
+      // Build assessment columns (only for assignments with grades)
+      const assessments: GradebookAssessment[] = []
+      const allGrades = new Map<string, AssignmentGrades>() // assignmentId -> grades
+
+      // Fetch grades for each assignment
+      for (const assignment of assignments) {
+        const gradesResult = await driveService.getGrades(assignment.id, sectionId)
+        if (gradesResult.success && gradesResult.data) {
+          allGrades.set(assignment.id, gradesResult.data)
+          assessments.push({
+            id: assignment.assessmentId,
+            title: assignment.assessmentTitle,
+            type: assignment.assessmentType,
+            totalPoints: assignment.questionCount, // Each question = 1 point for now
+            assignmentId: assignment.id
+          })
+        }
+      }
+
+      // Build entries for each student
+      const entries: GradebookEntry[] = activeStudents.map((student) => {
+        const grades: Record<string, GradeInfo | null> = {}
+        let totalPercentage = 0
+        let gradedCount = 0
+
+        // Check each assessment for this student's grade
+        for (const assessment of assessments) {
+          const assignmentGrades = allGrades.get(assessment.assignmentId)
+          if (assignmentGrades) {
+            const record = assignmentGrades.records.find((r) => r.studentId === student.id)
+            if (record) {
+              grades[assessment.id] = {
+                score: record.rawScore,
+                totalPoints: record.totalQuestions,
+                percentage: record.percentage,
+                gradedAt: record.gradedAt
+              }
+              totalPercentage += record.percentage
+              gradedCount++
+            } else {
+              grades[assessment.id] = null
+            }
+          } else {
+            grades[assessment.id] = null
+          }
+        }
+
+        return {
+          studentId: student.id,
+          studentName: `${student.lastName}, ${student.firstName}`,
+          studentNumber: student.studentNumber,
+          grades,
+          averagePercentage: gradedCount > 0 ? Math.round((totalPercentage / gradedCount) * 10) / 10 : null
+        }
+      })
+
+      // Sort entries by student name
+      entries.sort((a, b) => a.studentName.localeCompare(b.studentName))
+
+      const gradebook: Gradebook = {
+        sectionId,
+        sectionName: section.name,
+        courseName: course.name,
+        assessments,
+        entries,
+        generatedAt: new Date().toISOString()
+      }
+
+      return { success: true, data: gradebook }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get gradebook'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Export gradebook to CSV format
+   */
+  async exportGradebookCSV(
+    sectionId: string,
+    includeStudentNumber = true
+  ): Promise<ServiceResult<string>> {
+    try {
+      // Get gradebook data
+      const gradebookResult = await this.getGradebook(sectionId)
+      if (!gradebookResult.success) {
+        return { success: false, error: gradebookResult.error }
+      }
+      const gradebook = gradebookResult.data
+
+      // Build CSV header
+      const headers: string[] = ['Student']
+      if (includeStudentNumber) {
+        headers.push('Student ID')
+      }
+      for (const assessment of gradebook.assessments) {
+        headers.push(assessment.title)
+      }
+      headers.push('Average')
+
+      // Build CSV rows
+      const rows: string[][] = []
+      for (const entry of gradebook.entries) {
+        const row: string[] = [entry.studentName]
+        if (includeStudentNumber) {
+          row.push(entry.studentNumber ?? '')
+        }
+        for (const assessment of gradebook.assessments) {
+          const grade = entry.grades[assessment.id]
+          if (grade) {
+            row.push(`${grade.percentage.toFixed(1)}%`)
+          } else {
+            row.push('-')
+          }
+        }
+        row.push(entry.averagePercentage !== null ? `${entry.averagePercentage.toFixed(1)}%` : '-')
+        rows.push(row)
+      }
+
+      // Convert to CSV string
+      const escapeCSV = (value: string): string => {
+        if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+          return `"${value.replace(/"/g, '""')}"`
+        }
+        return value
+      }
+
+      const csvLines = [
+        headers.map(escapeCSV).join(','),
+        ...rows.map((row) => row.map(escapeCSV).join(','))
+      ]
+
+      return { success: true, data: csvLines.join('\n') }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to export gradebook'
+      return { success: false, error: message }
     }
   }
 }

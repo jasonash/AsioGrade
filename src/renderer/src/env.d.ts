@@ -136,6 +136,9 @@ type InvokeChannel =
   | 'grade:saveGrades'
   | 'grade:getGrades'
   | 'grade:applyOverrides'
+  // Gradebook
+  | 'grade:getGradebook'
+  | 'grade:exportGradebookCSV'
   // Window
   | 'window:openTestEditor'
   | 'window:openRoster'

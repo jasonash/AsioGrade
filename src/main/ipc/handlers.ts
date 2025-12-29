@@ -909,6 +909,23 @@ function registerGradeHandlers(): void {
       }
     }
   )
+
+  // ============================================================
+  // Gradebook Operations
+  // ============================================================
+
+  // Get gradebook for a section
+  ipcMain.handle('grade:getGradebook', async (_event, sectionId: string) => {
+    return gradeService.getGradebook(sectionId)
+  })
+
+  // Export gradebook as CSV
+  ipcMain.handle(
+    'grade:exportGradebookCSV',
+    async (_event, sectionId: string, includeStudentNumber?: boolean) => {
+      return gradeService.exportGradebookCSV(sectionId, includeStudentNumber)
+    }
+  )
 }
 
 function registerAIHandlers(): void {

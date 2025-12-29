@@ -12,6 +12,7 @@ import PeopleIcon from '@mui/icons-material/People'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import RoomIcon from '@mui/icons-material/Room'
 import AssignmentIcon from '@mui/icons-material/Assignment'
+import GradeIcon from '@mui/icons-material/Grade'
 import { useRosterStore, useAssignmentStore } from '../stores'
 import { StudentList, StudentFormModal, CSVImportModal } from '../components/roster'
 import { AssignmentCard, AssignmentCreationModal } from '../components/assignments'
@@ -23,9 +24,10 @@ interface SectionViewPageProps {
   section: SectionSummary
   onBack: () => void
   onAssignmentSelect?: (assignment: AssignmentSummary) => void
+  onGradebookClick?: () => void
 }
 
-export function SectionViewPage({ course, section, onBack, onAssignmentSelect }: SectionViewPageProps): ReactElement {
+export function SectionViewPage({ course, section, onBack, onAssignmentSelect, onGradebookClick }: SectionViewPageProps): ReactElement {
   const { roster, loading, error, fetchRoster, deleteStudent, updateStudentDOK, clearRoster } = useRosterStore()
   const {
     assignments,
@@ -116,6 +118,14 @@ export function SectionViewPage({ course, section, onBack, onAssignmentSelect }:
         </Button>
         <Button variant="outlined" startIcon={<UploadIcon />} onClick={() => setIsImportModalOpen(true)}>
           Import CSV
+        </Button>
+        <Button
+          variant="outlined"
+          startIcon={<GradeIcon />}
+          onClick={onGradebookClick}
+          disabled={!onGradebookClick}
+        >
+          View Gradebook
         </Button>
       </Box>
 
