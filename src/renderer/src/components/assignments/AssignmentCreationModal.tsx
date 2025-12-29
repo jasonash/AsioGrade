@@ -7,7 +7,7 @@ import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
 import { Modal } from '../ui'
-import { useAssignmentStore, useUnitStore } from '../../stores'
+import { useAssignmentStore } from '../../stores'
 import type { Assignment, CreateAssignmentInput, AssessmentSummary } from '../../../../shared/types'
 import type { ServiceResult } from '../../../../shared/types/common.types'
 
@@ -38,7 +38,6 @@ export function AssignmentCreationModal({
   onSuccess
 }: AssignmentCreationModalProps): ReactElement {
   const { createAssignment, error: storeError, clearError } = useAssignmentStore()
-  const { units, fetchUnits } = useUnitStore()
 
   const [formData, setFormData] = useState<FormData>({
     assessmentId: '',
@@ -57,44 +56,27 @@ export function AssignmentCreationModal({
       const loadAssessments = async (): Promise<void> => {
         setLoadingAssessments(true)
 
-        // First, fetch units if not already loaded
-        await fetchUnits(courseId)
+        try {
+          const result = await window.electronAPI.invoke<ServiceResult<AssessmentSummary[]>>(
+            'drive:listAssessments',
+            courseId
+          )
+
+          if (result.success) {
+            // Filter to only published assessments
+            const published = result.data.filter((a) => a.status === 'published')
+            setPublishedAssessments(published)
+          }
+        } catch {
+          // Ignore errors
+        }
+
+        setLoadingAssessments(false)
       }
 
       loadAssessments()
     }
-  }, [isOpen, courseId, fetchUnits])
-
-  // When units are loaded, fetch assessments from each unit
-  useEffect(() => {
-    if (isOpen && units.length > 0) {
-      const fetchAllAssessments = async (): Promise<void> => {
-        const allAssessments: AssessmentSummary[] = []
-
-        for (const unit of units) {
-          try {
-            const result = await window.electronAPI.invoke<ServiceResult<AssessmentSummary[]>>(
-              'drive:listAssessments',
-              unit.id
-            )
-
-            if (result.success) {
-              // Filter to only published assessments
-              const published = result.data.filter((a) => a.status === 'published')
-              allAssessments.push(...published)
-            }
-          } catch {
-            // Skip units with errors
-          }
-        }
-
-        setPublishedAssessments(allAssessments)
-        setLoadingAssessments(false)
-      }
-
-      fetchAllAssessments()
-    }
-  }, [isOpen, units])
+  }, [isOpen, courseId])
 
   // Reset form when modal opens
   useEffect(() => {

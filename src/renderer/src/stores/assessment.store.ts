@@ -11,17 +11,17 @@ interface AssessmentState {
   // State
   assessments: AssessmentSummary[]
   currentAssessment: Assessment | null
-  currentUnitId: string | null
+  currentCourseId: string | null
   loading: boolean
   error: string | null
 
   // Actions
-  setCurrentUnitId: (unitId: string | null) => void
-  fetchAssessments: (unitId: string) => Promise<void>
+  setCurrentCourseId: (courseId: string | null) => void
+  fetchAssessments: (courseId: string) => Promise<void>
   getAssessment: (assessmentId: string) => Promise<Assessment | null>
   createAssessment: (input: CreateAssessmentInput) => Promise<Assessment | null>
   updateAssessment: (input: UpdateAssessmentInput) => Promise<Assessment | null>
-  deleteAssessment: (assessmentId: string, unitId: string) => Promise<boolean>
+  deleteAssessment: (assessmentId: string, courseId: string) => Promise<boolean>
   setCurrentAssessment: (assessment: Assessment | null) => void
   clearError: () => void
   clearAssessments: () => void
@@ -31,27 +31,27 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   // Initial state
   assessments: [],
   currentAssessment: null,
-  currentUnitId: null,
+  currentCourseId: null,
   loading: false,
   error: null,
 
   // Actions
-  setCurrentUnitId: (unitId) => set({ currentUnitId: unitId }),
+  setCurrentCourseId: (courseId) => set({ currentCourseId: courseId }),
 
   setCurrentAssessment: (assessment) => set({ currentAssessment: assessment }),
 
   clearError: () => set({ error: null }),
 
   clearAssessments: () =>
-    set({ assessments: [], currentAssessment: null, currentUnitId: null }),
+    set({ assessments: [], currentAssessment: null, currentCourseId: null }),
 
-  fetchAssessments: async (unitId: string) => {
-    set({ loading: true, error: null, currentUnitId: unitId })
+  fetchAssessments: async (courseId: string) => {
+    set({ loading: true, error: null, currentCourseId: courseId })
 
     try {
       const result = await window.electronAPI.invoke<ServiceResult<AssessmentSummary[]>>(
         'drive:listAssessments',
-        unitId
+        courseId
       )
 
       if (result.success) {
@@ -99,11 +99,11 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
 
       if (result.success) {
         // Refresh the assessment list after creating
-        const { currentUnitId } = get()
-        if (currentUnitId) {
+        const { currentCourseId } = get()
+        if (currentCourseId) {
           const listResult = await window.electronAPI.invoke<ServiceResult<AssessmentSummary[]>>(
             'drive:listAssessments',
-            currentUnitId
+            currentCourseId
           )
 
           if (listResult.success) {
@@ -144,11 +144,11 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
         }
 
         // Refresh the assessment list
-        const { currentUnitId } = get()
-        if (currentUnitId) {
+        const { currentCourseId } = get()
+        if (currentCourseId) {
           const listResult = await window.electronAPI.invoke<ServiceResult<AssessmentSummary[]>>(
             'drive:listAssessments',
-            currentUnitId
+            currentCourseId
           )
 
           if (listResult.success) {
@@ -172,14 +172,14 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
     }
   },
 
-  deleteAssessment: async (assessmentId: string, unitId: string) => {
+  deleteAssessment: async (assessmentId: string, courseId: string) => {
     set({ loading: true, error: null })
 
     try {
       const result = await window.electronAPI.invoke<ServiceResult<void>>(
         'drive:deleteAssessment',
         assessmentId,
-        unitId
+        courseId
       )
 
       if (result.success) {
@@ -192,7 +192,7 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
         // Refresh the assessment list
         const listResult = await window.electronAPI.invoke<ServiceResult<AssessmentSummary[]>>(
           'drive:listAssessments',
-          unitId
+          courseId
         )
 
         if (listResult.success) {

@@ -19,8 +19,7 @@ interface AssessmentCreationModalProps {
   onClose: () => void
   onSuccess?: (assessment: Assessment) => void
   courseId: string
-  unitId: string
-  unitName: string
+  courseName: string
 }
 
 interface FormData {
@@ -48,8 +47,7 @@ export function AssessmentCreationModal({
   onClose,
   onSuccess,
   courseId,
-  unitId,
-  unitName
+  courseName
 }: AssessmentCreationModalProps): ReactElement {
   const { createAssessment, error: storeError, clearError } = useAssessmentStore()
 
@@ -94,7 +92,6 @@ export function AssessmentCreationModal({
 
     const result = await createAssessment({
       courseId,
-      unitId,
       title: formData.title.trim(),
       type: formData.type,
       purpose: formData.purpose,
@@ -121,7 +118,7 @@ export function AssessmentCreationModal({
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {/* Context info */}
         <Typography variant="body2" color="text.secondary">
-          Creating assessment in unit: <strong>{unitName}</strong>
+          Creating assessment for course: <strong>{courseName}</strong>
         </Typography>
 
         {/* Error display */}

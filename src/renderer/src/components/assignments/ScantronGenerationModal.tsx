@@ -77,7 +77,6 @@ export function ScantronGenerationModal({
     const request: ScantronGenerationRequest = {
       assignmentId: assignment.id,
       sectionId: assignment.sectionId,
-      unitId: assignment.unitId,
       options
     }
 
@@ -90,7 +89,7 @@ export function ScantronGenerationModal({
       })
 
       // Use save dialog (remembers last directory)
-      const saveResult = await window.electronAPI.invoke('file:saveWithDialog', {
+      const saveResult = await window.electronAPI.invoke<{ success: boolean }>('file:saveWithDialog', {
         data: result.pdfBase64,
         defaultFilename: `scantron-${assignment.assessmentTitle.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`,
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }]

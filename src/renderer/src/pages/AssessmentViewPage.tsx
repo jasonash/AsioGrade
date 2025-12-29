@@ -15,13 +15,11 @@ import PublishIcon from '@mui/icons-material/Publish'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import ScoreIcon from '@mui/icons-material/Score'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
-import { useAssessmentStore, useStandardsStore, useUnitStore } from '../stores'
+import { useAssessmentStore, useStandardsStore } from '../stores'
 import { ConfirmModal } from '../components/ui'
 import { AssessmentEditModal, QuestionList, AIAssistantPanel } from '../components/assessments'
 import type {
   CourseSummary,
-  UnitSummary,
-  Unit,
   AssessmentSummary,
   AssessmentType,
   Standard,
@@ -30,7 +28,6 @@ import type {
 
 interface AssessmentViewPageProps {
   course: CourseSummary
-  unit: UnitSummary
   assessmentSummary: AssessmentSummary
   onBack: () => void
   onDeleted: () => void
@@ -57,7 +54,6 @@ const typeColors: Record<AssessmentType, 'primary' | 'secondary' | 'info' | 'war
 
 export function AssessmentViewPage({
   course,
-  unit,
   assessmentSummary,
   onBack,
   onDeleted
@@ -72,25 +68,22 @@ export function AssessmentViewPage({
     clearError
   } = useAssessmentStore()
   const { allCollections, fetchAllCollections } = useStandardsStore()
-  const { getUnit } = useUnitStore()
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
-  const [fullUnit, setFullUnit] = useState<Unit | null>(null)
 
-  // Fetch full assessment details, standards, and unit when component mounts
+  // Fetch full assessment details and standards when component mounts
   useEffect(() => {
     getAssessment(assessmentSummary.id)
     fetchAllCollections(course.id)
-    getUnit(course.id, unit.id).then(setFullUnit)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- Store functions are stable
-  }, [assessmentSummary.id, course.id, unit.id])
+  }, [assessmentSummary.id, course.id])
 
   const handleDelete = async (): Promise<void> => {
     setIsDeleting(true)
-    const success = await deleteAssessment(assessmentSummary.id, unit.id)
+    const success = await deleteAssessment(assessmentSummary.id, course.id)
     setIsDeleting(false)
 
     if (success) {
@@ -106,7 +99,6 @@ export function AssessmentViewPage({
     await updateAssessment({
       id: currentAssessment.id,
       courseId: currentAssessment.courseId,
-      unitId: currentAssessment.unitId,
       status: 'published'
     })
     setIsPublishing(false)
@@ -120,7 +112,6 @@ export function AssessmentViewPage({
     await updateAssessment({
       id: currentAssessment.id,
       courseId: currentAssessment.courseId,
-      unitId: currentAssessment.unitId,
       questions
     })
   }
@@ -135,7 +126,6 @@ export function AssessmentViewPage({
     await updateAssessment({
       id: currentAssessment.id,
       courseId: currentAssessment.courseId,
-      unitId: currentAssessment.unitId,
       questions: updatedQuestions
     })
   }
@@ -153,7 +143,6 @@ export function AssessmentViewPage({
     await updateAssessment({
       id: currentAssessment.id,
       courseId: currentAssessment.courseId,
-      unitId: currentAssessment.unitId,
       questions: updatedQuestions
     })
   }
@@ -170,11 +159,6 @@ export function AssessmentViewPage({
   }
 
   const allStandards = getAllStandards()
-
-  // Separate unit standards from other standards for AI generation
-  const unitStandardRefs = fullUnit?.standardRefs ?? []
-  const unitStandards = allStandards.filter((s) => unitStandardRefs.includes(s.code))
-  const otherStandards = allStandards.filter((s) => !unitStandardRefs.includes(s.code))
 
   // Calculate stats
   const totalPoints = currentAssessment?.questions.reduce((sum, q) => sum + q.points, 0) ?? 0
@@ -209,7 +193,7 @@ export function AssessmentViewPage({
           onClick={onBack}
           sx={{ mb: 2, color: 'text.secondary' }}
         >
-          Back to {unit.name}
+          Back to {course.name}
         </Button>
 
         <Box
@@ -363,13 +347,11 @@ export function AssessmentViewPage({
           <Grid size={{ xs: 12, md: 4 }}>
             <AIAssistantPanel
               courseId={course.id}
-              unitId={unit.id}
               assessmentId={currentAssessment.id}
               assessmentTitle={currentAssessment.title}
               gradeLevel={course.gradeLevel}
               subject={course.subject}
-              unitStandards={unitStandards}
-              otherStandards={otherStandards}
+              standards={allStandards}
               existingQuestions={(currentAssessment.questions as MultipleChoiceQuestion[]) ?? []}
               onQuestionsAccepted={handleQuestionsAccepted}
               onQuestionRefined={handleQuestionRefined}

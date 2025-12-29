@@ -1,2 +1,2 @@
-export { Modal } from './modal'
+export { Modal } from './Modal'
 export { ConfirmModal } from './confirm-modal'

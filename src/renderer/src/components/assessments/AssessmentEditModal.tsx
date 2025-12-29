@@ -90,7 +90,6 @@ export function AssessmentEditModal({
     const result = await updateAssessment({
       id: assessment.id,
       courseId: assessment.courseId,
-      unitId: assessment.unitId,
       title: formData.title.trim(),
       type: formData.type,
       purpose: formData.purpose,

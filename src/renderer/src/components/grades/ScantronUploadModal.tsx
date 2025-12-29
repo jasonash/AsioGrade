@@ -92,7 +92,6 @@ export function ScantronUploadModal({
       const result = await processScantron({
         assignmentId: assignment.id,
         sectionId: assignment.sectionId,
-        unitId: assignment.unitId,
         pdfBase64: base64
       })
 

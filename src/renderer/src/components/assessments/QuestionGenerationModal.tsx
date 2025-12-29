@@ -2,7 +2,7 @@
  * QuestionGenerationModal Component
  *
  * Modal for configuring AI question generation parameters.
- * Shows unit standards (pre-selected) and optional other course standards.
+ * Shows course standards for selection.
  */
 
 import { type ReactElement, useState, useEffect } from 'react'
@@ -13,12 +13,7 @@ import TextField from '@mui/material/TextField'
 import MenuItem from '@mui/material/MenuItem'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
-import Collapse from '@mui/material/Collapse'
 import CircularProgress from '@mui/material/CircularProgress'
-import Divider from '@mui/material/Divider'
-import IconButton from '@mui/material/IconButton'
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
-import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { Modal } from '../ui'
 import { useAIStore } from '../../stores'
 import type { Standard } from '../../../../shared/types'
@@ -31,45 +26,37 @@ interface QuestionGenerationModalProps {
   isOpen: boolean
   onClose: () => void
   courseId: string
-  unitId: string
   assessmentId: string
   gradeLevel: string
   subject: string
-  unitStandards: Standard[]
-  otherStandards: Standard[]
+  standards: Standard[]
 }
 
 export function QuestionGenerationModal({
   isOpen,
   onClose,
   courseId,
-  unitId,
   assessmentId,
   gradeLevel,
   subject,
-  unitStandards,
-  otherStandards
+  standards
 }: QuestionGenerationModalProps): ReactElement {
   const { generateQuestions, isGenerating } = useAIStore()
 
   const [questionCount, setQuestionCount] = useState(5)
-  const [selectedUnitStandards, setSelectedUnitStandards] = useState<Set<string>>(new Set())
-  const [selectedOtherStandards, setSelectedOtherStandards] = useState<Set<string>>(new Set())
+  const [selectedStandards, setSelectedStandards] = useState<Set<string>>(new Set())
   const [difficulty, setDifficulty] = useState<QuestionDifficulty>('mixed')
   const [focusTopics, setFocusTopics] = useState('')
-  const [showOtherStandards, setShowOtherStandards] = useState(false)
 
-  // Initialize unit standards as selected when modal opens or unit standards change
+  // Initialize standards as selected when modal opens
   useEffect(() => {
     if (isOpen) {
-      setSelectedUnitStandards(new Set(unitStandards.map((s) => s.code)))
-      setSelectedOtherStandards(new Set())
-      setShowOtherStandards(false)
+      setSelectedStandards(new Set(standards.map((s) => s.code)))
     }
-  }, [isOpen, unitStandards])
+  }, [isOpen, standards])
 
-  const handleUnitStandardToggle = (code: string): void => {
-    setSelectedUnitStandards((prev) => {
+  const handleStandardToggle = (code: string): void => {
+    setSelectedStandards((prev) => {
       const next = new Set(prev)
       if (next.has(code)) {
         next.delete(code)
@@ -80,36 +67,21 @@ export function QuestionGenerationModal({
     })
   }
 
-  const handleOtherStandardToggle = (code: string): void => {
-    setSelectedOtherStandards((prev) => {
-      const next = new Set(prev)
-      if (next.has(code)) {
-        next.delete(code)
-      } else {
-        next.add(code)
-      }
-      return next
-    })
+  const handleSelectAll = (): void => {
+    setSelectedStandards(new Set(standards.map((s) => s.code)))
   }
 
-  const handleSelectAllUnit = (): void => {
-    setSelectedUnitStandards(new Set(unitStandards.map((s) => s.code)))
+  const handleSelectNone = (): void => {
+    setSelectedStandards(new Set())
   }
-
-  const handleSelectNoneUnit = (): void => {
-    setSelectedUnitStandards(new Set())
-  }
-
-  const allSelectedStandards = [...selectedUnitStandards, ...selectedOtherStandards]
 
   const handleGenerate = async (): Promise<void> => {
-    if (allSelectedStandards.length === 0) return
+    if (selectedStandards.size === 0) return
 
     const request: QuestionGenerationRequest = {
       courseId,
-      unitId,
       assessmentId,
-      standardRefs: allSelectedStandards,
+      standardRefs: [...selectedStandards],
       questionCount,
       questionTypes: ['multiple_choice'],
       difficulty,
@@ -143,30 +115,30 @@ export function QuestionGenerationModal({
           helperText="Generate 1-20 questions at a time"
         />
 
-        {/* Unit Standards Section */}
+        {/* Standards Section */}
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="subtitle2">
-              Unit Standards ({selectedUnitStandards.size}/{unitStandards.length} selected)
+              Standards ({selectedStandards.size}/{standards.length} selected)
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
-              <Button size="small" onClick={handleSelectAllUnit}>
+              <Button size="small" onClick={handleSelectAll}>
                 All
               </Button>
-              <Button size="small" onClick={handleSelectNoneUnit}>
+              <Button size="small" onClick={handleSelectNone}>
                 None
               </Button>
             </Box>
           </Box>
 
-          {unitStandards.length === 0 ? (
+          {standards.length === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-              No standards assigned to this unit. Add standards to the unit or use Other Standards below.
+              No standards assigned to this course. Add standards to the course first.
             </Typography>
           ) : (
             <Box
               sx={{
-                maxHeight: 200,
+                maxHeight: 250,
                 overflowY: 'auto',
                 border: 1,
                 borderColor: 'divider',
@@ -174,13 +146,13 @@ export function QuestionGenerationModal({
                 p: 1
               }}
             >
-              {unitStandards.map((standard) => (
+              {standards.map((standard) => (
                 <FormControlLabel
                   key={standard.code}
                   control={
                     <Checkbox
-                      checked={selectedUnitStandards.has(standard.code)}
-                      onChange={() => handleUnitStandardToggle(standard.code)}
+                      checked={selectedStandards.has(standard.code)}
+                      onChange={() => handleStandardToggle(standard.code)}
                       size="small"
                     />
                   }
@@ -196,66 +168,6 @@ export function QuestionGenerationModal({
             </Box>
           )}
         </Box>
-
-        {/* Other Standards Section (Collapsible) */}
-        {otherStandards.length > 0 && (
-          <Box>
-            <Divider sx={{ mb: 2 }} />
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                cursor: 'pointer'
-              }}
-              onClick={() => setShowOtherStandards(!showOtherStandards)}
-            >
-              <Typography variant="subtitle2" color="text.secondary">
-                Other Course Standards ({selectedOtherStandards.size} selected)
-              </Typography>
-              <IconButton size="small">
-                {showOtherStandards ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              </IconButton>
-            </Box>
-            <Typography variant="caption" color="text.secondary">
-              Standards from other units - use for review or cross-topic questions
-            </Typography>
-
-            <Collapse in={showOtherStandards}>
-              <Box
-                sx={{
-                  maxHeight: 200,
-                  overflowY: 'auto',
-                  border: 1,
-                  borderColor: 'divider',
-                  borderRadius: 1,
-                  p: 1,
-                  mt: 1
-                }}
-              >
-                {otherStandards.map((standard) => (
-                  <FormControlLabel
-                    key={standard.code}
-                    control={
-                      <Checkbox
-                        checked={selectedOtherStandards.has(standard.code)}
-                        onChange={() => handleOtherStandardToggle(standard.code)}
-                        size="small"
-                      />
-                    }
-                    label={
-                      <Typography variant="body2">
-                        <strong>{standard.code}</strong> - {standard.description.slice(0, 60)}
-                        {standard.description.length > 60 ? '...' : ''}
-                      </Typography>
-                    }
-                    sx={{ display: 'flex', alignItems: 'flex-start', mb: 0.5 }}
-                  />
-                ))}
-              </Box>
-            </Collapse>
-          </Box>
-        )}
 
         {/* Difficulty */}
         <TextField
@@ -287,10 +199,10 @@ export function QuestionGenerationModal({
           <Button
             variant="contained"
             onClick={handleGenerate}
-            disabled={isGenerating || allSelectedStandards.length === 0}
+            disabled={isGenerating || selectedStandards.size === 0}
             startIcon={isGenerating ? <CircularProgress size={16} color="inherit" /> : undefined}
           >
-            {isGenerating ? 'Generating...' : `Generate (${allSelectedStandards.length} standards)`}
+            {isGenerating ? 'Generating...' : `Generate (${selectedStandards.size} standards)`}
           </Button>
         </Box>
       </Box>

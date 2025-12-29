@@ -13,7 +13,6 @@ import TextField from '@mui/material/TextField'
 import Button from '@mui/material/Button'
 import IconButton from '@mui/material/IconButton'
 import Chip from '@mui/material/Chip'
-import Divider from '@mui/material/Divider'
 import CircularProgress from '@mui/material/CircularProgress'
 import Alert from '@mui/material/Alert'
 import Collapse from '@mui/material/Collapse'
@@ -34,13 +33,11 @@ import type { AIAssessmentContext, QuestionGenerationRequest } from '../../../..
 
 interface AIAssistantPanelProps {
   courseId: string
-  unitId: string
   assessmentId: string
   assessmentTitle: string
   gradeLevel: string
   subject: string
-  unitStandards: Standard[]
-  otherStandards: Standard[]
+  standards: Standard[]
   existingQuestions: MultipleChoiceQuestion[]
   selectedQuestion?: MultipleChoiceQuestion
   onQuestionsAccepted: (questions: MultipleChoiceQuestion[]) => void
@@ -49,17 +46,14 @@ interface AIAssistantPanelProps {
 
 export function AIAssistantPanel({
   courseId,
-  unitId,
   assessmentId,
   assessmentTitle,
   gradeLevel,
   subject,
-  unitStandards,
-  otherStandards,
+  standards,
   existingQuestions,
   selectedQuestion,
-  onQuestionsAccepted,
-  onQuestionRefined
+  onQuestionsAccepted
 }: AIAssistantPanelProps): ReactElement {
   const {
     conversation,
@@ -73,8 +67,7 @@ export function AIAssistantPanel({
     rejectQuestion,
     acceptAllQuestions,
     rejectAllQuestions,
-    clearError,
-    clearConversation
+    clearError
   } = useAIStore()
 
   const [chatInput, setChatInput] = useState('')
@@ -93,11 +86,10 @@ export function AIAssistantPanel({
 
   const context: AIAssessmentContext = {
     courseId,
-    unitId,
     assessmentTitle,
     gradeLevel,
     subject,
-    standardRefs: unitStandards.map((s) => s.code),
+    standardRefs: standards.map((s) => s.code),
     existingQuestionCount: existingQuestions.length
   }
 
@@ -105,7 +97,6 @@ export function AIAssistantPanel({
   const handleGenerateMissing = async (standardRefs: string[]): Promise<void> => {
     const request: QuestionGenerationRequest = {
       courseId,
-      unitId,
       assessmentId,
       standardRefs,
       questionCount: Math.min(standardRefs.length * 2, 10), // 2 per standard, max 10
@@ -198,7 +189,7 @@ export function AIAssistantPanel({
               variant="outlined"
               startIcon={<AddIcon />}
               onClick={() => setShowGenerationModal(true)}
-              disabled={isGenerating || (unitStandards.length === 0 && otherStandards.length === 0)}
+              disabled={isGenerating || standards.length === 0}
             >
               Generate
             </Button>
@@ -225,7 +216,7 @@ export function AIAssistantPanel({
         </Box>
 
         {/* Coverage Analysis (Collapsible) */}
-        {unitStandards.length > 0 && (
+        {standards.length > 0 && (
           <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
             <Box
               sx={{
@@ -245,7 +236,7 @@ export function AIAssistantPanel({
             <Collapse in={showCoverage}>
               <Box sx={{ px: 2, pb: 2 }}>
                 <CoverageAnalysis
-                  standards={unitStandards}
+                  standards={standards}
                   questions={existingQuestions}
                   onGenerateMissing={handleGenerateMissing}
                   isGenerating={isGenerating}
@@ -378,12 +369,10 @@ export function AIAssistantPanel({
         isOpen={showGenerationModal}
         onClose={() => setShowGenerationModal(false)}
         courseId={courseId}
-        unitId={unitId}
         assessmentId={assessmentId}
         gradeLevel={gradeLevel}
         subject={subject}
-        unitStandards={unitStandards}
-        otherStandards={otherStandards}
+        standards={standards}
       />
 
       {/* Question Import Modal */}

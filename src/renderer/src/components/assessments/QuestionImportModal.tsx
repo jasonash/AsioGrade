@@ -55,25 +55,21 @@ export function QuestionImportModal({
 }: QuestionImportModalProps): ReactElement {
   const [step, setStep] = useState<ImportStep>('upload')
   const [fileName, setFileName] = useState<string | null>(null)
-  const [extractedText, setExtractedText] = useState<string | null>(null)
   const [importResult, setImportResult] = useState<MaterialImportResult | null>(null)
   const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(new Set())
   const [selectedFillInBlank, setSelectedFillInBlank] = useState<Set<string>>(new Set())
   const [isConverting, setIsConverting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isProcessing, setIsProcessing] = useState(false)
 
   // Reset state when modal closes
   const handleClose = (): void => {
     setStep('upload')
     setFileName(null)
-    setExtractedText(null)
     setImportResult(null)
     setSelectedQuestions(new Set())
     setSelectedFillInBlank(new Set())
     setIsConverting(false)
     setError(null)
-    setIsProcessing(false)
     onClose()
   }
 
@@ -99,7 +95,6 @@ export function QuestionImportModal({
       const filePath = fileResult.data
       const name = filePath.split('/').pop() ?? filePath
       setFileName(name)
-      setIsProcessing(true)
 
       // Extract text from file
       const textResult = await window.electronAPI.invoke<ServiceResult<string>>(
@@ -109,11 +104,9 @@ export function QuestionImportModal({
 
       if (!textResult.success) {
         setError(textResult.error ?? 'Failed to extract text from file')
-        setIsProcessing(false)
         return
       }
 
-      setExtractedText(textResult.data)
       setStep('extracting')
 
       // Send to AI for question extraction
@@ -128,8 +121,6 @@ export function QuestionImportModal({
         'ai:extractQuestionsFromMaterial',
         request
       )
-
-      setIsProcessing(false)
 
       if (!aiResult.success) {
         setError(aiResult.error ?? 'Failed to extract questions')
@@ -155,7 +146,7 @@ export function QuestionImportModal({
       setStep('review')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
-      setIsProcessing(false)
+      setStep('upload')
     }
   }
 

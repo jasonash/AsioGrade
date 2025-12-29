@@ -145,7 +145,7 @@ export const useAIStore = create<AIState>((set, get) => ({
 
       // Use the invoke result directly - IPC events may not arrive before cleanup
       // This ensures we always get the questions regardless of event timing
-      if (result.success && result.data) {
+      if (result.success) {
         // Replace pending questions with result to avoid duplicates from race condition
         set({
           isGenerating: false,
@@ -159,7 +159,7 @@ export const useAIStore = create<AIState>((set, get) => ({
         set({
           isGenerating: false,
           streamingProgress: '',
-          error: result.error ?? 'Generation failed'
+          error: result.error
         })
       }
     } catch (error) {
@@ -191,7 +191,7 @@ export const useAIStore = create<AIState>((set, get) => ({
         request
       )
 
-      if (result.success && result.data) {
+      if (result.success) {
         set((state) => ({
           isRefining: false,
           refinementResult: result.data,
@@ -200,7 +200,7 @@ export const useAIStore = create<AIState>((set, get) => ({
         }))
         return result.data
       } else {
-        set({ isRefining: false, error: result.error ?? 'Refinement failed' })
+        set({ isRefining: false, error: result.error })
         return null
       }
     } catch (error) {
@@ -218,7 +218,7 @@ export const useAIStore = create<AIState>((set, get) => ({
 
     try {
       const request: AIChatRequest = {
-        assessmentId: context.unitId, // Using unitId as assessmentId for now
+        assessmentId: context.courseId, // Using courseId as assessmentId for chat context
         message,
         context
       }
@@ -228,7 +228,7 @@ export const useAIStore = create<AIState>((set, get) => ({
         request
       )
 
-      if (result.success && result.data) {
+      if (result.success) {
         set((state) => ({
           conversation: [...state.conversation, result.data.message],
           isGenerating: false,
@@ -240,7 +240,7 @@ export const useAIStore = create<AIState>((set, get) => ({
             : state.pendingQuestions
         }))
       } else {
-        set({ isGenerating: false, error: result.error ?? 'Chat failed' })
+        set({ isGenerating: false, error: result.error })
       }
     } catch (error) {
       const messageStr = error instanceof Error ? error.message : 'Chat failed'
