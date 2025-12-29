@@ -13,6 +13,7 @@ import Typography from '@mui/material/Typography'
 import { Modal } from '../ui'
 import { useAssessmentStore } from '../../stores'
 import type { AssessmentType, AssessmentPurpose, Assessment } from '../../../../shared/types'
+import { QUIZ_MIN_QUESTIONS, QUIZ_MAX_QUESTIONS } from '../../../../shared/types/assessment.types'
 
 interface AssessmentCreationModalProps {
   isOpen: boolean
@@ -155,6 +156,14 @@ export function AssessmentCreationModal({
             </MenuItem>
           ))}
         </TextField>
+
+        {/* Quiz format info */}
+        {formData.type === 'quiz' && (
+          <Alert severity="info" sx={{ py: 0.5 }}>
+            Quizzes use a single-page format with {QUIZ_MIN_QUESTIONS}-{QUIZ_MAX_QUESTIONS} questions
+            and an integrated answer bubble sheet.
+          </Alert>
+        )}
 
         {/* Purpose */}
         <FormControl component="fieldset" disabled={isSubmitting}>

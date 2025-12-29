@@ -28,13 +28,14 @@ import { GeneratedQuestionCard } from './GeneratedQuestionCard'
 import { QuestionGenerationModal } from './QuestionGenerationModal'
 import { QuestionImportModal } from './QuestionImportModal'
 import { CoverageAnalysis } from './CoverageAnalysis'
-import type { Standard, MultipleChoiceQuestion } from '../../../../shared/types'
+import type { Standard, MultipleChoiceQuestion, AssessmentType } from '../../../../shared/types'
 import type { AIAssessmentContext, QuestionGenerationRequest } from '../../../../shared/types/ai.types'
 
 interface AIAssistantPanelProps {
   courseId: string
   assessmentId: string
   assessmentTitle: string
+  assessmentType?: AssessmentType
   gradeLevel: string
   subject: string
   standards: Standard[]
@@ -48,6 +49,7 @@ export function AIAssistantPanel({
   courseId,
   assessmentId,
   assessmentTitle,
+  assessmentType,
   gradeLevel,
   subject,
   standards,
@@ -373,6 +375,8 @@ export function AIAssistantPanel({
         gradeLevel={gradeLevel}
         subject={subject}
         standards={standards}
+        assessmentType={assessmentType}
+        existingQuestionCount={existingQuestions.length}
       />
 
       {/* Question Import Modal */}

@@ -10,6 +10,10 @@ import type { Question } from './question.types'
 import type { DOKLevel } from './roster.types'
 import type { VersionId } from './assignment.types'
 
+// Quiz question constraints (quizzes are single-page with integrated scantron)
+export const QUIZ_MIN_QUESTIONS = 3
+export const QUIZ_MAX_QUESTIONS = 10
+
 // Assessment status
 export type AssessmentStatus = 'draft' | 'published'
 

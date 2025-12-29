@@ -37,6 +37,7 @@ import type {
   Question
 } from '../../../shared/types'
 import type { DOKLevel } from '../../../shared/types/roster.types'
+import { QUIZ_MIN_QUESTIONS, QUIZ_MAX_QUESTIONS } from '../../../shared/types/assessment.types'
 
 interface AssessmentViewPageProps {
   course: CourseSummary
@@ -298,6 +299,13 @@ export function AssessmentViewPage({
   const isViewingVariant = selectedVariantId !== null
   const isViewingVersion = selectedVersionId !== null
 
+  // Quiz-specific logic
+  const isQuiz = currentAssessment?.type === 'quiz'
+  const questionCount = currentAssessment?.questions.length ?? 0
+  const quizHasTooFewQuestions = isQuiz && questionCount < QUIZ_MIN_QUESTIONS
+  const quizHasTooManyQuestions = isQuiz && questionCount > QUIZ_MAX_QUESTIONS
+  const quizLimitViolation = quizHasTooFewQuestions || quizHasTooManyQuestions
+
   // Calculate stats based on displayed questions
   const totalPoints = displayedQuestions.reduce((sum, q) => sum + q.points, 0)
   const alignedStandardsCount = new Set(
@@ -377,25 +385,28 @@ export function AssessmentViewPage({
                 >
                   {generatingVariant ? 'Generating...' : 'Generate Variant'}
                 </Button>
-                <Button
-                  variant="outlined"
-                  startIcon={generatingVersions ? <CircularProgress size={16} /> : <ShuffleIcon />}
-                  onClick={() => setIsGenerateVersionsModalOpen(true)}
-                  disabled={generatingVariant || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0}
-                >
-                  {generatingVersions
-                    ? 'Generating...'
-                    : currentAssessment?.versions?.length
-                      ? 'Regenerate Versions'
-                      : 'Generate Versions'}
-                </Button>
+                {/* Hide Generate Versions button for quizzes - they don't support versions */}
+                {!isQuiz && (
+                  <Button
+                    variant="outlined"
+                    startIcon={generatingVersions ? <CircularProgress size={16} /> : <ShuffleIcon />}
+                    onClick={() => setIsGenerateVersionsModalOpen(true)}
+                    disabled={generatingVariant || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0}
+                  >
+                    {generatingVersions
+                      ? 'Generating...'
+                      : currentAssessment?.versions?.length
+                        ? 'Regenerate Versions'
+                        : 'Generate Versions'}
+                  </Button>
+                )}
                 <Button
                   variant="contained"
                   color="success"
                   startIcon={<PublishIcon />}
                   onClick={handlePublish}
                   disabled={
-                    isPublishing || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0
+                    isPublishing || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0 || quizLimitViolation
                   }
                 >
                   {isPublishing ? 'Publishing...' : 'Publish'}
@@ -425,6 +436,15 @@ export function AssessmentViewPage({
       {error && (
         <Alert severity="error" onClose={clearError}>
           {error}
+        </Alert>
+      )}
+
+      {/* Quiz limit warning */}
+      {currentAssessment?.status === 'draft' && quizLimitViolation && (
+        <Alert severity="warning">
+          {quizHasTooFewQuestions
+            ? `Quizzes require at least ${QUIZ_MIN_QUESTIONS} questions. Add ${QUIZ_MIN_QUESTIONS - questionCount} more question${QUIZ_MIN_QUESTIONS - questionCount === 1 ? '' : 's'} to publish.`
+            : `Quizzes are limited to ${QUIZ_MAX_QUESTIONS} questions. Remove ${questionCount - QUIZ_MAX_QUESTIONS} question${questionCount - QUIZ_MAX_QUESTIONS === 1 ? '' : 's'} to publish.`}
         </Alert>
       )}
 
@@ -601,6 +621,7 @@ export function AssessmentViewPage({
               courseId={course.id}
               assessmentId={currentAssessment.id}
               assessmentTitle={currentAssessment.title}
+              assessmentType={currentAssessment.type}
               gradeLevel={course.gradeLevel}
               subject={course.subject}
               standards={allStandards}

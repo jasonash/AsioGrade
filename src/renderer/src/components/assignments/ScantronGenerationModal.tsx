@@ -8,10 +8,13 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
+import Chip from '@mui/material/Chip'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import QuizIcon from '@mui/icons-material/Quiz'
 import { Modal } from '../ui'
 import { useAssignmentStore } from '../../stores'
 import type { AssignmentSummary, ScantronGenerationRequest, ScantronOptions } from '../../../../shared/types'
+import type { ServiceResult } from '../../../../shared/types/common.types'
 
 interface ScantronGenerationModalProps {
   isOpen: boolean
@@ -74,13 +77,37 @@ export function ScantronGenerationModal({
       bubbleStyle: formData.bubbleStyle
     }
 
-    const request: ScantronGenerationRequest = {
-      assignmentId: assignment.id,
-      sectionId: assignment.sectionId,
-      options
-    }
+    const isQuiz = assignment.assessmentType === 'quiz'
 
-    const result = await generateScantron(request)
+    let result: { pdfBase64: string; studentCount: number; pageCount: number } | null = null
+
+    if (isQuiz) {
+      // Use quiz PDF generation (single page with questions + bubbles)
+      const quizResult = await window.electronAPI.invoke<
+        ServiceResult<{ pdfBase64: string; studentCount: number; pageCount: number }>
+      >('pdf:generateQuiz', {
+        assignmentId: assignment.id,
+        sectionId: assignment.sectionId,
+        options
+      })
+
+      if (quizResult.success) {
+        result = quizResult.data
+      } else {
+        // Store error will be set by the store's generateScantron if we used it
+        // For quiz, we need to handle the error here
+        console.error('Quiz PDF generation failed:', quizResult.error)
+        return
+      }
+    } else {
+      // Use standard scantron generation
+      const request: ScantronGenerationRequest = {
+        assignmentId: assignment.id,
+        sectionId: assignment.sectionId,
+        options
+      }
+      result = await generateScantron(request)
+    }
 
     if (result) {
       setResultInfo({
@@ -89,9 +116,10 @@ export function ScantronGenerationModal({
       })
 
       // Use save dialog (remembers last directory)
+      const filePrefix = isQuiz ? 'quiz' : 'scantron'
       const saveResult = await window.electronAPI.invoke<{ success: boolean }>('file:saveWithDialog', {
         data: result.pdfBase64,
-        defaultFilename: `scantron-${assignment.assessmentTitle.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`,
+        defaultFilename: `${filePrefix}-${assignment.assessmentTitle.replace(/[^a-zA-Z0-9]/g, '-')}.pdf`,
         filters: [{ name: 'PDF Files', extensions: ['pdf'] }]
       })
 
@@ -109,11 +137,21 @@ export function ScantronGenerationModal({
 
   if (!assignment) return <></>
 
+  const isQuiz = assignment.assessmentType === 'quiz'
+  const modalTitle = isQuiz ? 'Generate Quiz PDF' : 'Generate Scantrons'
+
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Generate Scantrons" size="md">
+    <Modal isOpen={isOpen} onClose={handleClose} title={modalTitle} size="md">
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         {/* Store error */}
         {storeError && <Alert severity="error">{storeError}</Alert>}
+
+        {/* Quiz format info */}
+        {assignment.assessmentType === 'quiz' && (
+          <Alert severity="info" icon={<QuizIcon />} sx={{ py: 0.5 }}>
+            This is a quiz - generating single-page format with questions and bubbles together.
+          </Alert>
+        )}
 
         {/* Success message */}
         {generationComplete && resultInfo && (
@@ -122,17 +160,22 @@ export function ScantronGenerationModal({
             icon={<CheckCircleIcon />}
             sx={{ mb: 1 }}
           >
-            Generated {resultInfo.pageCount} scantron page{resultInfo.pageCount !== 1 ? 's' : ''} for{' '}
-            {resultInfo.studentCount} student{resultInfo.studentCount !== 1 ? 's' : ''}. The PDF has
-            been downloaded.
+            Generated {resultInfo.pageCount} {assignment.assessmentType === 'quiz' ? 'quiz' : 'scantron'} page
+            {resultInfo.pageCount !== 1 ? 's' : ''} for {resultInfo.studentCount} student
+            {resultInfo.studentCount !== 1 ? 's' : ''}. The PDF has been downloaded.
           </Alert>
         )}
 
         {/* Assignment Info */}
         <Box sx={{ bgcolor: 'action.hover', p: 1.5, borderRadius: 1 }}>
-          <Typography variant="subtitle2" gutterBottom>
-            {assignment.assessmentTitle}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            <Typography variant="subtitle2">
+              {assignment.assessmentTitle}
+            </Typography>
+            {assignment.assessmentType === 'quiz' && (
+              <Chip label="Quiz" size="small" color="info" />
+            )}
+          </Box>
           <Typography variant="body2" color="text.secondary">
             {assignment.questionCount} questions | {assignment.studentCount} student
             {assignment.studentCount !== 1 ? 's' : ''}

@@ -26,6 +26,7 @@ import type {
   UpdateAssignmentInput,
   ScantronGenerationRequest,
   ScantronStudentInfo,
+  ScantronOptions,
   GradeProcessRequest,
   SaveGradesInput,
   AssignmentGrades,
@@ -745,6 +746,103 @@ function registerPDFHandlers(): void {
       return { success: false, error: message }
     }
   })
+
+  // Generate quiz PDF (single page with questions + bubbles)
+  ipcMain.handle(
+    'pdf:generateQuiz',
+    async (
+      _event,
+      request: {
+        assignmentId: string
+        sectionId: string
+        options: ScantronOptions
+      }
+    ) => {
+      try {
+        // Get assignment
+        const assignmentResult = await driveService.getAssignment(request.assignmentId)
+        if (!assignmentResult.success) {
+          return { success: false, error: assignmentResult.error }
+        }
+        const assignment = assignmentResult.data
+
+        // Get assessment (for questions, title, etc.)
+        const assessmentResult = await driveService.getAssessment(assignment.assessmentId)
+        if (!assessmentResult.success) {
+          return { success: false, error: assessmentResult.error }
+        }
+        const assessment = assessmentResult.data
+
+        // Verify this is a quiz type
+        if (assessment.type !== 'quiz') {
+          return { success: false, error: 'Assessment is not a quiz type' }
+        }
+
+        // Get section for course name
+        const sectionResult = await driveService.getSection(request.sectionId)
+        if (!sectionResult.success) {
+          return { success: false, error: sectionResult.error }
+        }
+        const section = sectionResult.data
+
+        // Get course for name
+        const courseResult = await driveService.getCourse(section.courseId)
+        if (!courseResult.success) {
+          return { success: false, error: courseResult.error }
+        }
+        const course = courseResult.data
+
+        // Get roster for student info
+        const rosterResult = await driveService.getRoster(request.sectionId)
+        if (!rosterResult.success) {
+          return { success: false, error: rosterResult.error }
+        }
+        const roster = rosterResult.data
+
+        // Build student info list (only active students)
+        const students: ScantronStudentInfo[] = roster.students
+          .filter((s) => s.active)
+          .map((s) => ({
+            studentId: s.id,
+            firstName: s.firstName,
+            lastName: s.lastName,
+            studentNumber: s.studentNumber
+          }))
+
+        if (students.length === 0) {
+          return { success: false, error: 'No active students in section' }
+        }
+
+        // Generate quiz PDF
+        const result = await pdfService.generateQuizPDF(
+          students,
+          request.assignmentId,
+          assessment.title,
+          course.name,
+          assessment.questions,
+          request.options
+        )
+
+        // Convert Buffer to base64 for IPC transfer
+        if (result.success && result.pdfBuffer) {
+          return {
+            success: true,
+            data: {
+              pdfBase64: result.pdfBuffer.toString('base64'),
+              studentCount: result.studentCount,
+              pageCount: result.pageCount,
+              generatedAt: result.generatedAt
+            }
+          }
+        }
+
+        return { success: false, error: result.error ?? 'Failed to generate quiz PDF' }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to generate quiz PDF'
+        return { success: false, error: message }
+      }
+    }
+  )
 }
 
 function registerGradeHandlers(): void {

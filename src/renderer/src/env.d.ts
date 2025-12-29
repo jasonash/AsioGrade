@@ -124,6 +124,7 @@ type InvokeChannel =
   // PDF
   | 'pdf:parseScantron'
   | 'pdf:generateScantron'
+  | 'pdf:generateQuiz'
   | 'pdf:exportTest'
   | 'pdf:generateLessonPlan'
   // File operations

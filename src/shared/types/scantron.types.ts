@@ -5,6 +5,13 @@
  */
 
 /**
+ * Scantron format type
+ * - 'quiz': Single-page with questions on left, bubbles on right (3-10 questions)
+ * - undefined: Standard multi-column bubble sheet
+ */
+export type ScantronFormat = 'quiz'
+
+/**
  * QR code data encoded on each scantron page
  *
  * SIMPLIFIED: Only essential data for identification.
@@ -16,6 +23,7 @@ export interface ScantronQRData {
   v: 1 // Schema version (for forwards compatibility)
   aid: string // Assignment ID
   sid: string // Student ID
+  fmt?: ScantronFormat // Optional: scantron format (if missing, assume standard)
 }
 
 /**

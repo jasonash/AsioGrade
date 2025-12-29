@@ -10,7 +10,9 @@ import type {
   ScantronGenerationResult,
   ScantronQRData,
   ScantronStudentInfo,
-  ScantronOptions
+  ScantronOptions,
+  Question,
+  MultipleChoiceQuestion
 } from '../../shared/types'
 
 // US Letter dimensions in points (72 dpi)
@@ -32,6 +34,14 @@ const QUESTIONS_PER_COLUMN = 25
 // Registration mark constants
 const REG_MARK_SIZE = 20  // Size of registration marks
 const REG_MARK_OFFSET = 25 // Distance from page edge
+
+// Quiz layout constants (single page with questions + bubbles)
+const QUIZ_MARGIN = 36
+const QUIZ_HEADER_HEIGHT = 70
+const QUIZ_QUESTION_WIDTH_RATIO = 0.62 // 62% for questions
+const QUIZ_BUBBLE_WIDTH_RATIO = 0.35 // 35% for bubbles (3% gap)
+const QUIZ_BUBBLE_RADIUS = 8
+const QUIZ_BUBBLE_SPACING = 30
 
 class PDFService {
   /**
@@ -110,6 +120,312 @@ class PDFService {
         generatedAt: new Date().toISOString(),
         error: message
       }
+    }
+  }
+
+  /**
+   * Generate quiz PDF with integrated scantron
+   * Single page per student with questions on left and bubbles on right
+   */
+  async generateQuizPDF(
+    students: ScantronStudentInfo[],
+    assignmentId: string,
+    quizTitle: string,
+    courseName: string,
+    questions: Question[],
+    options: ScantronOptions
+  ): Promise<ScantronGenerationResult> {
+    try {
+      const { width, height } = this.getPageDimensions(options.paperSize)
+      const dateStr = new Date().toISOString().split('T')[0]
+
+      // Create PDF document
+      const doc = new PDFDocument({
+        size: options.paperSize === 'letter' ? 'LETTER' : 'A4',
+        margin: QUIZ_MARGIN,
+        bufferPages: true
+      })
+
+      // Collect PDF data in a buffer
+      const chunks: Buffer[] = []
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk))
+
+      // Sort students alphabetically by last name, first name
+      const sortedStudents = [...students].sort((a, b) =>
+        `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`)
+      )
+
+      // Generate a page for each student
+      for (let i = 0; i < sortedStudents.length; i++) {
+        const student = sortedStudents[i]
+
+        // Add new page for students after the first
+        if (i > 0) {
+          doc.addPage()
+        }
+
+        // Build QR data for this student - include quiz format flag
+        const qrData: ScantronQRData = {
+          v: 1,
+          aid: assignmentId,
+          sid: student.studentId,
+          fmt: 'quiz'
+        }
+
+        // Generate the quiz page
+        await this.generateQuizPage(
+          doc,
+          student,
+          qrData,
+          quizTitle,
+          courseName,
+          questions,
+          options,
+          width,
+          height,
+          dateStr
+        )
+      }
+
+      // Finalize PDF
+      doc.end()
+
+      // Wait for the PDF to be fully written
+      const pdfBuffer = await new Promise<Buffer>((resolve) => {
+        doc.on('end', () => {
+          resolve(Buffer.concat(chunks))
+        })
+      })
+
+      return {
+        success: true,
+        pdfBuffer,
+        studentCount: students.length,
+        pageCount: students.length,
+        generatedAt: new Date().toISOString()
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate quiz PDF'
+      return {
+        success: false,
+        studentCount: 0,
+        pageCount: 0,
+        generatedAt: new Date().toISOString(),
+        error: message
+      }
+    }
+  }
+
+  /**
+   * Generate a single quiz page for one student
+   */
+  private async generateQuizPage(
+    doc: PDFKit.PDFDocument,
+    student: ScantronStudentInfo,
+    qrData: ScantronQRData,
+    quizTitle: string,
+    courseName: string,
+    questions: Question[],
+    options: ScantronOptions,
+    pageWidth: number,
+    pageHeight: number,
+    date: string
+  ): Promise<void> {
+    // Draw registration marks in corners
+    this.drawRegistrationMarks(doc, pageWidth, pageHeight)
+
+    // Draw header with QR code
+    const headerEndY = await this.drawQuizHeader(
+      doc,
+      student,
+      qrData,
+      quizTitle,
+      courseName,
+      date,
+      pageWidth
+    )
+
+    // Calculate layout dimensions
+    const contentWidth = pageWidth - 2 * QUIZ_MARGIN
+    const questionsWidth = contentWidth * QUIZ_QUESTION_WIDTH_RATIO
+    const bubblesWidth = contentWidth * QUIZ_BUBBLE_WIDTH_RATIO
+    const bubblesStartX = pageWidth - QUIZ_MARGIN - bubblesWidth
+
+    // Draw vertical separator line
+    const separatorX = QUIZ_MARGIN + questionsWidth + (contentWidth * 0.015)
+    doc
+      .moveTo(separatorX, headerEndY + 10)
+      .lineTo(separatorX, pageHeight - QUIZ_MARGIN - 30)
+      .stroke('#cccccc')
+
+    // Draw questions and bubbles
+    this.drawQuizQuestionsAndBubbles(
+      doc,
+      questions,
+      headerEndY + 15,
+      QUIZ_MARGIN,
+      questionsWidth,
+      bubblesStartX,
+      bubblesWidth,
+      options.bubbleStyle
+    )
+  }
+
+  /**
+   * Draw quiz header with QR code, title, and student info
+   */
+  private async drawQuizHeader(
+    doc: PDFKit.PDFDocument,
+    student: ScantronStudentInfo,
+    qrData: ScantronQRData,
+    quizTitle: string,
+    courseName: string,
+    date: string,
+    pageWidth: number
+  ): Promise<number> {
+    let y = QUIZ_MARGIN
+
+    // QR code on the left
+    const qrSize = 50
+    const qrDataString = JSON.stringify(qrData)
+    const qrDataUrl = await QRCode.toDataURL(qrDataString, {
+      width: qrSize,
+      margin: 1,
+      errorCorrectionLevel: 'H'
+    })
+    doc.image(qrDataUrl, QUIZ_MARGIN, y, { width: qrSize, height: qrSize })
+
+    // Title and course name next to QR
+    const titleX = QUIZ_MARGIN + qrSize + 15
+    doc.font('Helvetica-Bold').fontSize(14)
+    doc.text(quizTitle, titleX, y + 5)
+    doc.font('Helvetica').fontSize(10)
+    doc.text(courseName, titleX, y + 22)
+
+    // Name and date fields on the right
+    const fieldWidth = 150
+    const fieldX = pageWidth - QUIZ_MARGIN - fieldWidth
+
+    doc.font('Helvetica-Bold').fontSize(10)
+    doc.text('Name:', fieldX, y + 5, { continued: true })
+    doc.font('Helvetica').text(' _________________')
+
+    doc.font('Helvetica-Bold').text('Date:', fieldX, y + 22, { continued: true })
+    doc.font('Helvetica').text(` ${date}`)
+
+    // Pre-printed student name below fields (small, gray)
+    doc.font('Helvetica').fontSize(8).fillColor('#666666')
+    doc.text(`${student.lastName}, ${student.firstName}`, fieldX, y + 42)
+    doc.fillColor('#000000')
+
+    // Divider line
+    y += QUIZ_HEADER_HEIGHT
+    doc
+      .moveTo(QUIZ_MARGIN, y)
+      .lineTo(pageWidth - QUIZ_MARGIN, y)
+      .stroke()
+
+    return y + 5
+  }
+
+  /**
+   * Draw questions on the left and bubbles on the right
+   */
+  private drawQuizQuestionsAndBubbles(
+    doc: PDFKit.PDFDocument,
+    questions: Question[],
+    startY: number,
+    questionsX: number,
+    questionsWidth: number,
+    bubblesX: number,
+    _bubblesWidth: number,
+    bubbleStyle: 'circle' | 'oval'
+  ): void {
+    let currentY = startY
+
+    for (let i = 0; i < questions.length; i++) {
+      const question = questions[i] as MultipleChoiceQuestion
+      const questionNum = i + 1
+
+      // Calculate bubble Y position (centered in row)
+      const bubbleCenterY = currentY + 20
+
+      // Draw question number and text on the left
+      doc.font('Helvetica-Bold').fontSize(10)
+      const numText = `${questionNum}.`
+      doc.text(numText, questionsX, currentY)
+
+      // Question text (wrapping)
+      const textX = questionsX + 20
+      const textWidth = questionsWidth - 25
+      doc.font('Helvetica').fontSize(9)
+      const textHeight = doc.heightOfString(question.text, { width: textWidth })
+      doc.text(question.text, textX, currentY, { width: textWidth })
+
+      // Draw choices below question
+      let choiceY = currentY + textHeight + 5
+      if (question.choices) {
+        doc.fontSize(8)
+        for (let c = 0; c < question.choices.length; c++) {
+          const choice = question.choices[c]
+          const choiceLabel = String.fromCharCode(65 + c) // A, B, C, D...
+          doc.text(`${choiceLabel}) ${choice.text}`, textX + 10, choiceY, {
+            width: textWidth - 15
+          })
+          choiceY += doc.heightOfString(`${choiceLabel}) ${choice.text}`, { width: textWidth - 15 }) + 2
+        }
+      }
+
+      // Draw bubbles on the right (vertically centered)
+      this.drawQuizBubbleRow(
+        doc,
+        questionNum,
+        bubblesX,
+        bubbleCenterY,
+        question.choices?.length ?? 4,
+        bubbleStyle
+      )
+
+      // Move to next question
+      const contentHeight = Math.max(choiceY - currentY, 40)
+      currentY += contentHeight + 10
+    }
+  }
+
+  /**
+   * Draw a single row of bubbles for quiz format
+   */
+  private drawQuizBubbleRow(
+    doc: PDFKit.PDFDocument,
+    questionNum: number,
+    startX: number,
+    centerY: number,
+    choiceCount: number,
+    bubbleStyle: 'circle' | 'oval'
+  ): void {
+    // Draw question number
+    doc.font('Helvetica-Bold').fontSize(10)
+    doc.text(`${questionNum}.`, startX, centerY - 5, { width: 25, align: 'right' })
+
+    // Draw bubbles
+    const bubbleStartX = startX + 35
+    for (let c = 0; c < choiceCount; c++) {
+      const bubbleX = bubbleStartX + c * QUIZ_BUBBLE_SPACING
+
+      // Draw bubble outline
+      if (bubbleStyle === 'oval') {
+        doc.ellipse(bubbleX, centerY, QUIZ_BUBBLE_RADIUS, QUIZ_BUBBLE_RADIUS * 1.2)
+      } else {
+        doc.circle(bubbleX, centerY, QUIZ_BUBBLE_RADIUS)
+      }
+      doc.stroke()
+
+      // Draw choice label below bubble
+      doc.font('Helvetica').fontSize(7)
+      doc.text(CHOICE_LABELS[c], bubbleX - 4, centerY + QUIZ_BUBBLE_RADIUS + 2, {
+        width: 8,
+        align: 'center'
+      })
     }
   }
 

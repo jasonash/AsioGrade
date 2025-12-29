@@ -26,6 +26,8 @@ import type {
   QuestionDifficulty,
   QuestionGenerationRequest
 } from '../../../../shared/types/ai.types'
+import type { AssessmentType } from '../../../../shared/types'
+import { QUIZ_MAX_QUESTIONS } from '../../../../shared/types/assessment.types'
 
 interface QuestionGenerationModalProps {
   isOpen: boolean
@@ -35,6 +37,8 @@ interface QuestionGenerationModalProps {
   gradeLevel: string
   subject: string
   standards: Standard[]
+  assessmentType?: AssessmentType
+  existingQuestionCount?: number
 }
 
 export function QuestionGenerationModal({
@@ -44,12 +48,19 @@ export function QuestionGenerationModal({
   assessmentId,
   gradeLevel,
   subject,
-  standards
+  standards,
+  assessmentType,
+  existingQuestionCount = 0
 }: QuestionGenerationModalProps): ReactElement {
   const { generateQuestions, isGenerating } = useAIStore()
   const { materials, fetchMaterials } = useCourseMaterialStore()
 
-  const [questionCount, setQuestionCount] = useState(5)
+  // Quiz-specific constraints
+  const isQuiz = assessmentType === 'quiz'
+  const remainingQuizSlots = isQuiz ? Math.max(0, QUIZ_MAX_QUESTIONS - existingQuestionCount) : 20
+  const maxQuestionsAllowed = isQuiz ? remainingQuizSlots : 20
+
+  const [questionCount, setQuestionCount] = useState(Math.min(5, maxQuestionsAllowed))
   const [selectedStandards, setSelectedStandards] = useState<Set<string>>(new Set())
   const [selectedMaterials, setSelectedMaterials] = useState<Set<string>>(new Set())
   const [difficulty, setDifficulty] = useState<QuestionDifficulty>('mixed')
@@ -148,10 +159,18 @@ export function QuestionGenerationModal({
           type="number"
           value={questionCount}
           onChange={(e) =>
-            setQuestionCount(Math.max(1, Math.min(20, parseInt(e.target.value) || 1)))
+            setQuestionCount(Math.max(1, Math.min(maxQuestionsAllowed, parseInt(e.target.value) || 1)))
           }
-          inputProps={{ min: 1, max: 20 }}
-          helperText="Generate 1-20 questions at a time"
+          inputProps={{ min: 1, max: maxQuestionsAllowed }}
+          helperText={
+            isQuiz
+              ? remainingQuizSlots === 0
+                ? 'Quiz is at maximum capacity (10 questions)'
+                : `Generate 1-${remainingQuizSlots} questions (quiz limit: ${existingQuestionCount}/${QUIZ_MAX_QUESTIONS})`
+              : 'Generate 1-20 questions at a time'
+          }
+          disabled={isQuiz && remainingQuizSlots === 0}
+          error={isQuiz && remainingQuizSlots === 0}
         />
 
         {/* Standards Section */}
@@ -305,7 +324,7 @@ export function QuestionGenerationModal({
           <Button
             variant="contained"
             onClick={handleGenerate}
-            disabled={isGenerating || selectedStandards.size === 0}
+            disabled={isGenerating || selectedStandards.size === 0 || (isQuiz && remainingQuizSlots === 0)}
             startIcon={isGenerating ? <CircularProgress size={16} color="inherit" /> : undefined}
           >
             {isGenerating ? 'Generating...' : `Generate (${selectedStandards.size} standards)`}
