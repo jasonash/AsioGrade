@@ -34,7 +34,6 @@ export interface ScantronOptions {
 export interface ScantronGenerationRequest {
   assignmentId: string
   sectionId: string
-  unitId: string // Needed for QR code to enable automatic grading lookup
   options: ScantronOptions
 }
 

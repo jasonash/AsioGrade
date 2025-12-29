@@ -28,7 +28,6 @@ export interface StudentAssignment {
 export interface Assignment extends Entity {
   sectionId: string
   assessmentId: string
-  unitId: string // Denormalized for grading lookup
   assessmentTitle: string // Denormalized for display
   assessmentType: AssessmentType // Denormalized for display
   assessmentPurpose: AssessmentPurpose // Denormalized for display
@@ -48,7 +47,6 @@ export interface AssignmentSummary {
   id: string
   sectionId: string
   assessmentId: string
-  unitId: string // Denormalized for grading lookup
   assessmentTitle: string
   assessmentType: AssessmentType
   assessmentPurpose: AssessmentPurpose

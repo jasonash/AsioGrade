@@ -6,11 +6,6 @@
 
 import type { QuestionType, MultipleChoiceQuestion } from './question.types'
 import type { LLMUsage } from './llm.types'
-import type {
-  LearningGoal,
-  LessonComponent,
-  LessonComponentType
-} from './lesson.types'
 
 // ============================================================
 // Question Generation Types
@@ -24,7 +19,6 @@ export type QuestionDifficulty = 'easy' | 'medium' | 'hard' | 'mixed'
 export interface QuestionGenerationRequest {
   // Context
   courseId: string
-  unitId: string
   assessmentId: string
 
   // Standards to cover
@@ -151,7 +145,6 @@ export interface AIConversation {
  */
 export interface AIAssessmentContext {
   courseId: string
-  unitId: string
   assessmentTitle: string
   gradeLevel: string
   subject: string
@@ -318,129 +311,3 @@ export interface VariantGenerationResult {
   usage: LLMUsage
 }
 
-// ============================================================
-// Lesson Generation Types (Phase 3)
-// ============================================================
-
-/**
- * Context for AI lesson generation
- */
-export interface LessonGenerationContext {
-  courseId: string
-  unitId: string
-  standardRefs: string[]
-  durationMinutes: number
-  gradeLevel: string
-  subject: string
-
-  // Unit materials context (extracted text from uploaded materials)
-  unitMaterialsContext?: string
-
-  // Optional context
-  priorKnowledge?: string
-  studentNeeds?: string
-  availableMaterials?: string[] // Names of materials available in the unit
-}
-
-/**
- * Request to generate learning goals
- */
-export interface LessonGoalsRequest {
-  context: LessonGenerationContext
-  goalCount?: number // Default: 2-4
-}
-
-/**
- * Result of learning goals generation
- */
-export interface LessonGoalsResult {
-  goals: LearningGoal[]
-  successCriteria: string[]
-  usage: LLMUsage
-}
-
-/**
- * Request to generate lesson structure
- */
-export interface LessonStructureRequest {
-  context: LessonGenerationContext
-  goals: LearningGoal[]
-  successCriteria: string[]
-}
-
-/**
- * Result of lesson structure generation
- */
-export interface LessonStructureResult {
-  components: LessonComponent[]
-  totalMinutes: number
-  usage: LLMUsage
-}
-
-/**
- * Request to expand a lesson component with details
- */
-export interface ComponentExpansionRequest {
-  component: LessonComponent
-  context: LessonGenerationContext
-  goals: LearningGoal[]
-}
-
-/**
- * Result of component expansion
- */
-export interface ComponentExpansionResult {
-  expandedComponent: LessonComponent
-  usage: LLMUsage
-}
-
-/**
- * Result of full lesson generation (goals + structure + expansions)
- */
-export interface FullLessonResult {
-  goals: LearningGoal[]
-  successCriteria: string[]
-  components: LessonComponent[]
-  usage: LLMUsage
-}
-
-/**
- * Progress event for lesson generation streaming
- */
-export interface LessonProgressEvent {
-  step: 'goals' | 'structure' | 'expansion'
-  status: 'generating' | 'complete' | 'error'
-  componentIndex?: number // For expansion progress
-  totalComponents?: number
-  error?: string
-}
-
-/**
- * Request to suggest activities for a component type
- */
-export interface ActivitySuggestionRequest {
-  componentType: LessonComponentType
-  context: LessonGenerationContext
-  goals: LearningGoal[]
-  suggestionCount?: number // Default: 3-5
-}
-
-/**
- * A suggested activity for a lesson component
- */
-export interface ActivitySuggestion {
-  id: string
-  title: string
-  description: string
-  estimatedMinutes: number
-  materials?: string[]
-  teacherNotes?: string
-}
-
-/**
- * Result of activity suggestions
- */
-export interface ActivitySuggestionResult {
-  activities: ActivitySuggestion[]
-  usage: LLMUsage
-}

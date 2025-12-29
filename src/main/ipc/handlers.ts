@@ -19,17 +19,10 @@ import type {
   UpdateStudentInput,
   CreateStandardsInput,
   UpdateStandardsInput,
-  CreateUnitInput,
-  UpdateUnitInput,
-  ReorderUnitsInput,
   CreateAssessmentInput,
   UpdateAssessmentInput,
   CreateAssignmentInput,
   UpdateAssignmentInput,
-  CreateLessonInput,
-  UpdateLessonInput,
-  ReorderLessonsInput,
-  UploadUnitMaterialInput,
   ScantronGenerationRequest,
   ScantronStudentInfo,
   GradeProcessRequest,
@@ -44,12 +37,8 @@ import type {
   AIChatRequest,
   MaterialImportRequest,
   VariantGenerationRequest,
-  FillInBlankConversionRequest,
-  LessonGenerationContext,
-  ComponentExpansionRequest
+  FillInBlankConversionRequest
 } from '../../shared/types/ai.types'
-import type { LearningGoal } from '../../shared/types/lesson.types'
-import type { MaterialGenerationRequest, GeneratedMaterial } from '../../shared/types/material.types'
 
 /**
  * Register all IPC handlers for the main process
@@ -79,9 +68,6 @@ export function registerIpcHandlers(): void {
 
   // AI handlers
   registerAIHandlers()
-
-  // Material handlers
-  registerMaterialHandlers()
 
   // File handlers
   registerFileHandlers()
@@ -472,46 +458,12 @@ function registerDriveHandlers(): void {
   })
 
   // ============================================================
-  // Unit Operations
-  // ============================================================
-
-  // List units for a course
-  ipcMain.handle('drive:listUnits', async (_event, courseId: string) => {
-    return driveService.listUnits(courseId)
-  })
-
-  // Get a specific unit
-  ipcMain.handle('drive:getUnit', async (_event, unitId: string) => {
-    return driveService.getUnit(unitId)
-  })
-
-  // Create a new unit
-  ipcMain.handle('drive:createUnit', async (_event, input: CreateUnitInput) => {
-    return driveService.createUnit(input)
-  })
-
-  // Update a unit
-  ipcMain.handle('drive:updateUnit', async (_event, input: UpdateUnitInput) => {
-    return driveService.updateUnit(input)
-  })
-
-  // Delete a unit
-  ipcMain.handle('drive:deleteUnit', async (_event, courseId: string, unitId: string) => {
-    return driveService.deleteUnit(unitId, courseId)
-  })
-
-  // Reorder units
-  ipcMain.handle('drive:reorderUnits', async (_event, input: ReorderUnitsInput) => {
-    return driveService.reorderUnits(input)
-  })
-
-  // ============================================================
   // Assessment Operations
   // ============================================================
 
-  // List assessments for a unit
-  ipcMain.handle('drive:listAssessments', async (_event, unitId: string) => {
-    return driveService.listAssessments(unitId)
+  // List assessments for a course
+  ipcMain.handle('drive:listAssessments', async (_event, courseId: string) => {
+    return driveService.listAssessments(courseId)
   })
 
   // Get a specific assessment
@@ -532,8 +484,8 @@ function registerDriveHandlers(): void {
   // Delete an assessment
   ipcMain.handle(
     'drive:deleteAssessment',
-    async (_event, assessmentId: string, unitId: string) => {
-      return driveService.deleteAssessment(assessmentId, unitId)
+    async (_event, assessmentId: string, courseId: string) => {
+      return driveService.deleteAssessment(assessmentId, courseId)
     }
   )
 
@@ -569,63 +521,6 @@ function registerDriveHandlers(): void {
     }
   )
 
-  // ============================================================
-  // Lesson Operations
-  // ============================================================
-
-  // List lessons for a unit
-  ipcMain.handle('drive:listLessons', async (_event, unitId: string) => {
-    return driveService.listLessons(unitId)
-  })
-
-  // Get a specific lesson
-  ipcMain.handle('drive:getLesson', async (_event, lessonId: string) => {
-    return driveService.getLesson(lessonId)
-  })
-
-  // Create a new lesson
-  ipcMain.handle('drive:createLesson', async (_event, input: CreateLessonInput) => {
-    return driveService.createLesson(input)
-  })
-
-  // Update a lesson
-  ipcMain.handle('drive:updateLesson', async (_event, input: UpdateLessonInput) => {
-    return driveService.updateLesson(input)
-  })
-
-  // Delete a lesson
-  ipcMain.handle('drive:deleteLesson', async (_event, lessonId: string, unitId: string) => {
-    return driveService.deleteLesson(lessonId, unitId)
-  })
-
-  // Reorder lessons
-  ipcMain.handle('drive:reorderLessons', async (_event, input: ReorderLessonsInput) => {
-    return driveService.reorderLessons(input)
-  })
-
-  // ============================================================
-  // Unit Materials Operations
-  // ============================================================
-
-  // List materials for a unit
-  ipcMain.handle('drive:listUnitMaterials', async (_event, unitId: string) => {
-    return driveService.listUnitMaterials(unitId)
-  })
-
-  // Upload a material to a unit
-  ipcMain.handle('drive:uploadUnitMaterial', async (_event, input: UploadUnitMaterialInput) => {
-    return driveService.uploadUnitMaterial(input)
-  })
-
-  // Delete a unit material
-  ipcMain.handle('drive:deleteUnitMaterial', async (_event, materialId: string) => {
-    return driveService.deleteUnitMaterial(materialId)
-  })
-
-  // Get extracted text from all unit materials (for AI context)
-  ipcMain.handle('drive:getUnitMaterialsContext', async (_event, unitId: string) => {
-    return driveService.getUnitMaterialsContext(unitId)
-  })
 }
 
 function registerLLMHandlers(): void {
@@ -769,7 +664,6 @@ function registerPDFHandlers(): void {
         students,
         request.assignmentId,
         request.sectionId,
-        request.unitId,
         assignment.questionCount,
         request.options
       )
@@ -963,138 +857,6 @@ function registerAIHandlers(): void {
     }
   )
 
-  // ============================================================
-  // Phase 3: Lesson Generation
-  // ============================================================
-
-  // Generate learning goals from standards
-  ipcMain.handle(
-    'ai:generateLessonGoals',
-    async (_event, context: LessonGenerationContext) => {
-      try {
-        const standardsResult = await driveService.getAllStandardsForCourse(context.courseId)
-        if (!standardsResult.success) {
-          return { success: false, error: 'Failed to load standards' }
-        }
-
-        const standardsText = buildStandardsText(standardsResult.data, context.standardRefs)
-
-        return aiService.generateLearningGoals(context, standardsText)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Goals generation failed'
-        return { success: false, error: message }
-      }
-    }
-  )
-
-  // Generate lesson structure from goals
-  ipcMain.handle(
-    'ai:generateLessonStructure',
-    async (_event, context: LessonGenerationContext, goals: LearningGoal[]) => {
-      try {
-        const standardsResult = await driveService.getAllStandardsForCourse(context.courseId)
-        if (!standardsResult.success) {
-          return { success: false, error: 'Failed to load standards' }
-        }
-
-        const standardsText = buildStandardsText(standardsResult.data, context.standardRefs)
-
-        return aiService.generateLessonStructure(context, goals, standardsText)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Structure generation failed'
-        return { success: false, error: message }
-      }
-    }
-  )
-
-  // Expand a lesson component with details
-  ipcMain.handle(
-    'ai:expandLessonComponent',
-    async (_event, request: ComponentExpansionRequest) => {
-      try {
-        const standardsResult = await driveService.getAllStandardsForCourse(request.context.courseId)
-        if (!standardsResult.success) {
-          return { success: false, error: 'Failed to load standards' }
-        }
-
-        const standardsText = buildStandardsText(standardsResult.data, request.context.standardRefs)
-
-        return aiService.expandComponent(request, standardsText)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Component expansion failed'
-        return { success: false, error: message }
-      }
-    }
-  )
-
-  // Generate a complete lesson (goals + structure + expansions) in one call
-  ipcMain.handle(
-    'ai:generateFullLesson',
-    async (event, context: LessonGenerationContext) => {
-      try {
-        const standardsResult = await driveService.getAllStandardsForCourse(context.courseId)
-        if (!standardsResult.success) {
-          return { success: false, error: 'Failed to load standards' }
-        }
-
-        const standardsText = buildStandardsText(standardsResult.data, context.standardRefs)
-
-        // Pass the event sender for progress updates
-        return aiService.generateFullLesson(context, standardsText, event.sender)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Full lesson generation failed'
-        return { success: false, error: message }
-      }
-    }
-  )
-
-  // ============================================================
-  // Phase 5: Material Generation
-  // ============================================================
-
-  // Generate teaching material (worksheet, puzzle, vocabulary, etc.)
-  ipcMain.handle(
-    'ai:generateMaterial',
-    async (_event, request: MaterialGenerationRequest, standardsText: string) => {
-      try {
-        return aiService.generateMaterial(request, standardsText)
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Material generation failed'
-        return { success: false, error: message }
-      }
-    }
-  )
-
-  // Check if image generation is available
-  ipcMain.handle('ai:supportsImageGeneration', async () => {
-    return llmService.supportsImageGeneration()
-  })
-}
-
-function registerMaterialHandlers(): void {
-  // ============================================================
-  // Material PDF Generation
-  // ============================================================
-
-  // Generate PDF for a material
-  ipcMain.handle(
-    'material:generatePDF',
-    async (_event, material: GeneratedMaterial, courseName?: string, unitName?: string) => {
-      try {
-        const result = await pdfService.generateMaterialPDF(material, courseName, unitName)
-        if (result.success && result.pdfBuffer) {
-          return {
-            success: true,
-            pdfBuffer: result.pdfBuffer.toString('base64')
-          }
-        }
-        return { success: false, error: result.error ?? 'PDF generation failed' }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'PDF generation failed'
-        return { success: false, error: message }
-      }
-    }
-  )
 }
 
 function registerFileHandlers(): void {

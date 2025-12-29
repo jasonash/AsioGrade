@@ -1,7 +1,7 @@
 /**
  * Assessment type definitions
  *
- * Assessments are created at the course/unit level and contain questions.
+ * Assessments are created at the course level and contain questions.
  * They can later be assigned to sections as assignments.
  */
 
@@ -16,7 +16,6 @@ export type AssessmentStatus = 'draft' | 'published'
  */
 export interface Assessment extends Entity {
   courseId: string
-  unitId?: string // Optional - assessments can exist without a unit
   type: AssessmentType
   title: string
   description?: string
@@ -25,7 +24,7 @@ export interface Assessment extends Entity {
   status: AssessmentStatus
   publishedAt?: string
 
-  // Placeholders for future features (deferred)
+  // Placeholders for future features
   // variants?: AssessmentVariants
   // versions?: TestVersions
 }
@@ -35,7 +34,6 @@ export interface Assessment extends Entity {
  */
 export interface AssessmentSummary {
   id: string
-  unitId?: string
   type: AssessmentType
   title: string
   purpose: AssessmentPurpose
@@ -51,7 +49,6 @@ export interface AssessmentSummary {
  */
 export interface CreateAssessmentInput {
   courseId: string
-  unitId?: string
   type: AssessmentType
   title: string
   description?: string
@@ -65,7 +62,6 @@ export interface CreateAssessmentInput {
 export interface UpdateAssessmentInput {
   id: string
   courseId: string
-  unitId?: string
   type?: AssessmentType
   title?: string
   description?: string
