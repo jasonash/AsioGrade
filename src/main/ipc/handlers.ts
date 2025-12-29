@@ -706,14 +706,28 @@ function registerPDFHandlers(): void {
       const roster = rosterResult.data
 
       // Build student info list (only active students)
+      // Include DOK level (from roster or override) and assigned version
       const students: ScantronStudentInfo[] = roster.students
         .filter((s) => s.active)
-        .map((s) => ({
-          studentId: s.id,
-          firstName: s.firstName,
-          lastName: s.lastName,
-          studentNumber: s.studentNumber
-        }))
+        .map((s) => {
+          // Find this student's assignment to get DOK override and version
+          const studentAssignment = assignment.studentAssignments.find(
+            (sa) => sa.studentId === s.id
+          )
+          // Use DOK override if set, otherwise use roster DOK
+          const dokLevel = studentAssignment?.dokOverride ?? s.dokLevel
+          // Use assigned version, default to 'A'
+          const versionId = studentAssignment?.versionId ?? 'A'
+
+          return {
+            studentId: s.id,
+            firstName: s.firstName,
+            lastName: s.lastName,
+            studentNumber: s.studentNumber,
+            dokLevel,
+            versionId
+          }
+        })
 
       if (students.length === 0) {
         return { success: false, error: 'No active students in section' }
@@ -800,14 +814,28 @@ function registerPDFHandlers(): void {
         const roster = rosterResult.data
 
         // Build student info list (only active students)
+        // Include DOK level (from roster or override) and assigned version
         const students: ScantronStudentInfo[] = roster.students
           .filter((s) => s.active)
-          .map((s) => ({
-            studentId: s.id,
-            firstName: s.firstName,
-            lastName: s.lastName,
-            studentNumber: s.studentNumber
-          }))
+          .map((s) => {
+            // Find this student's assignment to get DOK override and version
+            const studentAssignment = assignment.studentAssignments.find(
+              (sa) => sa.studentId === s.id
+            )
+            // Use DOK override if set, otherwise use roster DOK
+            const dokLevel = studentAssignment?.dokOverride ?? s.dokLevel
+            // Use assigned version, default to 'A'
+            const versionId = studentAssignment?.versionId ?? 'A'
+
+            return {
+              studentId: s.id,
+              firstName: s.firstName,
+              lastName: s.lastName,
+              studentNumber: s.studentNumber,
+              dokLevel,
+              versionId
+            }
+          })
 
         if (students.length === 0) {
           return { success: false, error: 'No active students in section' }

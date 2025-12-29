@@ -6,12 +6,20 @@
  */
 
 import type { Entity, AssignmentStatus, AssessmentType, AssessmentPurpose } from './common.types'
+import type { DOKLevel } from './roster.types'
 
 /**
  * Version ID for test versions (A/B/C/D)
- * For now, all students get version 'A'
  */
 export type VersionId = 'A' | 'B' | 'C' | 'D'
+
+/**
+ * Version assignment strategy
+ * - 'single': All students get the same version (default: A)
+ * - 'random': Randomly distribute versions across students
+ * - 'sequential': Assign A, B, C, D, A, B, C, D... in order
+ */
+export type VersionAssignmentStrategy = 'single' | 'random' | 'sequential'
 
 /**
  * Student-specific assignment record
@@ -19,7 +27,8 @@ export type VersionId = 'A' | 'B' | 'C' | 'D'
 export interface StudentAssignment {
   studentId: string
   variantId?: string // null = base assessment (for future UDL support)
-  versionId: VersionId // Always 'A' for now
+  versionId: VersionId // Test version (A/B/C/D)
+  dokOverride?: DOKLevel // Override roster DOK for this assessment (optional)
 }
 
 /**
@@ -78,4 +87,5 @@ export interface UpdateAssignmentInput {
   assignedDate?: string
   dueDate?: string
   status?: AssignmentStatus
+  studentAssignments?: StudentAssignment[] // For DOK overrides and version assignment
 }

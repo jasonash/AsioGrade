@@ -2358,6 +2358,7 @@ class DriveService {
         assignedDate: input.assignedDate ?? existing.assignedDate,
         dueDate: input.dueDate ?? existing.dueDate,
         status: input.status ?? existing.status,
+        studentAssignments: input.studentAssignments ?? existing.studentAssignments,
         updatedAt: now,
         version: existing.version + 1
       }

@@ -4,6 +4,9 @@
  * Types for generating and parsing scantron answer sheets.
  */
 
+import type { DOKLevel } from './roster.types'
+import type { VersionId } from './assignment.types'
+
 /**
  * Scantron format type
  * - 'quiz': Single-page with questions on left, bubbles on right (3-10 questions)
@@ -14,16 +17,17 @@ export type ScantronFormat = 'quiz'
 /**
  * QR code data encoded on each scantron page
  *
- * SIMPLIFIED: Only essential data for identification.
- * All other info (section, unit, version, date, question count) is looked up
- * from the assignment record. This reduces QR code density by ~60% for
- * better scan reliability.
+ * v1: Basic identification (aid, sid, fmt)
+ * v2: Added DOK level and version for grading lookup
  */
 export interface ScantronQRData {
-  v: 1 // Schema version (for forwards compatibility)
+  v: 1 | 2 // Schema version (1 = legacy, 2 = with DOK/version)
   aid: string // Assignment ID
   sid: string // Student ID
   fmt?: ScantronFormat // Optional: scantron format (if missing, assume standard)
+  // v2 fields (optional for backwards compatibility)
+  dok?: DOKLevel // Student's DOK level for this assessment
+  ver?: VersionId // Version assigned to this student (A/B/C/D)
 }
 
 /**
@@ -65,4 +69,6 @@ export interface ScantronStudentInfo {
   firstName: string
   lastName: string
   studentNumber?: string
+  dokLevel: DOKLevel // Effective DOK level (roster or override)
+  versionId: VersionId // Assigned version (A/B/C/D)
 }

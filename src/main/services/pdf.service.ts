@@ -82,12 +82,13 @@ class PDFService {
           doc.addPage()
         }
 
-        // Build QR data for this student
-        // SIMPLIFIED: Only essential IDs - everything else looked up from assignment
+        // Build QR data for this student (v2 includes DOK and version)
         const qrData: ScantronQRData = {
-          v: 1,
+          v: 2,
           aid: assignmentId,
-          sid: student.studentId
+          sid: student.studentId,
+          dok: student.dokLevel,
+          ver: student.versionId
         }
 
         // Generate the page
@@ -164,12 +165,14 @@ class PDFService {
           doc.addPage()
         }
 
-        // Build QR data for this student - include quiz format flag
+        // Build QR data for this student (v2 includes DOK, version, and format)
         const qrData: ScantronQRData = {
-          v: 1,
+          v: 2,
           aid: assignmentId,
           sid: student.studentId,
-          fmt: 'quiz'
+          fmt: 'quiz',
+          dok: student.dokLevel,
+          ver: student.versionId
         }
 
         // Generate the quiz page
