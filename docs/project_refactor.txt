@@ -1,0 +1,98 @@
+Project Refactor: Feature Reduction
+
+I've been closely examining the current state of the app, and I have decided that it is time
+to refactor to reduce the current feature set. 
+
+Reasoning: While unit and lesson planning is the ultimate end-goal, there is currently insufficient
+time available to properly implement these features. My main goal when starting this project was
+to create an app capable of using AI assistance to create assessments with the ability to also
+grade said assessments. Unit and lesson planning seemed the obvious addition, but this functionality
+needs much more examination before moving forward.
+
+Plan: Reduce the functionality of the app to assessment creation/grading only. The foundation for
+this functionality is already working very well, and only needs a bit of refinement to finalize.
+
+Currently, the app has the following structure:
+	- Courses
+		- Sections
+			- Students
+			- Assignments
+		- Standards
+		- Units
+			- Lessons
+				- Generated Materials
+			- Assessments
+
+I propose this simplified structure:
+	- Courses
+		- Sections
+			- Students
+			- Assessment Creation for Students
+			- Assessment Grading for Students
+		- Standards
+		- Uploaded Materials
+		- Assessments
+
+The essential change I need to make is to remove unit/lesson planning. I would instead like
+assessments to exist at the level just below courses. I would also like to add the ability to
+upload "materials" at the course level. For example, I have years of legacy plans/assignments
+that I would like to be able to upload and have AI parse them for inclusion in the creation
+of assessments. I have legacy plans that I still use with formalized lesson plan documents,
+worksheets, slides, etc... that I need to cover with my quizzes and assessments.
+
+For clarification the new workflow would be:
+
+	1. Create new course (e.g. "Earth Space Science")
+	2. Create sections (e.g. "Block A" or "Period 1")
+	3. Assign students to sections
+		a. We will need the addition of a "DOK, Depth of Knowledge" assignment for each student.
+	4. Upload standards to class
+	5. Upload materials to class (e.g. legacy tests, legacy assignments, legacy lesson plans, etc...)
+		AI would parse these materials and store them in format suitable for using in assessment creation. This part
+		is very important!! This will be a large part of the foundation of creating assessments moving forward.
+	6. Add Assessment: This functionality would largely stay the same, except for a few small additional changes:
+		a. In addition to choosing which standards to cover with the assessment, the teacher will be allowed to also
+			choose from any uploaded materials they have provided. The rest of assessment creation shall remain
+			unchanged, and teacher will be able to add/edit/delete questions as they currently can.
+		b. Teacher will be allowed to add additional prompting to assessment creation in order to get better results. Perhaps
+			an "iterative" approach to question generation would be preferable? We should explore this.
+		c. While all assessment types will remain the same, the "quiz" type will vary slightly according to notes below.
+		d. Once a "grade level DOK" assessment has been created, a new interface will be available to create "above grade level"
+			and "below grade level" assessments with AI guidance.
+	7. Create Scantrons for Assessments:
+		a. Assessments and scantrons will be created for each student.
+		b. When creating assessments, a "DOK checklist" will pop up to allow teacher to quickly change the DOK assignment
+			for individual students to match their current learning level. I envision a list of students with a drop-down
+			next to each that has the DOK assignment from the roster pre-filled allowing the teacher to quickly change
+			only the DOK for those students who need it.
+		c. In addition to differing DOK levels, the assessments should also have a "randomized" functionality where the tests'
+			multiple choice answers are randomized to prevent cheating during test taking. This will mean that both the test
+			and scantron will need to have a "version" (e.g. A,B,C,D, etc...) printed at the top. The differing DOK levels can
+			likely have the same "correct" answers, but will likely differ in their "distractor" values to vary DOK assessment.
+	8. Grade Scantrons:
+		a. Grading will remain largely unchanged, but will include an "all grades" section for each section that will allow
+			teachers to keep track of all grades for each section. Export options will be available so teachers can use these
+			grades in external systems.
+
+Quiz Details:
+	The generation of "quiz" assessments will be slightly different than it exists now.
+		a. Quizzes will be in a new format with 3-10 questions on a single page WITH an included
+			"scantron" section on the same page. This will aid in quickly generating quizzes
+			that can be handed out quickly and efficiently.
+		b. 3 - 10 questions
+		c. Included scantron section including QR code, quiz title, etc.
+		d. This new quiz layout will require some investigation and testing to ensure accurate grading
+			functionality.
+			
+Important Considerations:
+	I would prefer not to lose any of the work we have done with the current state of lesson planning. I feel like it is a good
+	start, but lack of time has forced me to roll back functionality. I am hoping there is a way to somehow "preserve" our work
+	in some way so that we can revisit it later. I would love to hear any recommendations about how to preserve the current state
+	for picking up later.
+
+
+
+
+
+
+
