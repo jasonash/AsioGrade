@@ -161,9 +161,6 @@ class GradeService {
       }
       const assignment = assignmentResult.data
 
-      // List assessments for the unit to populate the cache before getting the specific assessment
-      await driveService.listAssessments(request.unitId)
-
       const assessmentResult = await driveService.getAssessment(assignment.assessmentId)
       if (!assessmentResult.success || !assessmentResult.data) {
         return {

@@ -1,10 +1,9 @@
 import { useState, type ReactElement } from 'react'
 import { Layout, type NavItem } from './components/layout'
-import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, UnitViewPage, StandardsViewPage, AssessmentViewPage, AssignmentViewPage, LessonEditorPage } from './pages'
+import { DashboardPage, PlaceholderPage, SettingsPage, CourseViewPage, SectionViewPage, StandardsViewPage, AssessmentViewPage, AssignmentViewPage } from './pages'
 import { CourseCreationModal } from './components/courses'
-import { useUIStore, useCourseStore, useSectionStore, useUnitStore, useAssessmentStore, useAssignmentStore } from './stores'
-import { useLessonStore } from './stores/lesson.store'
-import type { CourseSummary, SectionSummary, UnitSummary, AssessmentSummary, AssignmentSummary, LessonSummary } from '../../shared/types'
+import { useUIStore, useCourseStore, useSectionStore, useAssessmentStore, useAssignmentStore } from './stores'
+import type { CourseSummary, SectionSummary, AssessmentSummary, AssignmentSummary } from '../../shared/types'
 
 const pageConfig: Record<NavItem, { title: string; description: string }> = {
   dashboard: { title: 'Dashboard', description: 'Your teaching dashboard' },
@@ -24,22 +23,14 @@ function App(): ReactElement {
   const { activeNav, setActiveNav } = useUIStore()
   const { currentCourse, setCurrentCourse } = useCourseStore()
   const { fetchSections } = useSectionStore()
-  const { fetchUnits } = useUnitStore()
   const { fetchAssessments } = useAssessmentStore()
   const { fetchAssignments } = useAssignmentStore()
-  const { fetchLessons } = useLessonStore()
 
   // State for current section view
   const [currentSection, setCurrentSection] = useState<SectionSummary | null>(null)
 
-  // State for current unit view
-  const [currentUnit, setCurrentUnit] = useState<UnitSummary | null>(null)
-
   // State for current assessment view
   const [currentAssessment, setCurrentAssessment] = useState<AssessmentSummary | null>(null)
-
-  // State for current lesson view
-  const [currentLesson, setCurrentLesson] = useState<LessonSummary | null>(null)
 
   // State for current assignment view (assignments are instances of assessments given to sections)
   const [currentAssignment, setCurrentAssignment] = useState<AssignmentSummary | null>(null)
@@ -51,21 +42,15 @@ function App(): ReactElement {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
 
   const handleNavigate = (nav: NavItem): void => {
-    // Clear current course, section, unit, assessment, lesson, assignment, and standards view when navigating away
+    // Clear current course, section, assessment, assignment, and standards view when navigating away
     if (currentCourse) {
       setCurrentCourse(null)
     }
     if (currentSection) {
       setCurrentSection(null)
     }
-    if (currentUnit) {
-      setCurrentUnit(null)
-    }
     if (currentAssessment) {
       setCurrentAssessment(null)
-    }
-    if (currentLesson) {
-      setCurrentLesson(null)
     }
     if (currentAssignment) {
       setCurrentAssignment(null)
@@ -79,15 +64,13 @@ function App(): ReactElement {
   const handleCourseSelect = (course: CourseSummary): void => {
     setCurrentCourse(course)
     setCurrentSection(null)
-    setCurrentUnit(null)
     setCurrentAssessment(null)
-    setCurrentLesson(null)
     setCurrentAssignment(null)
     setViewingStandards(false)
     setActiveNav('dashboard')
-    // Fetch sections and units for this course
+    // Fetch sections for this course
     fetchSections(course.id)
-    fetchUnits(course.id)
+    fetchAssessments(course.id)
   }
 
   const handleSectionSelect = (section: SectionSummary, course: CourseSummary): void => {
@@ -114,53 +97,17 @@ function App(): ReactElement {
     }
 
     // Show assessment view if an assessment is selected
-    if (activeNav === 'dashboard' && currentAssessment && currentUnit && currentCourse) {
+    if (activeNav === 'dashboard' && currentAssessment && currentCourse) {
       return (
         <AssessmentViewPage
           course={currentCourse}
-          unit={currentUnit}
           assessmentSummary={currentAssessment}
           onBack={() => setCurrentAssessment(null)}
           onDeleted={() => {
             setCurrentAssessment(null)
             // Refresh assessments list
-            fetchAssessments(currentUnit.id)
+            fetchAssessments(currentCourse.id)
           }}
-        />
-      )
-    }
-
-    // Show lesson editor if a lesson is selected
-    if (activeNav === 'dashboard' && currentLesson && currentUnit && currentCourse) {
-      return (
-        <LessonEditorPage
-          course={currentCourse}
-          unit={currentUnit}
-          lessonSummary={currentLesson}
-          onBack={() => setCurrentLesson(null)}
-          onDeleted={() => {
-            setCurrentLesson(null)
-            // Refresh lessons list
-            fetchLessons(currentUnit.id)
-          }}
-        />
-      )
-    }
-
-    // Show unit view if a unit is selected
-    if (activeNav === 'dashboard' && currentUnit && currentCourse) {
-      return (
-        <UnitViewPage
-          course={currentCourse}
-          unitSummary={currentUnit}
-          onBack={() => setCurrentUnit(null)}
-          onDeleted={() => {
-            setCurrentUnit(null)
-            // Refresh units list
-            fetchUnits(currentCourse.id)
-          }}
-          onAssessmentSelect={(assessment) => setCurrentAssessment(assessment)}
-          onLessonSelect={(lesson) => setCurrentLesson(lesson)}
         />
       )
     }
@@ -194,12 +141,12 @@ function App(): ReactElement {
       )
     }
 
-    // Show course view if a course is selected (but no section or unit)
+    // Show course view if a course is selected (but no section)
     if (activeNav === 'dashboard' && currentCourse) {
       return (
         <CourseViewPage
           onSectionSelect={(section) => setCurrentSection(section)}
-          onUnitSelect={(unit) => setCurrentUnit(unit)}
+          onAssessmentSelect={(assessment: AssessmentSummary) => setCurrentAssessment(assessment)}
           onStandardsSelect={() => setViewingStandards(true)}
         />
       )

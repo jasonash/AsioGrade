@@ -663,7 +663,6 @@ function registerPDFHandlers(): void {
       const result = await pdfService.generateScantronPDF(
         students,
         request.assignmentId,
-        request.sectionId,
         assignment.questionCount,
         request.options
       )
@@ -687,51 +686,6 @@ function registerPDFHandlers(): void {
       return { success: false, error: message }
     }
   })
-
-  // Generate lesson plan PDF
-  ipcMain.handle(
-    'pdf:generateLessonPlan',
-    async (
-      _event,
-      lessonId: string,
-      courseName: string,
-      unitName: string
-    ) => {
-      try {
-        // Get the full lesson
-        const lessonResult = await driveService.getLesson(lessonId)
-        if (!lessonResult.success) {
-          return { success: false, error: lessonResult.error ?? 'Lesson not found' }
-        }
-        if (!lessonResult.data) {
-          return { success: false, error: 'Lesson not found' }
-        }
-
-        // Generate PDF
-        const result = await pdfService.generateLessonPDF(
-          lessonResult.data,
-          courseName,
-          unitName
-        )
-
-        // Convert Buffer to base64 for IPC transfer
-        if (result.success && result.pdfBuffer) {
-          return {
-            success: true,
-            data: {
-              pdfBase64: result.pdfBuffer.toString('base64'),
-              filename: `${lessonResult.data.title.replace(/[^a-zA-Z0-9]/g, '_')}_lesson_plan.pdf`
-            }
-          }
-        }
-
-        return { success: false, error: result.error ?? 'Failed to generate PDF' }
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to generate lesson PDF'
-        return { success: false, error: message }
-      }
-    }
-  )
 }
 
 function registerGradeHandlers(): void {
