@@ -1,4 +1,4 @@
-import { type ReactElement, useEffect, useState } from 'react'
+import { type ReactElement, useEffect, useState, useMemo } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
@@ -15,9 +15,16 @@ import PublishIcon from '@mui/icons-material/Publish'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import ScoreIcon from '@mui/icons-material/Score'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
+import TuneIcon from '@mui/icons-material/Tune'
 import { useAssessmentStore, useStandardsStore } from '../stores'
 import { ConfirmModal } from '../components/ui'
-import { AssessmentEditModal, QuestionList, AIAssistantPanel } from '../components/assessments'
+import {
+  AssessmentEditModal,
+  QuestionList,
+  AIAssistantPanel,
+  VariantGenerationModal,
+  VariantSelector
+} from '../components/assessments'
 import type {
   CourseSummary,
   AssessmentSummary,
@@ -25,6 +32,7 @@ import type {
   Standard,
   MultipleChoiceQuestion
 } from '../../../shared/types'
+import type { DOKLevel } from '../../../shared/types/roster.types'
 
 interface AssessmentViewPageProps {
   course: CourseSummary
@@ -61,16 +69,22 @@ export function AssessmentViewPage({
   const {
     currentAssessment,
     loading,
+    generatingVariant,
     error,
     getAssessment,
     updateAssessment,
     deleteAssessment,
+    deleteVariant,
     clearError
   } = useAssessmentStore()
   const { allCollections, fetchAllCollections } = useStandardsStore()
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [isVariantModalOpen, setIsVariantModalOpen] = useState(false)
+  const [isDeleteVariantModalOpen, setIsDeleteVariantModalOpen] = useState(false)
+  const [variantToDelete, setVariantToDelete] = useState<string | null>(null)
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isPublishing, setIsPublishing] = useState(false)
 
@@ -147,6 +161,29 @@ export function AssessmentViewPage({
     })
   }
 
+  // Handler for deleting a variant
+  const handleDeleteVariantClick = (variantId: string): void => {
+    setVariantToDelete(variantId)
+    setIsDeleteVariantModalOpen(true)
+  }
+
+  const handleDeleteVariant = async (): Promise<void> => {
+    if (!variantToDelete) return
+
+    setIsDeleting(true)
+    const success = await deleteVariant(variantToDelete)
+    setIsDeleting(false)
+
+    if (success) {
+      // If we deleted the currently selected variant, go back to base
+      if (selectedVariantId === variantToDelete) {
+        setSelectedVariantId(null)
+      }
+      setIsDeleteVariantModalOpen(false)
+      setVariantToDelete(null)
+    }
+  }
+
   // Get all standards from all collections for alignment
   const getAllStandards = (): Standard[] => {
     const standards: Standard[] = []
@@ -160,12 +197,37 @@ export function AssessmentViewPage({
 
   const allStandards = getAllStandards()
 
-  // Calculate stats
-  const totalPoints = currentAssessment?.questions.reduce((sum, q) => sum + q.points, 0) ?? 0
+  // Get standard refs from base questions
+  const standardRefs = useMemo(() => {
+    if (!currentAssessment) return []
+    return currentAssessment.questions
+      .map((q) => q.standardRef)
+      .filter((ref): ref is string => ref !== undefined)
+  }, [currentAssessment])
+
+  // Get existing variant DOK levels
+  const existingVariantDOKs = useMemo((): DOKLevel[] => {
+    if (!currentAssessment?.variants) return []
+    return currentAssessment.variants.map((v) => v.dokLevel)
+  }, [currentAssessment?.variants])
+
+  // Get the currently displayed questions (base or variant)
+  const displayedQuestions = useMemo(() => {
+    if (!currentAssessment) return []
+    if (!selectedVariantId) return currentAssessment.questions
+    const variant = currentAssessment.variants?.find((v) => v.id === selectedVariantId)
+    return variant?.questions ?? currentAssessment.questions
+  }, [currentAssessment, selectedVariantId])
+
+  // Check if viewing a variant
+  const isViewingVariant = selectedVariantId !== null
+
+  // Calculate stats based on displayed questions
+  const totalPoints = displayedQuestions.reduce((sum, q) => sum + q.points, 0)
   const alignedStandardsCount = new Set(
-    currentAssessment?.questions
+    displayedQuestions
       .filter((q) => q.standardRef)
-      .map((q) => q.standardRef) ?? []
+      .map((q) => q.standardRef)
   ).size
 
   // Loading state
@@ -230,17 +292,27 @@ export function AssessmentViewPage({
 
           <Box sx={{ display: 'flex', gap: 1 }}>
             {currentAssessment?.status === 'draft' && (
-              <Button
-                variant="contained"
-                color="success"
-                startIcon={<PublishIcon />}
-                onClick={handlePublish}
-                disabled={
-                  isPublishing || (currentAssessment?.questions.length ?? 0) === 0
-                }
-              >
-                {isPublishing ? 'Publishing...' : 'Publish'}
-              </Button>
+              <>
+                <Button
+                  variant="outlined"
+                  startIcon={generatingVariant ? <CircularProgress size={16} /> : <TuneIcon />}
+                  onClick={() => setIsVariantModalOpen(true)}
+                  disabled={generatingVariant || (currentAssessment?.questions.length ?? 0) === 0}
+                >
+                  {generatingVariant ? 'Generating...' : 'Generate Variant'}
+                </Button>
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={<PublishIcon />}
+                  onClick={handlePublish}
+                  disabled={
+                    isPublishing || (currentAssessment?.questions.length ?? 0) === 0
+                  }
+                >
+                  {isPublishing ? 'Publishing...' : 'Publish'}
+                </Button>
+              </>
             )}
             <Button
               variant="outlined"
@@ -270,7 +342,7 @@ export function AssessmentViewPage({
 
       {/* Stats cards */}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <HelpOutlineIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
@@ -279,12 +351,12 @@ export function AssessmentViewPage({
               </Typography>
             </Box>
             <Typography variant="h4" fontWeight={700}>
-              {currentAssessment?.questions.length ?? 0}
+              {displayedQuestions.length}
             </Typography>
           </Paper>
         </Grid>
 
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <ScoreIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
@@ -298,7 +370,7 @@ export function AssessmentViewPage({
           </Paper>
         </Grid>
 
-        <Grid size={{ xs: 12, sm: 4 }}>
+        <Grid size={{ xs: 12, sm: 3 }}>
           <Paper variant="outlined" sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <MenuBookIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
@@ -311,23 +383,58 @@ export function AssessmentViewPage({
             </Typography>
           </Paper>
         </Grid>
+
+        <Grid size={{ xs: 12, sm: 3 }}>
+          <Paper variant="outlined" sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TuneIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
+              <Typography variant="body2" color="text.secondary">
+                DOK Variants
+              </Typography>
+            </Box>
+            <Typography variant="h4" fontWeight={700}>
+              {currentAssessment?.variants?.length ?? 0}
+            </Typography>
+          </Paper>
+        </Grid>
       </Grid>
 
       <Divider />
 
+      {/* Variant Selector - Show when variants exist */}
+      {currentAssessment?.variants && currentAssessment.variants.length > 0 && (
+        <VariantSelector
+          variants={currentAssessment.variants}
+          selectedVariantId={selectedVariantId}
+          onSelectVariant={setSelectedVariantId}
+          onDeleteVariant={currentAssessment.status === 'draft' ? handleDeleteVariantClick : undefined}
+          disabled={loading || generatingVariant}
+        />
+      )}
+
       {/* Questions section with AI Assistant */}
       <Grid container spacing={3}>
         {/* Questions List */}
-        <Grid size={{ xs: 12, md: currentAssessment?.status === 'draft' ? 8 : 12 }}>
-          <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
-            Questions
-          </Typography>
+        <Grid size={{ xs: 12, md: currentAssessment?.status === 'draft' && !isViewingVariant ? 8 : 12 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+            <Typography variant="h6" fontWeight={600}>
+              Questions
+            </Typography>
+            {isViewingVariant && (
+              <Chip
+                label="Viewing Variant (Read Only)"
+                size="small"
+                color="info"
+                variant="outlined"
+              />
+            )}
+          </Box>
 
           <QuestionList
-            questions={(currentAssessment?.questions as MultipleChoiceQuestion[]) ?? []}
+            questions={displayedQuestions as MultipleChoiceQuestion[]}
             standards={allStandards}
             onQuestionsChange={handleQuestionsChange}
-            readOnly={currentAssessment?.status === 'published'}
+            readOnly={currentAssessment?.status === 'published' || isViewingVariant}
           />
 
           {currentAssessment?.status === 'published' && (
@@ -340,10 +447,20 @@ export function AssessmentViewPage({
               if you need to make changes.
             </Typography>
           )}
+
+          {isViewingVariant && (
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mt: 2, fontStyle: 'italic' }}
+            >
+              Viewing a DOK variant. Switch to the base assessment to edit questions.
+            </Typography>
+          )}
         </Grid>
 
-        {/* AI Assistant Panel - Only show for draft assessments */}
-        {currentAssessment?.status === 'draft' && (
+        {/* AI Assistant Panel - Only show for draft assessments when not viewing a variant */}
+        {currentAssessment?.status === 'draft' && !isViewingVariant && (
           <Grid size={{ xs: 12, md: 4 }}>
             <AIAssistantPanel
               courseId={course.id}
@@ -380,6 +497,38 @@ export function AssessmentViewPage({
         onConfirm={handleDelete}
         title="Delete Assessment"
         message={`Are you sure you want to delete "${assessmentSummary.title}"? This action cannot be undone.`}
+        confirmText={isDeleting ? 'Deleting...' : 'Delete'}
+        variant="destructive"
+        isLoading={isDeleting}
+      />
+
+      {/* Variant Generation Modal */}
+      {currentAssessment && (
+        <VariantGenerationModal
+          isOpen={isVariantModalOpen}
+          onClose={() => setIsVariantModalOpen(false)}
+          onSuccess={() => {
+            // Optionally switch to the new variant
+          }}
+          assessmentId={currentAssessment.id}
+          courseId={course.id}
+          gradeLevel={course.gradeLevel}
+          subject={course.subject}
+          standardRefs={standardRefs}
+          existingVariantDOKs={existingVariantDOKs}
+        />
+      )}
+
+      {/* Delete Variant Confirmation Modal */}
+      <ConfirmModal
+        isOpen={isDeleteVariantModalOpen}
+        onClose={() => {
+          setIsDeleteVariantModalOpen(false)
+          setVariantToDelete(null)
+        }}
+        onConfirm={handleDeleteVariant}
+        title="Delete Variant"
+        message="Are you sure you want to delete this DOK variant? This action cannot be undone."
         confirmText={isDeleting ? 'Deleting...' : 'Delete'}
         variant="destructive"
         isLoading={isDeleting}

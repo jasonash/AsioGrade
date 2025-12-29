@@ -100,6 +100,7 @@ type InvokeChannel =
   | 'ai:extractQuestionsFromMaterial'
   | 'ai:generateVariant'
   | 'ai:convertFillInBlank'
+  | 'ai:generateDOKVariant'
   // AI Lesson Generation
   | 'ai:generateLessonGoals'
   | 'ai:generateLessonStructure'

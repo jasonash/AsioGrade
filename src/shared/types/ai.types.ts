@@ -6,6 +6,8 @@
 
 import type { QuestionType, MultipleChoiceQuestion } from './question.types'
 import type { LLMUsage } from './llm.types'
+import type { DOKLevel } from './roster.types'
+import type { VariantStrategy, AssessmentVariant } from './assessment.types'
 
 // ============================================================
 // Question Generation Types
@@ -314,6 +316,31 @@ export interface VariantGenerationResult {
   variant: MultipleChoiceQuestion
   variantType: VariantType
   explanation: string // What was changed
+  usage: LLMUsage
+}
+
+// ============================================================
+// DOK-Based Assessment Variant Types (Phase 5)
+// ============================================================
+
+/**
+ * Request to generate a DOK-based variant of an entire assessment
+ */
+export interface DOKVariantGenerationRequest {
+  assessmentId: string
+  courseId: string
+  targetDOK: DOKLevel
+  strategy: VariantStrategy
+  standardRefs: string[]
+  gradeLevel: string
+  subject: string
+}
+
+/**
+ * Result of DOK variant generation
+ */
+export interface DOKVariantGenerationResult {
+  variant: AssessmentVariant
   usage: LLMUsage
 }
 

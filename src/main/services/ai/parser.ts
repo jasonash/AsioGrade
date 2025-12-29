@@ -5,8 +5,10 @@
  */
 
 import type { GeneratedQuestion, ExtractedQuestion, MaterialImportResult, VariantType } from '../../../shared/types/ai.types'
-import type { MultipleChoiceQuestion, Choice } from '../../../shared/types/question.types'
+import type { MultipleChoiceQuestion, Choice, Question } from '../../../shared/types/question.types'
 import type { LLMUsage } from '../../../shared/types/llm.types'
+import type { DOKLevel } from '../../../shared/types/roster.types'
+import type { VariantStrategy, AssessmentVariant, Assessment } from '../../../shared/types/assessment.types'
 
 export interface ParsedQuestionResult {
   success: boolean
@@ -37,6 +39,12 @@ export interface ParsedVariantResult {
 export interface ParsedFillInBlankConversionResult {
   success: boolean
   questions?: ExtractedQuestion[]
+  error?: string
+}
+
+export interface ParsedDOKVariantResult {
+  success: boolean
+  variant?: AssessmentVariant
   error?: string
 }
 
@@ -520,6 +528,245 @@ export function parseFillInBlankConversion(
     return { success: true, questions }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to parse converted questions'
+    return { success: false, error: message }
+  }
+}
+
+/**
+ * Parse DOK variant from LLM response
+ * Handles both "questions" and "distractors" strategies
+ */
+export function parseDOKVariant(
+  content: string,
+  baseAssessment: Assessment,
+  targetDOK: DOKLevel,
+  strategy: VariantStrategy,
+  model: string
+): ParsedDOKVariantResult {
+  try {
+    const now = new Date().toISOString()
+
+    if (strategy === 'questions') {
+      // For "questions" strategy, parse a JSON array of new questions
+      const jsonMatch = content.match(/\[[\s\S]*\]/)
+      if (!jsonMatch) {
+        return { success: false, error: 'No JSON array found in response for questions strategy' }
+      }
+
+      const parsed: unknown = JSON.parse(jsonMatch[0])
+      if (!Array.isArray(parsed)) {
+        return { success: false, error: 'Response is not an array' }
+      }
+
+      const questions: Question[] = []
+
+      for (let index = 0; index < parsed.length; index++) {
+        const q = parsed[index] as Record<string, unknown>
+
+        // Validate required fields
+        if (typeof q.text !== 'string' || !q.text.trim()) {
+          throw new Error(`Question ${index + 1} missing required "text" field`)
+        }
+
+        if (!Array.isArray(q.choices) || q.choices.length < 2) {
+          throw new Error(`Question ${index + 1} must have at least 2 choices`)
+        }
+
+        // Normalize choices
+        const choices: Choice[] = q.choices.map((c: unknown, ci: number) => {
+          const choice = c as Record<string, unknown>
+          const choiceId = typeof choice.id === 'string'
+            ? choice.id.toLowerCase()
+            : String.fromCharCode(97 + ci)
+
+          return {
+            id: choiceId,
+            text: String(choice.text ?? ''),
+            isCorrect: Boolean(choice.isCorrect)
+          }
+        })
+
+        // Ensure exactly one correct answer
+        const correctChoices = choices.filter(c => c.isCorrect)
+        if (correctChoices.length === 0) {
+          const correctAnswerFromLLM = String(q.correctAnswer ?? 'a').toLowerCase()
+          const correctChoice = choices.find(c => c.id === correctAnswerFromLLM)
+          if (correctChoice) {
+            correctChoice.isCorrect = true
+          } else {
+            choices[0].isCorrect = true
+          }
+        } else if (correctChoices.length > 1) {
+          correctChoices.slice(1).forEach(c => { c.isCorrect = false })
+        }
+
+        // Shuffle choices to randomize correct answer position
+        const { shuffledChoices, correctAnswer } = shuffleChoices(choices)
+
+        // Build the question
+        const question: Question = {
+          id: `dokvar-${Date.now().toString(36)}-${index}`,
+          type: 'multiple_choice' as const,
+          text: String(q.text).trim(),
+          choices: shuffledChoices,
+          correctAnswer,
+          standardRef: typeof q.standardRef === 'string' ? q.standardRef : undefined,
+          points: typeof q.points === 'number' ? q.points : 1,
+          createdAt: now,
+          explanation: typeof q.explanation === 'string' ? q.explanation : undefined,
+          aiGenerated: true,
+          aiModel: model,
+          aiGeneratedAt: now
+        }
+
+        questions.push(question)
+      }
+
+      // Build the variant
+      const variant: AssessmentVariant = {
+        id: `var-${Date.now().toString(36)}-dok${targetDOK}`,
+        assessmentId: baseAssessment.id,
+        dokLevel: targetDOK,
+        strategy,
+        questions,
+        createdAt: now
+      }
+
+      return { success: true, variant }
+
+    } else {
+      // For "distractors" strategy, parse a JSON object with updated choices
+      const jsonMatch = content.match(/\{[\s\S]*\}/)
+      if (!jsonMatch) {
+        return { success: false, error: 'No JSON object found in response for distractors strategy' }
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+
+      if (!Array.isArray(parsed.questions)) {
+        return { success: false, error: 'Response missing "questions" array' }
+      }
+
+      // Create a map of original questions for reference
+      const originalQuestionsMap = new Map<string, Question>()
+      for (const q of baseAssessment.questions) {
+        originalQuestionsMap.set(q.id, q)
+      }
+
+      const questions: Question[] = []
+
+      for (const updatedQ of parsed.questions as Record<string, unknown>[]) {
+        const qId = String(updatedQ.id ?? '')
+        const originalQuestion = originalQuestionsMap.get(qId)
+
+        if (!originalQuestion) {
+          // If we can't find the original, skip this one
+          continue
+        }
+
+        // Parse new choices
+        if (!Array.isArray(updatedQ.choices) || updatedQ.choices.length < 2) {
+          // Keep original choices if none provided
+          questions.push({
+            ...originalQuestion,
+            id: `dokvar-${Date.now().toString(36)}-${questions.length}`,
+            createdAt: now,
+            aiGenerated: true,
+            aiModel: model,
+            aiGeneratedAt: now
+          })
+          continue
+        }
+
+        const newChoices: Choice[] = updatedQ.choices.map((c: unknown, ci: number) => {
+          const choice = c as Record<string, unknown>
+          const choiceId = typeof choice.id === 'string'
+            ? choice.id.toLowerCase()
+            : String.fromCharCode(97 + ci)
+
+          return {
+            id: choiceId,
+            text: String(choice.text ?? ''),
+            isCorrect: Boolean(choice.isCorrect)
+          }
+        })
+
+        // Ensure exactly one correct answer
+        const correctChoices = newChoices.filter(c => c.isCorrect)
+        if (correctChoices.length === 0) {
+          // Find the correct answer from original and mark it
+          const originalCorrectText = originalQuestion.choices.find(c => c.isCorrect)?.text
+          const matchingChoice = newChoices.find(c => c.text === originalCorrectText)
+          if (matchingChoice) {
+            matchingChoice.isCorrect = true
+          } else {
+            // Fall back to marking the first choice that matches original correct answer ID
+            const originalCorrectId = originalQuestion.correctAnswer
+            const idMatch = newChoices.find(c => c.id === originalCorrectId)
+            if (idMatch) {
+              idMatch.isCorrect = true
+            } else {
+              newChoices[0].isCorrect = true
+            }
+          }
+        } else if (correctChoices.length > 1) {
+          correctChoices.slice(1).forEach(c => { c.isCorrect = false })
+        }
+
+        const correctChoice = newChoices.find(c => c.isCorrect)
+        const correctAnswer = correctChoice?.id ?? originalQuestion.correctAnswer
+
+        // Build the question with updated distractors
+        const question: Question = {
+          id: `dokvar-${Date.now().toString(36)}-${questions.length}`,
+          type: 'multiple_choice' as const,
+          text: originalQuestion.text, // Keep original text
+          choices: newChoices,
+          correctAnswer,
+          standardRef: originalQuestion.standardRef,
+          points: originalQuestion.points,
+          createdAt: now,
+          explanation: originalQuestion.explanation,
+          aiGenerated: true,
+          aiModel: model,
+          aiGeneratedAt: now
+        }
+
+        questions.push(question)
+      }
+
+      // If we didn't get all questions, add the remaining originals
+      if (questions.length < baseAssessment.questions.length) {
+        const processedIds = new Set(questions.map(q => q.standardRef))
+        for (const originalQ of baseAssessment.questions) {
+          if (questions.length >= baseAssessment.questions.length) break
+          if (!processedIds.has(originalQ.standardRef)) {
+            questions.push({
+              ...originalQ,
+              id: `dokvar-${Date.now().toString(36)}-${questions.length}`,
+              createdAt: now,
+              aiGenerated: true,
+              aiModel: model,
+              aiGeneratedAt: now
+            })
+          }
+        }
+      }
+
+      // Build the variant
+      const variant: AssessmentVariant = {
+        id: `var-${Date.now().toString(36)}-dok${targetDOK}`,
+        assessmentId: baseAssessment.id,
+        dokLevel: targetDOK,
+        strategy,
+        questions,
+        createdAt: now
+      }
+
+      return { success: true, variant }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to parse DOK variant'
     return { success: false, error: message }
   }
 }

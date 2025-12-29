@@ -10,9 +10,12 @@ import type {
   RefinementCommand,
   MaterialImportRequest,
   VariantGenerationRequest,
-  FillInBlankConversionRequest
+  FillInBlankConversionRequest,
+  DOKVariantGenerationRequest
 } from '../../../shared/types/ai.types'
 import type { MultipleChoiceQuestion } from '../../../shared/types/question.types'
+import type { Assessment } from '../../../shared/types/assessment.types'
+import type { DOKLevel } from '../../../shared/types/roster.types'
 
 /**
  * System prompts for different AI operations
@@ -67,7 +70,25 @@ GUIDELINES FOR DISTRACTORS:
 - Ensure distractors are clearly wrong to someone who understands the concept
 - Make all choices the same approximate length
 - Avoid "trick" answers that are only wrong due to technicalities
-- Consider what incorrect but related concepts students might confuse`
+- Consider what incorrect but related concepts students might confuse`,
+
+  dokVariantGeneration: `You are an expert in educational assessment design and Webb's Depth of Knowledge (DOK) framework.
+
+Your task is to create assessment variants that adjust question difficulty while maintaining alignment to learning standards.
+
+WEBB'S DOK FRAMEWORK:
+- DOK 1 (Recall): Basic recall of facts, terms, definitions, simple procedures
+- DOK 2 (Skill/Concept): Use of information, concepts, skills in new situations, some reasoning required
+- DOK 3 (Strategic Thinking): Complex reasoning, planning, synthesis, analyzing multiple sources
+- DOK 4 (Extended Thinking): Complex reasoning over extended time, designing investigations, making connections
+
+GUIDELINES FOR VARIANT GENERATION:
+- When targeting lower DOK: Simplify vocabulary, reduce complexity, focus on key concepts, make distractors more obviously wrong
+- When targeting higher DOK: Add analytical depth, require synthesis, increase cognitive demand, make distractors more nuanced
+- Always maintain alignment to the same learning standards
+- Keep question format consistent (multiple choice with 4 options)
+- Ensure distractors reflect DOK level appropriateness
+- Provide clear explanations for why the correct answer is correct`
 }
 
 /**
@@ -394,4 +415,109 @@ Return a JSON array of converted questions:
 ]
 
 Convert all ${request.questions.length} questions now:`
+}
+
+/**
+ * DOK level descriptions for prompts
+ */
+const DOK_DESCRIPTIONS: Record<DOKLevel, string> = {
+  1: 'Recall - Basic recall of facts, terms, definitions, simple procedures',
+  2: 'Skill/Concept - Use of information, concepts, skills with some reasoning',
+  3: 'Strategic Thinking - Complex reasoning, planning, synthesis, using evidence',
+  4: 'Extended Thinking - Complex reasoning over time, designing investigations'
+}
+
+/**
+ * Build the prompt for generating DOK-based assessment variants
+ */
+export function buildDOKVariantPrompt(
+  request: DOKVariantGenerationRequest,
+  assessment: Assessment,
+  standardsText: string
+): string {
+  const questionsJson = assessment.questions.map((q, i) => ({
+    index: i + 1,
+    id: q.id,
+    text: q.text,
+    choices: q.choices,
+    correctAnswer: q.correctAnswer,
+    standardRef: q.standardRef
+  }))
+
+  // Different instructions based on strategy
+  const strategyInstructions =
+    request.strategy === 'questions'
+      ? `Generate ${assessment.questions.length} NEW questions that:
+- Test the SAME standards as the original assessment
+- Target DOK Level ${request.targetDOK}: ${DOK_DESCRIPTIONS[request.targetDOK]}
+- Maintain similar point values
+- Are appropriate for the target DOK level
+- Include clear explanations for each answer
+
+For DOK ${request.targetDOK}:
+${request.targetDOK === 1 ? '- Focus on recall of facts, definitions, and simple procedures\n- Use direct, straightforward question stems\n- Make distractors obviously different from the correct answer' : ''}${request.targetDOK === 2 ? '- Require application of concepts or skills\n- Include some inference or comparison\n- Make distractors based on procedural errors' : ''}${request.targetDOK === 3 ? '- Require analysis, reasoning, or evidence evaluation\n- May involve multiple steps or considerations\n- Make distractors represent sophisticated but incorrect reasoning' : ''}${request.targetDOK === 4 ? '- Require synthesis, evaluation, or complex reasoning\n- Connect multiple concepts or contexts\n- Make distractors represent advanced but flawed thinking' : ''}`
+      : `Update the DISTRACTORS (wrong answer choices) for each question to better target DOK Level ${request.targetDOK}.
+
+KEEP UNCHANGED:
+- Question stems (the question text)
+- Correct answers
+- Standard alignment
+
+MODIFY:
+- All three distractors for each question
+
+For DOK ${request.targetDOK} distractors:
+${request.targetDOK === 1 ? '- Make distractors more obviously wrong\n- Use clearly different terms or concepts\n- Avoid subtle distinctions that require deep understanding' : ''}${request.targetDOK === 2 ? '- Base distractors on common procedural mistakes\n- Include answers that would result from skipping steps\n- Use related but clearly incorrect terms' : ''}${request.targetDOK === 3 ? '- Make distractors represent plausible but incomplete reasoning\n- Include partially correct answers\n- Require careful analysis to distinguish from correct answer' : ''}${request.targetDOK === 4 ? '- Make distractors represent sophisticated misconceptions\n- Include answers that would be correct in different contexts\n- Require synthesis of multiple concepts to eliminate' : ''}`
+
+  const outputFormat =
+    request.strategy === 'questions'
+      ? `Return ONLY a valid JSON array of ${assessment.questions.length} questions:
+[
+  {
+    "text": "Question stem",
+    "choices": [
+      { "id": "a", "text": "Choice A", "isCorrect": false },
+      { "id": "b", "text": "Choice B", "isCorrect": true },
+      { "id": "c", "text": "Choice C", "isCorrect": false },
+      { "id": "d", "text": "Choice D", "isCorrect": false }
+    ],
+    "correctAnswer": "b",
+    "standardRef": "STANDARD-CODE",
+    "explanation": "Why this is the correct answer"
+  }
+]`
+      : `Return ONLY a valid JSON object with updated questions:
+{
+  "questions": [
+    {
+      "id": "original-question-id",
+      "choices": [
+        { "id": "a", "text": "New choice A", "isCorrect": false },
+        { "id": "b", "text": "Correct answer (unchanged)", "isCorrect": true },
+        { "id": "c", "text": "New choice C", "isCorrect": false },
+        { "id": "d", "text": "New choice D", "isCorrect": false }
+      ]
+    }
+  ]
+}`
+
+  return `Create a DOK Level ${request.targetDOK} variant of this assessment for grade ${request.gradeLevel} ${request.subject}.
+
+ORIGINAL ASSESSMENT: "${assessment.title}"
+Question Count: ${assessment.questions.length}
+Strategy: ${request.strategy === 'questions' ? 'Generate new questions' : 'Update distractors only'}
+
+ORIGINAL QUESTIONS:
+${JSON.stringify(questionsJson, null, 2)}
+
+STANDARDS TO MAINTAIN:
+${standardsText}
+
+TASK:
+${strategyInstructions}
+
+OUTPUT FORMAT:
+${outputFormat}
+
+Generate the DOK ${request.targetDOK} variant now:`
 }

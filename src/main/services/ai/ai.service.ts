@@ -13,14 +13,16 @@ import {
   buildChatContextPrompt,
   buildMaterialImportPrompt,
   buildVariantPrompt,
-  buildFillInBlankConversionPrompt
+  buildFillInBlankConversionPrompt,
+  buildDOKVariantPrompt
 } from './prompts'
 import {
   parseGeneratedQuestions,
   parseRefinedQuestion,
   parseMaterialImport,
   parseVariantQuestion,
-  parseFillInBlankConversion
+  parseFillInBlankConversion,
+  parseDOKVariant
 } from './parser'
 import type { ServiceResult } from '../../../shared/types/common.types'
 import type { LLMUsage } from '../../../shared/types/llm.types'
@@ -38,8 +40,11 @@ import type {
   VariantGenerationRequest,
   VariantGenerationResult,
   FillInBlankConversionRequest,
-  FillInBlankConversionResult
+  FillInBlankConversionResult,
+  DOKVariantGenerationRequest,
+  DOKVariantGenerationResult
 } from '../../../shared/types/ai.types'
+import type { Assessment } from '../../../shared/types/assessment.types'
 
 class AIService {
   /**
@@ -412,6 +417,62 @@ class AIService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Fill-in-blank conversion failed'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Generate a DOK-based variant of an entire assessment
+   * Supports two strategies:
+   * - "questions": Generate entirely new questions at target DOK level
+   * - "distractors": Keep question stems, regenerate distractors for target DOK
+   */
+  async generateDOKVariant(
+    request: DOKVariantGenerationRequest,
+    assessment: Assessment,
+    standardsText: string
+  ): Promise<ServiceResult<DOKVariantGenerationResult>> {
+    try {
+      // Build the prompt based on strategy
+      const prompt = buildDOKVariantPrompt(request, assessment, standardsText)
+
+      // Call LLM with DOK variant system prompt
+      const result = await llmService.complete({
+        prompt,
+        systemPrompt: SYSTEM_PROMPTS.dokVariantGeneration,
+        temperature: 0.4, // Moderate creativity while maintaining accuracy
+        maxTokens: 6000 // Larger token limit for full assessment variants
+      })
+
+      if (!result.success) {
+        return { success: false, error: result.error }
+      }
+
+      // Parse the response
+      const parseResult = parseDOKVariant(
+        result.data.content,
+        assessment,
+        request.targetDOK,
+        request.strategy,
+        result.data.model
+      )
+
+      if (!parseResult.success || !parseResult.variant) {
+        return {
+          success: false,
+          error: parseResult.error ?? 'Failed to parse DOK variant'
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          variant: parseResult.variant,
+          usage: result.data.usage
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'DOK variant generation failed'
       return { success: false, error: message }
     }
   }

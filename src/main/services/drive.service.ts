@@ -2028,6 +2028,7 @@ class DriveService {
         purpose: input.purpose ?? existing.purpose,
         questions: input.questions ?? existing.questions,
         status: input.status ?? existing.status,
+        variants: input.variants ?? existing.variants,
         updatedAt: now,
         version: existing.version + 1,
         publishedAt:

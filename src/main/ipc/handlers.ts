@@ -38,7 +38,8 @@ import type {
   AIChatRequest,
   MaterialImportRequest,
   VariantGenerationRequest,
-  FillInBlankConversionRequest
+  FillInBlankConversionRequest,
+  DOKVariantGenerationRequest
 } from '../../shared/types/ai.types'
 
 /**
@@ -830,6 +831,39 @@ function registerAIHandlers(): void {
     'ai:convertFillInBlank',
     async (_event, request: FillInBlankConversionRequest) => {
       return aiService.convertFillInBlankToMultipleChoice(request)
+    }
+  )
+
+  // ============================================================
+  // Phase 5: DOK-Based Assessment Variants
+  // ============================================================
+
+  // Generate DOK-based variant of an assessment
+  ipcMain.handle(
+    'ai:generateDOKVariant',
+    async (_event, request: DOKVariantGenerationRequest) => {
+      try {
+        // Fetch the assessment
+        const assessmentResult = await driveService.getAssessment(request.assessmentId)
+        if (!assessmentResult.success || !assessmentResult.data) {
+          return { success: false, error: 'Assessment not found' }
+        }
+
+        // Fetch standards text for the prompt
+        const standardsResult = await driveService.getAllStandardsForCourse(request.courseId)
+        if (!standardsResult.success) {
+          return { success: false, error: 'Failed to load standards' }
+        }
+
+        // Build standards text from selected refs
+        const standardsText = buildStandardsText(standardsResult.data, request.standardRefs)
+
+        // Generate the variant
+        return aiService.generateDOKVariant(request, assessmentResult.data, standardsText)
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'DOK variant generation failed'
+        return { success: false, error: message }
+      }
     }
   )
 

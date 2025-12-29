@@ -7,9 +7,26 @@
 
 import type { Entity, AssessmentType, AssessmentPurpose } from './common.types'
 import type { Question } from './question.types'
+import type { DOKLevel } from './roster.types'
 
 // Assessment status
 export type AssessmentStatus = 'draft' | 'published'
+
+// DOK-based variant strategy
+export type VariantStrategy = 'questions' | 'distractors'
+
+/**
+ * A DOK-based variant of an assessment
+ * Contains questions adjusted for a specific DOK level
+ */
+export interface AssessmentVariant {
+  id: string
+  assessmentId: string
+  dokLevel: DOKLevel
+  strategy: VariantStrategy
+  questions: Question[]
+  createdAt: string
+}
 
 /**
  * Full assessment entity with all questions
@@ -24,8 +41,10 @@ export interface Assessment extends Entity {
   status: AssessmentStatus
   publishedAt?: string
 
-  // Placeholders for future features
-  // variants?: AssessmentVariants
+  // DOK-based variants (Phase 5)
+  variants?: AssessmentVariant[]
+
+  // Placeholder for future features
   // versions?: TestVersions
 }
 
@@ -68,6 +87,7 @@ export interface UpdateAssessmentInput {
   purpose?: AssessmentPurpose
   questions?: Question[]
   status?: AssessmentStatus
+  variants?: AssessmentVariant[]
 }
 
 // Re-export common types for convenience
