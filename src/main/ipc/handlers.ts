@@ -28,7 +28,8 @@ import type {
   GradeProcessRequest,
   SaveGradesInput,
   AssignmentGrades,
-  GradeOverride
+  GradeOverride,
+  UpdateMaterialInput
 } from '../../shared/types'
 import type { LLMRequest, LLMProviderType } from '../../shared/types/llm.types'
 import type {
@@ -71,6 +72,9 @@ export function registerIpcHandlers(): void {
 
   // File handlers
   registerFileHandlers()
+
+  // Material handlers
+  registerMaterialHandlers()
 }
 
 function registerAuthHandlers(): void {
@@ -872,6 +876,48 @@ function registerFileHandlers(): void {
       return { success: false, error: message }
     }
   })
+}
+
+function registerMaterialHandlers(): void {
+  // ============================================================
+  // Course Material Operations
+  // ============================================================
+
+  // Upload a material from local file path
+  ipcMain.handle(
+    'material:upload',
+    async (_event, courseId: string, filePath: string, name: string) => {
+      return driveService.uploadCourseMaterial(courseId, filePath, name)
+    }
+  )
+
+  // List materials for a course
+  ipcMain.handle('material:list', async (_event, courseId: string) => {
+    return driveService.listCourseMaterials(courseId)
+  })
+
+  // Get a specific material (includes extracted text)
+  ipcMain.handle('material:get', async (_event, materialId: string) => {
+    return driveService.getCourseMaterial(materialId)
+  })
+
+  // Get multiple materials by IDs (for AI context)
+  ipcMain.handle('material:getByIds', async (_event, materialIds: string[]) => {
+    return driveService.getCourseMaterialsByIds(materialIds)
+  })
+
+  // Update a material (name only)
+  ipcMain.handle('material:update', async (_event, input: UpdateMaterialInput) => {
+    return driveService.updateCourseMaterial(input)
+  })
+
+  // Delete a material
+  ipcMain.handle(
+    'material:delete',
+    async (_event, materialId: string, courseId: string) => {
+      return driveService.deleteCourseMaterial(materialId, courseId)
+    }
+  )
 }
 
 /**

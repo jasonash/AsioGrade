@@ -28,8 +28,16 @@ import type {
   UpdateAssignmentInput,
   StudentAssignment,
   AssignmentGrades,
-  ServiceResult
+  ServiceResult,
+  CourseMaterial,
+  CourseMaterialSummary,
+  CreateMaterialInput,
+  UpdateMaterialInput
 } from '../../shared/types'
+import { getTypeFromExtension, getMimeType } from '../../shared/types'
+import { importService } from './import.service'
+import { readFile, stat } from 'fs/promises'
+import path from 'path'
 
 // App config stored in Google Drive
 interface AppConfig {
@@ -51,6 +59,8 @@ interface FolderCache {
   assessmentFileIds: Record<string, string> // assessmentId -> fileId
   assignmentFileIds: Record<string, string> // assignmentId -> fileId
   gradeFileIds: Record<string, string> // assignmentId -> grade file ID
+  materialFileIds: Record<string, string> // materialId -> metadata file ID
+  materialOriginalFileIds: Record<string, string> // materialId -> original file ID
 }
 
 // Metadata cache with TTL for performance
@@ -71,6 +81,8 @@ interface MetadataCache {
   studentCounts: Record<string, CacheEntry<number>> // sectionFolderId -> student count
   assessmentCounts: Record<string, CacheEntry<number>> // courseFolderId -> assessment count
   assignmentCounts: Record<string, CacheEntry<number>> // sectionFolderId -> assignment count
+  materials: Record<string, CacheEntry<CourseMaterial>> // materialId -> material
+  materialSummaries: Record<string, CacheEntry<CourseMaterialSummary[]>> // courseFolderId -> list of summaries
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
@@ -83,7 +95,9 @@ class DriveService {
     sectionFolderIds: {},
     assessmentFileIds: {},
     assignmentFileIds: {},
-    gradeFileIds: {}
+    gradeFileIds: {},
+    materialFileIds: {},
+    materialOriginalFileIds: {}
   }
   private metadataCache: MetadataCache = {
     courses: {},
@@ -96,7 +110,9 @@ class DriveService {
     sectionCounts: {},
     studentCounts: {},
     assessmentCounts: {},
-    assignmentCounts: {}
+    assignmentCounts: {},
+    materials: {},
+    materialSummaries: {}
   }
 
   /**
@@ -123,7 +139,9 @@ class DriveService {
       sectionFolderIds: {},
       assessmentFileIds: {},
       assignmentFileIds: {},
-      gradeFileIds: {}
+      gradeFileIds: {},
+      materialFileIds: {},
+      materialOriginalFileIds: {}
     }
     this.metadataCache = {
       courses: {},
@@ -136,7 +154,9 @@ class DriveService {
       sectionCounts: {},
       studentCounts: {},
       assessmentCounts: {},
-      assignmentCounts: {}
+      assignmentCounts: {},
+      materials: {},
+      materialSummaries: {}
     }
   }
 
@@ -2635,6 +2655,453 @@ class DriveService {
    */
   invalidateGradeCache(assignmentId: string): void {
     delete this.metadataCache.grades[assignmentId]
+  }
+
+  // ============================================================
+  // Course Material Operations
+  // ============================================================
+
+  /**
+   * Invalidate material cache for a course
+   */
+  private invalidateMaterialCache(courseFolderId: string, materialId?: string): void {
+    delete this.metadataCache.materialSummaries[courseFolderId]
+    if (materialId) {
+      delete this.metadataCache.materials[materialId]
+    }
+  }
+
+  /**
+   * Upload a course material from a local file
+   * Extracts text content and stores both original file and metadata in Drive
+   */
+  async uploadCourseMaterial(
+    courseId: string,
+    filePath: string,
+    name: string
+  ): Promise<ServiceResult<CourseMaterial>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get course folder ID
+      const courseFolderId = this.folderCache.courseFolderIds[courseId] ?? courseId
+      if (!courseFolderId) {
+        return { success: false, error: 'Course folder not found' }
+      }
+
+      // Get file info
+      const fileStat = await stat(filePath)
+      const originalFileName = path.basename(filePath)
+      const materialType = getTypeFromExtension(filePath)
+
+      if (!materialType) {
+        return {
+          success: false,
+          error: 'Unsupported file type. Supported types: PDF, DOC, DOCX, PPT, PPTX, TXT'
+        }
+      }
+
+      // Extract text from file
+      const extractResult = await importService.extractTextFromFile(filePath)
+      const extractedText = extractResult.success ? extractResult.data : ''
+      const extractionStatus = extractResult.success ? 'complete' as const : 'failed' as const
+      const extractionError = extractResult.success ? undefined : extractResult.error
+
+      // Ensure materials folder exists
+      const materialsFolderId = await this.ensureSubfolder(courseFolderId, 'materials')
+      const originalsFolderId = await this.ensureSubfolder(materialsFolderId, 'originals')
+
+      // Generate unique material ID
+      const materialId = this.generateUniqueId(name)
+      const now = new Date().toISOString()
+
+      // Upload original file to Drive
+      const fileBuffer = await readFile(filePath)
+      const mimeType = getMimeType(materialType)
+
+      const originalFileResponse = await drive.files.create({
+        requestBody: {
+          name: `${materialId}${path.extname(filePath)}`,
+          mimeType,
+          parents: [originalsFolderId]
+        },
+        media: {
+          mimeType,
+          body: fileBuffer as unknown as string // Type workaround for googleapis
+        },
+        fields: 'id'
+      })
+
+      const driveFileId = originalFileResponse.data.id!
+      this.folderCache.materialOriginalFileIds[materialId] = driveFileId
+
+      // Create material metadata
+      const material: CourseMaterial = {
+        id: materialId,
+        courseId,
+        name,
+        type: materialType,
+        originalFileName,
+        fileSize: fileStat.size,
+        mimeType,
+        extractedText,
+        extractionStatus,
+        extractionError,
+        driveFileId,
+        createdAt: now,
+        updatedAt: now,
+        version: 1
+      }
+
+      // Save metadata file
+      const metaFileResponse = await drive.files.create({
+        requestBody: {
+          name: `${materialId}.json`,
+          mimeType: 'application/json',
+          parents: [materialsFolderId]
+        },
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(material, null, 2)
+        },
+        fields: 'id'
+      })
+
+      this.folderCache.materialFileIds[materialId] = metaFileResponse.data.id!
+
+      // Invalidate cache
+      this.invalidateMaterialCache(courseFolderId)
+
+      return { success: true, data: material }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to upload material'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Create material from already extracted data (used by IPC handler)
+   */
+  async createCourseMaterial(input: CreateMaterialInput): Promise<ServiceResult<CourseMaterial>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get course folder ID
+      const courseFolderId = this.folderCache.courseFolderIds[input.courseId] ?? input.courseId
+      if (!courseFolderId) {
+        return { success: false, error: 'Course folder not found' }
+      }
+
+      // Ensure materials folder exists
+      const materialsFolderId = await this.ensureSubfolder(courseFolderId, 'materials')
+
+      // Generate unique material ID
+      const materialId = this.generateUniqueId(input.name)
+      const now = new Date().toISOString()
+
+      // Create material metadata
+      const material: CourseMaterial = {
+        id: materialId,
+        courseId: input.courseId,
+        name: input.name,
+        type: input.type,
+        originalFileName: input.originalFileName,
+        fileSize: input.fileSize,
+        mimeType: input.mimeType,
+        extractedText: input.extractedText,
+        extractionStatus: input.extractionStatus,
+        extractionError: input.extractionError,
+        driveFileId: input.driveFileId,
+        createdAt: now,
+        updatedAt: now,
+        version: 1
+      }
+
+      // Save metadata file
+      const metaFileResponse = await drive.files.create({
+        requestBody: {
+          name: `${materialId}.json`,
+          mimeType: 'application/json',
+          parents: [materialsFolderId]
+        },
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(material, null, 2)
+        },
+        fields: 'id'
+      })
+
+      this.folderCache.materialFileIds[materialId] = metaFileResponse.data.id!
+
+      // Invalidate cache
+      this.invalidateMaterialCache(courseFolderId)
+
+      return { success: true, data: material }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to create material'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * List all materials for a course
+   */
+  async listCourseMaterials(courseId: string): Promise<ServiceResult<CourseMaterialSummary[]>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get course folder ID
+      const courseFolderId = this.folderCache.courseFolderIds[courseId] ?? courseId
+      if (!courseFolderId) {
+        return { success: false, error: 'Course folder not found' }
+      }
+
+      // Check cache first
+      const cached = this.metadataCache.materialSummaries[courseFolderId]
+      if (this.isCacheValid(cached)) {
+        return { success: true, data: cached.data }
+      }
+
+      // Find materials folder
+      const materialsFolderResponse = await drive.files.list({
+        q: `name='materials' and mimeType='application/vnd.google-apps.folder' and '${courseFolderId}' in parents and trashed=false`,
+        fields: 'files(id)',
+        spaces: 'drive'
+      })
+
+      if (!materialsFolderResponse.data.files || materialsFolderResponse.data.files.length === 0) {
+        return { success: true, data: [] }
+      }
+
+      const materialsFolderId = materialsFolderResponse.data.files[0].id!
+
+      // List all JSON files (metadata files) in materials folder
+      const response = await drive.files.list({
+        q: `'${materialsFolderId}' in parents and mimeType='application/json' and trashed=false`,
+        fields: 'files(id, name)',
+        spaces: 'drive'
+      })
+
+      if (!response.data.files || response.data.files.length === 0) {
+        return { success: true, data: [] }
+      }
+
+      // Read each material file and build summaries
+      const summaries: CourseMaterialSummary[] = []
+
+      for (const file of response.data.files) {
+        try {
+          const contentResponse = await drive.files.get({
+            fileId: file.id!,
+            alt: 'media'
+          })
+
+          const material = contentResponse.data as unknown as CourseMaterial
+
+          // Cache the file ID mapping
+          this.folderCache.materialFileIds[material.id] = file.id!
+
+          summaries.push({
+            id: material.id,
+            name: material.name,
+            type: material.type,
+            originalFileName: material.originalFileName,
+            fileSize: material.fileSize,
+            extractionStatus: material.extractionStatus,
+            extractionError: material.extractionError,
+            createdAt: material.createdAt,
+            updatedAt: material.updatedAt
+          })
+        } catch {
+          // Skip invalid files
+          continue
+        }
+      }
+
+      // Sort by creation date (newest first)
+      summaries.sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      )
+
+      // Cache the summaries
+      this.metadataCache.materialSummaries[courseFolderId] = {
+        data: summaries,
+        timestamp: Date.now()
+      }
+
+      return { success: true, data: summaries }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to list materials'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Get a specific material by ID (includes extracted text)
+   */
+  async getCourseMaterial(materialId: string): Promise<ServiceResult<CourseMaterial>> {
+    try {
+      // Check cache first
+      const cached = this.metadataCache.materials[materialId]
+      if (this.isCacheValid(cached)) {
+        return { success: true, data: cached.data }
+      }
+
+      const drive = await this.getDrive()
+
+      // Get file ID from cache
+      const fileId = this.folderCache.materialFileIds[materialId]
+      if (!fileId) {
+        return { success: false, error: 'Material not found' }
+      }
+
+      const response = await drive.files.get({
+        fileId,
+        alt: 'media'
+      })
+
+      const material = response.data as unknown as CourseMaterial
+
+      // Cache the result
+      this.metadataCache.materials[materialId] = {
+        data: material,
+        timestamp: Date.now()
+      }
+
+      return { success: true, data: material }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get material'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Update a material's name
+   */
+  async updateCourseMaterial(input: UpdateMaterialInput): Promise<ServiceResult<CourseMaterial>> {
+    try {
+      // Get existing material
+      const existingResult = await this.getCourseMaterial(input.id)
+      if (!existingResult.success) {
+        return { success: false, error: existingResult.error }
+      }
+
+      const existing = existingResult.data
+      const drive = await this.getDrive()
+
+      // Get file ID
+      const fileId = this.folderCache.materialFileIds[input.id]
+      if (!fileId) {
+        return { success: false, error: 'Material file not found in cache' }
+      }
+
+      const now = new Date().toISOString()
+
+      // Merge updates
+      const updated: CourseMaterial = {
+        ...existing,
+        name: input.name ?? existing.name,
+        updatedAt: now,
+        version: existing.version + 1
+      }
+
+      // Save to Drive
+      await drive.files.update({
+        fileId,
+        media: {
+          mimeType: 'application/json',
+          body: JSON.stringify(updated, null, 2)
+        }
+      })
+
+      // Get course folder ID for cache invalidation
+      const courseFolderId = this.folderCache.courseFolderIds[input.courseId]
+      if (courseFolderId) {
+        this.invalidateMaterialCache(courseFolderId, input.id)
+      }
+
+      return { success: true, data: updated }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update material'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Delete a course material (both metadata and original file)
+   */
+  async deleteCourseMaterial(materialId: string, courseId: string): Promise<ServiceResult<void>> {
+    try {
+      const drive = await this.getDrive()
+
+      // Get metadata file ID from cache
+      const metaFileId = this.folderCache.materialFileIds[materialId]
+
+      // If we don't have the file IDs, try to get the material first to populate cache
+      if (!metaFileId) {
+        // List materials to populate cache
+        await this.listCourseMaterials(courseId)
+      }
+
+      const finalMetaFileId = this.folderCache.materialFileIds[materialId]
+      if (finalMetaFileId) {
+        // Get the material to find the original file ID
+        const materialResult = await this.getCourseMaterial(materialId)
+        if (materialResult.success && materialResult.data.driveFileId) {
+          // Trash the original file
+          try {
+            await drive.files.update({
+              fileId: materialResult.data.driveFileId,
+              requestBody: { trashed: true }
+            })
+          } catch {
+            // Original file may already be deleted
+          }
+        }
+
+        // Trash the metadata file
+        await drive.files.update({
+          fileId: finalMetaFileId,
+          requestBody: { trashed: true }
+        })
+      }
+
+      // Clear from caches
+      delete this.folderCache.materialFileIds[materialId]
+      delete this.folderCache.materialOriginalFileIds[materialId]
+
+      // Get course folder ID for cache invalidation
+      const courseFolderId = this.folderCache.courseFolderIds[courseId]
+      if (courseFolderId) {
+        this.invalidateMaterialCache(courseFolderId, materialId)
+      }
+
+      return { success: true, data: undefined }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete material'
+      return { success: false, error: message }
+    }
+  }
+
+  /**
+   * Get multiple materials by IDs (for AI context)
+   */
+  async getCourseMaterialsByIds(materialIds: string[]): Promise<ServiceResult<CourseMaterial[]>> {
+    try {
+      const materials: CourseMaterial[] = []
+
+      for (const id of materialIds) {
+        const result = await this.getCourseMaterial(id)
+        if (result.success) {
+          materials.push(result.data)
+        }
+      }
+
+      return { success: true, data: materials }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to get materials'
+      return { success: false, error: message }
+    }
   }
 
   // ============================================================

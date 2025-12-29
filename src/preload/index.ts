@@ -72,11 +72,19 @@ const validInvokeChannels = [
   'drive:deleteLesson',
   'drive:reorderLessons',
 
-  // Google Drive - Unit Materials
+  // Google Drive - Unit Materials (legacy)
   'drive:listUnitMaterials',
   'drive:uploadUnitMaterial',
   'drive:deleteUnitMaterial',
   'drive:getUnitMaterialsContext',
+
+  // Course Materials
+  'material:upload',
+  'material:list',
+  'material:get',
+  'material:getByIds',
+  'material:update',
+  'material:delete',
 
   // Storage
   'storage:get',

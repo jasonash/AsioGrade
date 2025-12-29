@@ -18,6 +18,7 @@ import { useCourseStore, useSectionStore, useStandardsStore, useAssessmentStore 
 import { SectionCreationModal } from '../components/sections'
 import { StandardsImportModal } from '../components/standards'
 import { AssessmentCreationModal } from '../components/assessments'
+import { CourseMaterialsSection } from '../components/courseMaterials'
 import type { SectionSummary, AssessmentSummary } from '../../../shared/types'
 
 export interface CourseViewPageProps {
@@ -241,6 +242,14 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
             ))}
           </Box>
         )}
+      </Box>
+
+      {/* Course Materials Section */}
+      <Box component="section">
+        <CourseMaterialsSection
+          courseId={currentCourse.id}
+          courseName={currentCourse.name}
+        />
       </Box>
 
       {/* Assessments Section */}

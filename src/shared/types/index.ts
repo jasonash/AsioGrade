@@ -19,5 +19,8 @@ export type * from './scantron.types'
 export type * from './grade.types'
 export type * from './ai.types'
 
+// Course material types has runtime values (helper functions) so use regular export
+export * from './courseMaterial.types'
+
 // LLM types has runtime values (const arrays, functions) so use regular export
 export * from './llm.types'
