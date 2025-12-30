@@ -1961,7 +1961,8 @@ class GradeService {
         id: `${assignment.id}-${page.qrData.studentId}`,
         studentId: page.qrData.studentId,
         assignmentId: assignment.id,
-        versionId: 'A' as VersionId, // All students get version 'A' for now
+        dokLevel: page.qrData.dokLevel, // DOK level from QR code for variant lookup
+        versionId: (page.qrData.versionId as VersionId) || ('A' as VersionId),
         gradedAt: new Date().toISOString(),
         scannedAt: new Date().toISOString(),
         rawScore,
@@ -2149,7 +2150,112 @@ class GradeService {
   }
 
   /**
-   * Apply teacher overrides to grades
+   * Apply teacher overrides to grades, handling DOK variants properly
+   * Each record may have a different variant with different correct answers
+   */
+  applyOverridesWithAssessment(
+    grades: AssignmentGrades,
+    overrides: GradeOverride[],
+    assessment?: Assessment
+  ): AssignmentGrades {
+    // Helper to build answer key from questions
+    const buildAnswerKeyMap = (questions: Question[]): Map<number, string> => {
+      const map = new Map<number, string>()
+      questions
+        .filter((q) => q.type === 'multiple_choice')
+        .forEach((q, index) => {
+          map.set(index + 1, q.correctAnswer.toUpperCase())
+        })
+      return map
+    }
+
+    // Build answer key maps for base assessment and all variants (keyed by DOK level)
+    const baseAnswerKeyMap = assessment ? buildAnswerKeyMap(assessment.questions) : new Map<number, string>()
+    const variantAnswerKeyByDOK = new Map<number, Map<number, string>>()
+    if (assessment?.variants) {
+      for (const variant of assessment.variants) {
+        variantAnswerKeyByDOK.set(variant.dokLevel, buildAnswerKeyMap(variant.questions))
+        console.log(`[GradeService] Built answer key for DOK ${variant.dokLevel}: ${variant.questions.length} questions`)
+      }
+    }
+
+    const updatedRecords = grades.records.map((record) => {
+      const recordOverrides = overrides.filter((o) => o.recordId === record.id)
+      if (recordOverrides.length === 0) {
+        return record
+      }
+
+      // Get the correct answer key for this record's DOK level
+      let answerKeyMap = baseAnswerKeyMap
+      if (record.dokLevel && variantAnswerKeyByDOK.has(record.dokLevel)) {
+        answerKeyMap = variantAnswerKeyByDOK.get(record.dokLevel)!
+        console.log(`[GradeService] Using DOK ${record.dokLevel} variant answer key`)
+      } else {
+        console.log(`[GradeService] Using base answer key (dokLevel=${record.dokLevel}, no variant found)`)
+      }
+
+      const updatedAnswers = [...record.answers]
+      const correctedQuestionNumbers = new Set<number>()
+
+      for (const override of recordOverrides) {
+        const answerIndex = updatedAnswers.findIndex(
+          (a) => a.questionNumber === override.questionNumber
+        )
+        if (answerIndex >= 0) {
+          const correctAnswer = answerKeyMap.get(override.questionNumber)
+          const newSelected = override.newAnswer?.toUpperCase() ?? null
+          const isCorrect = correctAnswer ? newSelected === correctAnswer : updatedAnswers[answerIndex].correct
+
+          console.log(`[GradeService] Override Q${override.questionNumber}: selected=${newSelected}, correctAnswer=${correctAnswer}, isCorrect=${isCorrect}`)
+
+          updatedAnswers[answerIndex] = {
+            ...updatedAnswers[answerIndex],
+            selected: override.newAnswer,
+            correct: isCorrect, // Update correct based on new answer
+            unclear: false, // Override clears the unclear flag
+            multipleSelected: false // Override clears the multiple selected flag
+          }
+          correctedQuestionNumbers.add(override.questionNumber)
+        }
+      }
+
+      // Remove flags for corrected questions
+      const updatedFlags = record.flags.filter(
+        (flag) => !flag.questionNumber || !correctedQuestionNumbers.has(flag.questionNumber)
+      )
+
+      // Recalculate score based on updated correct flags
+      const correctCount = updatedAnswers.filter((a) => a.correct).length
+      const percentage = updatedAnswers.length > 0 ? (correctCount / updatedAnswers.length) * 100 : 0
+
+      // Clear needsReview if no flags remain that require review
+      const reviewFlags = updatedFlags.filter(
+        (f) => f.type === 'multiple_bubbles' || f.type === 'low_confidence' || f.type === 'qr_error'
+      )
+      const needsReview = reviewFlags.length > 0
+
+      return {
+        ...record,
+        answers: updatedAnswers,
+        flags: updatedFlags,
+        needsReview,
+        rawScore: correctCount,
+        percentage,
+        points: correctCount,
+        reviewNotes: `${recordOverrides.length} answer(s) manually corrected`
+      }
+    })
+
+    return {
+      ...grades,
+      records: updatedRecords,
+      stats: this.calculateStats(updatedRecords, { questions: [] } as unknown as Assessment)
+    }
+  }
+
+  /**
+   * Apply teacher overrides to grades (legacy method without variant support)
+   * @deprecated Use applyOverridesWithAssessment instead
    */
   applyOverrides(
     grades: AssignmentGrades,
@@ -2183,14 +2289,13 @@ class GradeService {
           updatedAnswers[answerIndex] = {
             ...updatedAnswers[answerIndex],
             selected: override.newAnswer,
-            correct: isCorrect, // Update correct based on new answer
-            unclear: false, // Override clears the unclear flag
-            multipleSelected: false // Override clears the multiple selected flag
+            correct: isCorrect,
+            unclear: false,
+            multipleSelected: false
           }
         }
       }
 
-      // Recalculate score based on updated correct flags
       const correctCount = updatedAnswers.filter((a) => a.correct).length
       const percentage = updatedAnswers.length > 0 ? (correctCount / updatedAnswers.length) * 100 : 0
 
@@ -2219,25 +2324,26 @@ class GradeService {
       // Apply any overrides
       let grades = input.grades
       if (input.overrides && input.overrides.length > 0) {
+        console.log('[GradeService] Applying overrides:', JSON.stringify(input.overrides, null, 2))
+        console.log('[GradeService] Assessment ID:', grades.assessmentId)
+
         // Fetch the assessment to get the answer key for proper scoring
-        let answerKey: AnswerKeyEntry[] | undefined
+        // We need to handle DOK variants - each record may have a different variant
+        let assessment: Assessment | undefined
         try {
           const assessmentResult = await driveService.getAssessment(grades.assessmentId)
+          console.log('[GradeService] Assessment fetch result:', assessmentResult.success)
           if (assessmentResult.success && assessmentResult.data) {
-            answerKey = assessmentResult.data.questions
-              .filter((q) => q.type === 'multiple_choice')
-              .map((q, index) => ({
-                questionNumber: index + 1,
-                questionId: q.id,
-                correctAnswer: q.correctAnswer.toUpperCase(),
-                points: q.points
-              }))
+            assessment = assessmentResult.data
           }
         } catch (e) {
           console.warn('[GradeService] Could not fetch assessment for answer key:', e)
         }
 
-        grades = this.applyOverrides(grades, input.overrides, answerKey)
+        const beforeScore = grades.records[0]?.rawScore
+        grades = this.applyOverridesWithAssessment(grades, input.overrides, assessment)
+        const afterScore = grades.records[0]?.rawScore
+        console.log('[GradeService] Score before/after override:', beforeScore, '->', afterScore)
       }
 
       // Update the gradedAt timestamp

@@ -7,6 +7,7 @@
 import type { QuestionType } from './question.types'
 import type { VersionId } from './assignment.types'
 import type { ResolvedScantronData } from './scantron.types'
+import type { DOKLevel } from './roster.types'
 
 // ============================================================
 // Grade Flag Types
@@ -76,6 +77,7 @@ export interface GradeRecord {
   studentId: string
   assignmentId: string
   variantId?: string
+  dokLevel?: DOKLevel // DOK level from QR code (1, 2, or 3)
   versionId: VersionId
 
   gradedAt: string
