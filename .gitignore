@@ -1,9 +1,7 @@
 # Private files - never commit
 CLAUDE.md
-docs/PROJECT_STATUS.md
+docs/
 config/oauth.json
-docs/client_secret_*.json
-docs/GoogleOAuth.txt
 
 # Dependencies
 node_modules/
@@ -39,5 +37,4 @@ npm-debug.log*
 
 # Development/test files
 prototypes/
-docs/*.pdf
 *.traineddata
