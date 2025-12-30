@@ -100,7 +100,9 @@ export function BatchVariantModal({
       setGenerateVersions(true)
       clearError()
     }
-  }, [isOpen, existingVariants, existingBaseVersions, clearError])
+    // Note: clearError excluded from deps to prevent infinite re-render loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, existingVariants, existingBaseVersions])
 
   const handleDOKChange = (dok: DOKLevel, checked: boolean): void => {
     setDokSelections((prev) => ({

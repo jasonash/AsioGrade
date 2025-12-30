@@ -1165,7 +1165,8 @@ function registerAIHandlers(): void {
       const standardsText = buildStandardsText(standardsResult.data, request.standardRefs)
 
       // Calculate total steps
-      const variantsToGenerate = request.variants.filter((v) => v.regenerate !== false)
+      // All variants in the array should be generated - user explicitly selected them
+      const variantsToGenerate = request.variants
       const existingVariantsNeedingVersions = request.addVersionsToExisting
         ? (assessment.variants ?? []).filter(
             (v) =>

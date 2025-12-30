@@ -260,22 +260,29 @@ export function AssessmentViewPage({
     return currentAssessment.variants.map((v) => v.dokLevel)
   }, [currentAssessment?.variants])
 
+  // Memoize variants for modal to prevent infinite re-render loop
+  const existingVariantsForModal = useMemo(
+    () => currentAssessment?.variants ?? [],
+    [currentAssessment?.variants]
+  )
+
   // Get the currently displayed questions (base, variant, or versioned)
   const displayedQuestions = useMemo(() => {
     if (!currentAssessment) return []
 
-    // If viewing a DOK variant
-    if (selectedVariantId) {
-      const variant = currentAssessment.variants?.find((v) => v.id === selectedVariantId)
-      return variant?.questions ?? currentAssessment.questions
-    }
+    // Determine base questions and versions to use
+    const selectedVariant = selectedVariantId
+      ? currentAssessment.variants?.find((v) => v.id === selectedVariantId)
+      : null
+    const baseQuestions = selectedVariant?.questions ?? currentAssessment.questions
+    const versions = selectedVariant?.versions ?? currentAssessment.versions
 
     // If viewing a randomized version (A/B/C/D)
-    if (selectedVersionId) {
-      const version = currentAssessment.versions?.find((v) => v.versionId === selectedVersionId)
+    if (selectedVersionId && versions) {
+      const version = versions.find((v) => v.versionId === selectedVersionId)
       if (version) {
         // Create question map
-        const questionMap = new Map(currentAssessment.questions.map((q) => [q.id, q]))
+        const questionMap = new Map(baseQuestions.map((q) => [q.id, q]))
 
         // Reorder questions according to version
         const reorderedQuestions: Question[] = []
@@ -305,6 +312,11 @@ export function AssessmentViewPage({
         }
         return reorderedQuestions
       }
+    }
+
+    // If viewing a DOK variant (without version selected), return variant questions
+    if (selectedVariant) {
+      return baseQuestions
     }
 
     return currentAssessment.questions
@@ -556,16 +568,27 @@ export function AssessmentViewPage({
         </Box>
       )}
 
-      {/* Version Selector - Show when versions exist (and not viewing a variant) */}
-      {currentAssessment?.versions && currentAssessment.versions.length > 0 && !selectedVariantId && (
-        <VersionSelector
-          versions={currentAssessment.versions}
-          baseQuestions={currentAssessment.questions}
-          selectedVersionId={selectedVersionId}
-          onSelectVersion={setSelectedVersionId}
-          disabled={loading || generatingVersions}
-        />
-      )}
+      {/* Version Selector - Show when versions exist (for base assessment or selected variant) */}
+      {(() => {
+        // Get versions and questions based on whether we're viewing a variant
+        const selectedVariant = selectedVariantId
+          ? currentAssessment?.variants?.find((v) => v.id === selectedVariantId)
+          : null
+        const versions = selectedVariant?.versions ?? currentAssessment?.versions
+        const questionsForVersions = selectedVariant?.questions ?? currentAssessment?.questions ?? []
+
+        if (!versions || versions.length === 0) return null
+
+        return (
+          <VersionSelector
+            versions={versions}
+            baseQuestions={questionsForVersions}
+            selectedVersionId={selectedVersionId}
+            onSelectVersion={setSelectedVersionId}
+            disabled={loading || generatingVersions}
+          />
+        )
+      })()}
 
       {/* Questions section with AI Assistant */}
       <Grid container spacing={3}>
@@ -718,7 +741,7 @@ export function AssessmentViewPage({
           gradeLevel={course.gradeLevel}
           subject={course.subject}
           standardRefs={standardRefs}
-          existingVariants={currentAssessment.variants ?? []}
+          existingVariants={existingVariantsForModal}
           existingBaseVersions={currentAssessment.versions}
         />
       )}
