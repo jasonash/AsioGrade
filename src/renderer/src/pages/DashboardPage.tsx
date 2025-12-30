@@ -44,10 +44,13 @@ export function DashboardPage({ onOpenCreateModal }: DashboardPageProps): ReactE
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
         <Card sx={{ maxWidth: 400, textAlign: 'center' }}>
           <CardHeader>
-            <Box sx={{ width: 64, height: 64, mx: 'auto', mb: 2, borderRadius: '50%', bgcolor: 'primary.light', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <MenuBookIcon sx={{ fontSize: 32, color: 'primary.main' }} />
-            </Box>
-            <CardTitle>Welcome to TeachingHelp</CardTitle>
+            <Box
+              component="img"
+              src={logoImage}
+              alt="AsioGrade"
+              sx={{ width: 64, height: 64, mx: 'auto', mb: 2, borderRadius: 1.5 }}
+            />
+            <CardTitle>Welcome to AsioGrade</CardTitle>
             <CardDescription>
               Sign in with Google to sync your classes, tests, and grades across devices.
             </CardDescription>
@@ -55,7 +58,9 @@ export function DashboardPage({ onOpenCreateModal }: DashboardPageProps): ReactE
           <CardContent>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
               {status === 'not_configured' && (
-                <Alert severity="warning">OAuth not configured. Check config/oauth.json</Alert>
+                <Alert severity="warning">
+                  Google sign-in is not yet configured. Please contact your administrator.
+                </Alert>
               )}
 
               {error && (
@@ -65,10 +70,16 @@ export function DashboardPage({ onOpenCreateModal }: DashboardPageProps): ReactE
               <Button
                 onClick={login}
                 disabled={!isConfigured}
-                variant="outlined"
+                variant="contained"
                 size="large"
                 fullWidth
-                sx={{ bgcolor: 'white', color: 'text.primary', '&:hover': { bgcolor: 'grey.50' } }}
+                sx={{
+                  bgcolor: 'white',
+                  color: '#1f1f1f',
+                  fontWeight: 500,
+                  '&:hover': { bgcolor: 'grey.100' },
+                  '&.Mui-disabled': { bgcolor: 'grey.300', color: 'grey.500' }
+                }}
                 startIcon={
                   <svg width="20" height="20" viewBox="0 0 24 24">
                     <path
