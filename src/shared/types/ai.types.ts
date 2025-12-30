@@ -7,7 +7,12 @@
 import type { QuestionType, MultipleChoiceQuestion } from './question.types'
 import type { LLMUsage } from './llm.types'
 import type { DOKLevel } from './roster.types'
-import type { VariantStrategy, AssessmentVariant } from './assessment.types'
+import type {
+  VariantStrategy,
+  AssessmentVariant,
+  Assessment,
+  AssessmentVersion
+} from './assessment.types'
 
 // ============================================================
 // Question Generation Types
@@ -342,5 +347,72 @@ export interface DOKVariantGenerationRequest {
 export interface DOKVariantGenerationResult {
   variant: AssessmentVariant
   usage: LLMUsage
+}
+
+// ============================================================
+// Batch Variant Generation Types (Unified Modal)
+// ============================================================
+
+/**
+ * Stages of batch variant generation for progress tracking
+ */
+export type BatchGenerationStage =
+  | 'preparing'
+  | 'generating_variant'
+  | 'generating_versions'
+  | 'saving'
+  | 'complete'
+  | 'error'
+
+/**
+ * Progress event sent during batch variant generation
+ */
+export interface BatchGenerationProgress {
+  stage: BatchGenerationStage
+  currentItem: number
+  totalItems: number
+  message: string
+  dokLevel?: DOKLevel
+  error?: string
+}
+
+/**
+ * Configuration for a single DOK variant in a batch request
+ */
+export interface BatchVariantConfig {
+  dokLevel: DOKLevel
+  strategy: VariantStrategy
+  regenerate?: boolean // True if replacing an existing variant
+}
+
+/**
+ * Request to generate multiple DOK variants and/or versions in batch
+ */
+export interface BatchVariantRequest {
+  assessmentId: string
+  courseId: string
+  gradeLevel: string
+  subject: string
+  standardRefs: string[]
+
+  // DOK variants to generate (DOK 2 excluded - it's the base)
+  variants: BatchVariantConfig[]
+
+  // Whether to generate A/B/C/D versions
+  generateVersions: boolean
+
+  // Add versions to existing variants without regenerating questions
+  addVersionsToExisting: boolean
+}
+
+/**
+ * Result of batch variant generation
+ */
+export interface BatchVariantResult {
+  assessment: Assessment
+  generatedVariants: AssessmentVariant[]
+  baseVersions?: AssessmentVersion[]
+  errors?: Array<{ dokLevel: DOKLevel; error: string }>
+  totalUsage: LLMUsage
 }
 

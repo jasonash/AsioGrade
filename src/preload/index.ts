@@ -119,6 +119,7 @@ const validInvokeChannels = [
   'ai:generateVariant',
   'ai:convertFillInBlank',
   'ai:generateDOKVariant',
+  'ai:generateBatchVariants',
 
   // AI Lesson Generation
   'ai:generateLessonGoals',
@@ -180,7 +181,8 @@ const validEventChannels = [
   'llm:streamChunk',
   'grade:progress',
   'ai:questionStream',
-  'ai:lessonProgress'
+  'ai:lessonProgress',
+  'ai:batchVariantProgress'
 ] as const
 
 type InvokeChannel = (typeof validInvokeChannels)[number]

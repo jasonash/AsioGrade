@@ -104,6 +104,7 @@ type InvokeChannel =
   | 'ai:generateVariant'
   | 'ai:convertFillInBlank'
   | 'ai:generateDOKVariant'
+  | 'ai:generateBatchVariants'
   // AI Lesson Generation
   | 'ai:generateLessonGoals'
   | 'ai:generateLessonStructure'
@@ -155,6 +156,7 @@ type EventChannel =
   | 'grade:progress'
   | 'ai:questionStream'
   | 'ai:lessonProgress'
+  | 'ai:batchVariantProgress'
 
 interface ElectronAPI {
   platform: NodeJS.Platform

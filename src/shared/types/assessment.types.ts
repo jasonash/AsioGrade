@@ -53,6 +53,7 @@ export interface AssessmentVariant {
   questions: Question[]
   createdAt: string
   isModified?: boolean // True if variant has been manually edited after AI generation
+  versions?: AssessmentVersion[] // A/B/C/D shuffled versions for this variant
 }
 
 /**

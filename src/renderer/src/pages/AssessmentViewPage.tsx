@@ -26,7 +26,9 @@ import {
   AIAssistantPanel,
   VariantGenerationModal,
   VariantSelector,
-  VersionSelector
+  VersionSelector,
+  BatchVariantModal,
+  BatchProgressModal
 } from '../components/assessments'
 import type {
   CourseSummary,
@@ -77,6 +79,8 @@ export function AssessmentViewPage({
     loading,
     generatingVariant,
     generatingVersions,
+    batchGenerating,
+    batchProgress,
     error,
     setCurrentCourseId,
     getAssessment,
@@ -93,6 +97,7 @@ export function AssessmentViewPage({
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false)
+  const [isBatchVariantModalOpen, setIsBatchVariantModalOpen] = useState(false)
   const [isDeleteVariantModalOpen, setIsDeleteVariantModalOpen] = useState(false)
   const [variantToDelete, setVariantToDelete] = useState<string | null>(null)
   const [selectedVariantId, setSelectedVariantId] = useState<string | null>(null)
@@ -387,40 +392,29 @@ export function AssessmentViewPage({
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
             {currentAssessment?.status === 'draft' && (
               <>
-                <Tooltip title="Create alternate versions for differentiated instruction (optional)">
+                <Tooltip title="Generate DOK variants and A/B/C/D versions for differentiated instruction">
                   <span>
                     <Button
                       variant="outlined"
-                      startIcon={generatingVariant ? <CircularProgress size={16} /> : <TuneIcon />}
-                      onClick={() => setIsVariantModalOpen(true)}
-                      disabled={generatingVariant || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0}
+                      startIcon={batchGenerating ? <CircularProgress size={16} /> : <TuneIcon />}
+                      onClick={() => setIsBatchVariantModalOpen(true)}
+                      disabled={batchGenerating || generatingVariant || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0}
                     >
-                      {generatingVariant ? 'Generating...' : 'Add DOK Variant'}
+                      {batchGenerating
+                        ? 'Generating...'
+                        : currentAssessment?.variants?.length || currentAssessment?.versions?.length
+                          ? 'Manage Variants'
+                          : 'Generate Variants'}
                     </Button>
                   </span>
                 </Tooltip>
-                {/* Hide Generate Versions button for quizzes - they don't support versions */}
-                {!isQuiz && (
-                  <Button
-                    variant="outlined"
-                    startIcon={generatingVersions ? <CircularProgress size={16} /> : <ShuffleIcon />}
-                    onClick={() => setIsGenerateVersionsModalOpen(true)}
-                    disabled={generatingVariant || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0}
-                  >
-                    {generatingVersions
-                      ? 'Generating...'
-                      : currentAssessment?.versions?.length
-                        ? 'Regenerate Versions'
-                        : 'Generate Versions'}
-                  </Button>
-                )}
                 <Button
                   variant="contained"
                   color="success"
                   startIcon={<PublishIcon />}
                   onClick={handlePublish}
                   disabled={
-                    isPublishing || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0 || quizLimitViolation
+                    isPublishing || batchGenerating || generatingVersions || (currentAssessment?.questions.length ?? 0) === 0 || quizLimitViolation
                   }
                 >
                   {isPublishing ? 'Publishing...' : 'Publish'}
@@ -694,7 +688,7 @@ export function AssessmentViewPage({
         isLoading={isDeleting}
       />
 
-      {/* Variant Generation Modal */}
+      {/* Variant Generation Modal (legacy - kept for backwards compatibility) */}
       {currentAssessment && (
         <VariantGenerationModal
           isOpen={isVariantModalOpen}
@@ -710,6 +704,27 @@ export function AssessmentViewPage({
           existingVariantDOKs={existingVariantDOKs}
         />
       )}
+
+      {/* Batch Variant Modal - unified modal for variants + versions */}
+      {currentAssessment && (
+        <BatchVariantModal
+          isOpen={isBatchVariantModalOpen}
+          onClose={() => setIsBatchVariantModalOpen(false)}
+          onSuccess={() => {
+            // Modal handles success internally
+          }}
+          assessmentId={currentAssessment.id}
+          courseId={course.id}
+          gradeLevel={course.gradeLevel}
+          subject={course.subject}
+          standardRefs={standardRefs}
+          existingVariants={currentAssessment.variants ?? []}
+          existingBaseVersions={currentAssessment.versions}
+        />
+      )}
+
+      {/* Batch Progress Modal - shows during batch generation */}
+      <BatchProgressModal isOpen={batchGenerating} progress={batchProgress} />
 
       {/* Delete Variant Confirmation Modal */}
       <ConfirmModal

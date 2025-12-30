@@ -71,6 +71,18 @@ export function generateVersions(assessment: Assessment): AssessmentVersion[] {
 }
 
 /**
+ * Generate all 4 randomized versions (A, B, C, D) for a standalone question array
+ * Used for generating versions for DOK variants
+ */
+export function generateVersionsForQuestions(questions: Question[]): AssessmentVersion[] {
+  if (!questions || questions.length === 0) {
+    throw new Error('Cannot generate versions for empty question list')
+  }
+
+  return VERSION_IDS.map((versionId) => generateSingleVersion(questions, versionId))
+}
+
+/**
  * Get the answer key for a specific version
  * Returns the correct answer letter for each question in the version's order
  */
@@ -174,6 +186,7 @@ export function getVersionedQuestions(
 
 export const randomizationService = {
   generateVersions,
+  generateVersionsForQuestions,
   getAnswerKey,
   getAllAnswerKeys,
   getVersionedQuestion,

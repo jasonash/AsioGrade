@@ -11,7 +11,12 @@ import type {
 } from '../../../shared/types'
 import type { ServiceResult } from '../../../shared/types/common.types'
 import type { DOKLevel } from '../../../shared/types/roster.types'
-import type { DOKVariantGenerationResult } from '../../../shared/types/ai.types'
+import type {
+  DOKVariantGenerationResult,
+  BatchVariantRequest,
+  BatchGenerationProgress,
+  BatchVariantResult
+} from '../../../shared/types/ai.types'
 
 interface AssessmentState {
   // State
@@ -21,6 +26,8 @@ interface AssessmentState {
   loading: boolean
   generatingVariant: boolean
   generatingVersions: boolean
+  batchGenerating: boolean
+  batchProgress: BatchGenerationProgress | null
   error: string | null
 
   // Actions
@@ -43,6 +50,7 @@ interface AssessmentState {
   updateVariantQuestion: (variantId: string, question: MultipleChoiceQuestion) => Promise<boolean>
   generateVersions: (assessmentId: string, courseId: string) => Promise<AssessmentVersion[] | null>
   clearVersions: (assessmentId: string, courseId: string) => Promise<boolean>
+  generateBatchVariants: (request: BatchVariantRequest) => Promise<BatchVariantResult | null>
   setCurrentAssessment: (assessment: Assessment | null) => void
   clearError: () => void
   clearAssessments: () => void
@@ -56,6 +64,8 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
   loading: false,
   generatingVariant: false,
   generatingVersions: false,
+  batchGenerating: false,
+  batchProgress: null,
   error: null,
 
   // Actions
@@ -446,6 +456,43 @@ export const useAssessmentStore = create<AssessmentState>((set, get) => ({
       const message = error instanceof Error ? error.message : 'Failed to clear versions'
       set({ error: message, loading: false })
       return false
+    }
+  },
+
+  generateBatchVariants: async (request: BatchVariantRequest) => {
+    set({ batchGenerating: true, batchProgress: null, error: null })
+
+    // Set up progress listener
+    const unsubscribe = window.electronAPI.on(
+      'ai:batchVariantProgress',
+      (progress: unknown) => {
+        set({ batchProgress: progress as BatchGenerationProgress })
+      }
+    )
+
+    try {
+      const result = await window.electronAPI.invoke<ServiceResult<BatchVariantResult>>(
+        'ai:generateBatchVariants',
+        request
+      )
+
+      if (result.success) {
+        set({
+          currentAssessment: result.data.assessment,
+          batchGenerating: false,
+          batchProgress: null
+        })
+        return result.data
+      } else {
+        set({ error: result.error, batchGenerating: false, batchProgress: null })
+        return null
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Batch generation failed'
+      set({ error: message, batchGenerating: false, batchProgress: null })
+      return null
+    } finally {
+      unsubscribe()
     }
   }
 }))

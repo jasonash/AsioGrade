@@ -42,8 +42,12 @@ import type {
   MaterialImportRequest,
   VariantGenerationRequest,
   FillInBlankConversionRequest,
-  DOKVariantGenerationRequest
+  DOKVariantGenerationRequest,
+  BatchVariantRequest,
+  BatchGenerationProgress,
+  BatchVariantResult
 } from '../../shared/types/ai.types'
+import type { LLMUsage } from '../../shared/types/llm.types'
 
 /**
  * Register all IPC handlers for the main process
@@ -1129,6 +1133,226 @@ function registerAIHandlers(): void {
     }
   )
 
+  // Generate batch DOK variants with optional A/B/C/D versions
+  ipcMain.handle('ai:generateBatchVariants', async (event, request: BatchVariantRequest) => {
+    const { sender } = event
+
+    // Helper to send progress events
+    const sendProgress = (progress: BatchGenerationProgress): void => {
+      sender.send('ai:batchVariantProgress', progress)
+    }
+
+    try {
+      // Fetch the assessment
+      sendProgress({
+        stage: 'preparing',
+        currentItem: 0,
+        totalItems: 0,
+        message: 'Loading assessment...'
+      })
+
+      const assessmentResult = await driveService.getAssessment(request.assessmentId)
+      if (!assessmentResult.success || !assessmentResult.data) {
+        return { success: false, error: 'Assessment not found' }
+      }
+      const assessment = assessmentResult.data
+
+      // Fetch standards text for the prompt
+      const standardsResult = await driveService.getAllStandardsForCourse(request.courseId)
+      if (!standardsResult.success) {
+        return { success: false, error: 'Failed to load standards' }
+      }
+      const standardsText = buildStandardsText(standardsResult.data, request.standardRefs)
+
+      // Calculate total steps
+      const variantsToGenerate = request.variants.filter((v) => v.regenerate !== false)
+      const existingVariantsNeedingVersions = request.addVersionsToExisting
+        ? (assessment.variants ?? []).filter(
+            (v) =>
+              !v.versions?.length && !request.variants.some((rv) => rv.dokLevel === v.dokLevel)
+          )
+        : []
+
+      let totalSteps = variantsToGenerate.length // AI generation for each variant
+      if (request.generateVersions) {
+        totalSteps += variantsToGenerate.length // Version generation for new variants
+        totalSteps += existingVariantsNeedingVersions.length // Versions for existing variants
+        totalSteps += 1 // Base assessment versions
+      }
+      totalSteps += 1 // Saving step
+
+      let currentStep = 0
+      const generatedVariants: import('../../shared/types').AssessmentVariant[] = []
+      const errors: Array<{ dokLevel: import('../../shared/types').DOKLevel; error: string }> = []
+      let totalUsage: LLMUsage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 }
+
+      // Generate each DOK variant
+      for (const variantConfig of variantsToGenerate) {
+        currentStep++
+        sendProgress({
+          stage: 'generating_variant',
+          currentItem: currentStep,
+          totalItems: totalSteps,
+          message: `Generating DOK ${variantConfig.dokLevel} variant...`,
+          dokLevel: variantConfig.dokLevel
+        })
+
+        try {
+          const variantResult = await aiService.generateDOKVariant(
+            {
+              assessmentId: request.assessmentId,
+              courseId: request.courseId,
+              targetDOK: variantConfig.dokLevel,
+              strategy: variantConfig.strategy,
+              standardRefs: request.standardRefs,
+              gradeLevel: request.gradeLevel,
+              subject: request.subject
+            },
+            assessment,
+            standardsText
+          )
+
+          if (!variantResult.success) {
+            errors.push({
+              dokLevel: variantConfig.dokLevel,
+              error: variantResult.error
+            })
+            continue
+          }
+
+          let variant = variantResult.data.variant
+
+          // Accumulate usage
+          totalUsage = {
+            inputTokens: totalUsage.inputTokens + variantResult.data.usage.inputTokens,
+            outputTokens: totalUsage.outputTokens + variantResult.data.usage.outputTokens,
+            totalTokens: totalUsage.totalTokens + variantResult.data.usage.totalTokens
+          }
+
+          // Generate versions for this variant if requested
+          if (request.generateVersions && variant.questions.length > 0) {
+            currentStep++
+            sendProgress({
+              stage: 'generating_versions',
+              currentItem: currentStep,
+              totalItems: totalSteps,
+              message: `Creating A/B/C/D versions for DOK ${variantConfig.dokLevel}...`,
+              dokLevel: variantConfig.dokLevel
+            })
+
+            const variantVersions = randomizationService.generateVersionsForQuestions(
+              variant.questions
+            )
+            variant = { ...variant, versions: variantVersions }
+          }
+
+          generatedVariants.push(variant)
+        } catch (error) {
+          errors.push({
+            dokLevel: variantConfig.dokLevel,
+            error: error instanceof Error ? error.message : 'Generation failed'
+          })
+        }
+      }
+
+      // Add versions to existing variants that don't have them
+      const updatedExistingVariants: import('../../shared/types').AssessmentVariant[] = []
+      if (request.generateVersions && request.addVersionsToExisting) {
+        for (const existingVariant of existingVariantsNeedingVersions) {
+          currentStep++
+          sendProgress({
+            stage: 'generating_versions',
+            currentItem: currentStep,
+            totalItems: totalSteps,
+            message: `Creating A/B/C/D versions for existing DOK ${existingVariant.dokLevel}...`,
+            dokLevel: existingVariant.dokLevel
+          })
+
+          if (existingVariant.questions.length > 0) {
+            const versions = randomizationService.generateVersionsForQuestions(
+              existingVariant.questions
+            )
+            updatedExistingVariants.push({ ...existingVariant, versions })
+          } else {
+            updatedExistingVariants.push(existingVariant)
+          }
+        }
+      }
+
+      // Generate versions for base assessment if requested
+      let baseVersions: import('../../shared/types').AssessmentVersion[] | undefined
+      if (request.generateVersions && assessment.questions.length > 0) {
+        currentStep++
+        sendProgress({
+          stage: 'generating_versions',
+          currentItem: currentStep,
+          totalItems: totalSteps,
+          message: 'Creating A/B/C/D versions for base assessment...'
+        })
+
+        baseVersions = randomizationService.generateVersions(assessment)
+      }
+
+      // Save everything
+      currentStep++
+      sendProgress({
+        stage: 'saving',
+        currentItem: currentStep,
+        totalItems: totalSteps,
+        message: 'Saving all variants and versions...'
+      })
+
+      // Merge variants: keep existing that weren't regenerated, add new/updated ones
+      const existingToKeep = (assessment.variants ?? []).filter(
+        (v) =>
+          !generatedVariants.some((gv) => gv.dokLevel === v.dokLevel) &&
+          !updatedExistingVariants.some((uv) => uv.dokLevel === v.dokLevel)
+      )
+      const finalVariants = [...existingToKeep, ...updatedExistingVariants, ...generatedVariants]
+
+      const updateResult = await driveService.updateAssessment({
+        id: request.assessmentId,
+        courseId: request.courseId,
+        variants: finalVariants,
+        versions: baseVersions ?? assessment.versions
+      })
+
+      if (!updateResult.success) {
+        return { success: false, error: updateResult.error }
+      }
+
+      // Send complete
+      sendProgress({
+        stage: 'complete',
+        currentItem: totalSteps,
+        totalItems: totalSteps,
+        message:
+          errors.length > 0
+            ? `Completed with ${errors.length} error(s)`
+            : 'All variants and versions generated successfully!'
+      })
+
+      const result: BatchVariantResult = {
+        assessment: updateResult.data,
+        generatedVariants,
+        baseVersions,
+        errors: errors.length > 0 ? errors : undefined,
+        totalUsage
+      }
+
+      return { success: true, data: result }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Batch generation failed'
+      sendProgress({
+        stage: 'error',
+        currentItem: 0,
+        totalItems: 0,
+        message,
+        error: message
+      })
+      return { success: false, error: message }
+    }
+  })
 }
 
 function registerFileHandlers(): void {
