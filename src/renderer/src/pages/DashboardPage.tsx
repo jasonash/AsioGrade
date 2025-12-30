@@ -192,8 +192,20 @@ export function DashboardPage({ onOpenCreateModal }: DashboardPageProps): ReactE
         {!coursesLoading && !coursesError && courses.length === 0 && (
           <Card sx={{ textAlign: 'center', py: 4 }}>
             <CardContent>
-              <Box sx={{ width: 48, height: 48, mx: 'auto', mb: 2, borderRadius: '50%', bgcolor: 'primary.light', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <MenuBookIcon sx={{ fontSize: 24, color: 'primary.main' }} />
+              <Box
+                sx={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 2,
+                  bgcolor: 'rgba(229, 168, 13, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mx: 'auto',
+                  mb: 2
+                }}
+              >
+                <MenuBookIcon sx={{ fontSize: 28, color: 'primary.main' }} />
               </Box>
               <Typography fontWeight={500} gutterBottom>No courses yet</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

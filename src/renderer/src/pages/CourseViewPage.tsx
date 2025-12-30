@@ -161,8 +161,20 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
         {/* Empty state */}
         {!loading && !error && sections.length === 0 && (
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-            <Box sx={{ width: 48, height: 48, mx: 'auto', mb: 2, borderRadius: '50%', bgcolor: 'primary.light', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <PeopleIcon sx={{ fontSize: 24, color: 'primary.main' }} />
+            <Box
+              sx={{
+                width: 56,
+                height: 56,
+                borderRadius: 2,
+                bgcolor: 'rgba(229, 168, 13, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                mx: 'auto',
+                mb: 2
+              }}
+            >
+              <PeopleIcon sx={{ fontSize: 28, color: 'primary.main' }} />
             </Box>
             <Typography fontWeight={500} gutterBottom>No sections yet</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -205,8 +217,20 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
         {/* Empty state */}
         {standardsSummaries.length === 0 && (
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-            <Box sx={{ width: 48, height: 48, mx: 'auto', mb: 2, borderRadius: '50%', bgcolor: 'primary.light', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <MenuBookIcon sx={{ fontSize: 24, color: 'primary.main' }} />
+            <Box
+              sx={{
+                width: 56,
+                height: 56,
+                borderRadius: 2,
+                bgcolor: 'rgba(229, 168, 13, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                mx: 'auto',
+                mb: 2
+              }}
+            >
+              <MenuBookIcon sx={{ fontSize: 28, color: 'primary.main' }} />
             </Box>
             <Typography fontWeight={500} gutterBottom>No standards imported</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -289,8 +313,20 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
         {/* Empty state */}
         {!assessmentsLoading && !assessmentsError && assessments.length === 0 && (
           <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-            <Box sx={{ width: 48, height: 48, mx: 'auto', mb: 2, borderRadius: '50%', bgcolor: 'primary.light', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AssignmentIcon sx={{ fontSize: 24, color: 'primary.main' }} />
+            <Box
+              sx={{
+                width: 56,
+                height: 56,
+                borderRadius: 2,
+                bgcolor: 'rgba(229, 168, 13, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                mx: 'auto',
+                mb: 2
+              }}
+            >
+              <AssignmentIcon sx={{ fontSize: 28, color: 'primary.main' }} />
             </Box>
             <Typography fontWeight={500} gutterBottom>No assessments yet</Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
