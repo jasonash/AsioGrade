@@ -32,7 +32,7 @@
     "electron",
     "ai"
   ],
-  "author": "",
+  "author": "Jason Ash <jason@jasonash.com>",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/jasonash/AsioGrade/issues"
