@@ -54,12 +54,16 @@ class AIService {
    * @param standardsText - Formatted standards text
    * @param sender - Electron WebContents for IPC
    * @param materialContext - Optional extracted text from course materials
+   * @param appPromptSupplement - Optional global app-level prompt supplement
+   * @param coursePromptSupplement - Optional course-level prompt supplement
    */
   async generateQuestionsWithStream(
     request: QuestionGenerationRequest,
     standardsText: string,
     sender: Electron.WebContents,
-    materialContext?: string
+    materialContext?: string,
+    appPromptSupplement?: string,
+    coursePromptSupplement?: string
   ): Promise<ServiceResult<GeneratedQuestion[]>> {
     try {
       // Send start event
@@ -69,8 +73,14 @@ class AIService {
       }
       sender.send('ai:questionStream', startEvent)
 
-      // Build the prompt with optional material context
-      const prompt = buildQuestionGenerationPrompt(request, standardsText, materialContext)
+      // Build the prompt with optional context and prompt supplements
+      const prompt = buildQuestionGenerationPrompt(
+        request,
+        standardsText,
+        materialContext,
+        appPromptSupplement,
+        coursePromptSupplement
+      )
 
       // Stream the response
       let fullContent = ''
@@ -148,14 +158,24 @@ class AIService {
    * @param request - The question generation request
    * @param standardsText - Formatted standards text
    * @param materialContext - Optional extracted text from course materials
+   * @param appPromptSupplement - Optional global app-level prompt supplement
+   * @param coursePromptSupplement - Optional course-level prompt supplement
    */
   async generateQuestions(
     request: QuestionGenerationRequest,
     standardsText: string,
-    materialContext?: string
+    materialContext?: string,
+    appPromptSupplement?: string,
+    coursePromptSupplement?: string
   ): Promise<ServiceResult<GeneratedQuestion[]>> {
     try {
-      const prompt = buildQuestionGenerationPrompt(request, standardsText, materialContext)
+      const prompt = buildQuestionGenerationPrompt(
+        request,
+        standardsText,
+        materialContext,
+        appPromptSupplement,
+        coursePromptSupplement
+      )
 
       const result = await llmService.complete({
         prompt,

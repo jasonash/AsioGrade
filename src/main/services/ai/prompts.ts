@@ -96,11 +96,15 @@ GUIDELINES FOR VARIANT GENERATION:
  * @param request - The question generation request
  * @param standardsText - The formatted standards text
  * @param materialContext - Optional extracted text from course materials
+ * @param appPromptSupplement - Optional global app-level prompt supplement
+ * @param coursePromptSupplement - Optional course-level prompt supplement
  */
 export function buildQuestionGenerationPrompt(
   request: QuestionGenerationRequest,
   standardsText: string,
-  materialContext?: string
+  materialContext?: string,
+  appPromptSupplement?: string,
+  coursePromptSupplement?: string
 ): string {
   const difficultyNote = request.difficulty === 'mixed'
     ? 'Include a mix of easy, medium, and hard questions'
@@ -123,17 +127,33 @@ IMPORTANT: Base questions on the content from the course materials above when ap
 Questions should assess understanding of the material while aligning to the standards.\n`
     : ''
 
-  // Build custom prompt section if provided
-  const customPromptSection = request.customPrompt?.trim()
-    ? `\nTEACHER INSTRUCTIONS:
-${request.customPrompt.trim()}\n`
+  // Build instruction sections for each level (app → course → request)
+  const instructionSections: string[] = []
+
+  if (appPromptSupplement?.trim()) {
+    instructionSections.push(`GLOBAL INSTRUCTIONS (applies to all assessments):
+${appPromptSupplement.trim()}`)
+  }
+
+  if (coursePromptSupplement?.trim()) {
+    instructionSections.push(`COURSE INSTRUCTIONS (applies to this course):
+${coursePromptSupplement.trim()}`)
+  }
+
+  if (request.customPrompt?.trim()) {
+    instructionSections.push(`TEACHER INSTRUCTIONS (for this generation):
+${request.customPrompt.trim()}`)
+  }
+
+  const instructionsSection = instructionSections.length > 0
+    ? `\n${instructionSections.join('\n\n')}\n`
     : ''
 
   return `Generate ${request.questionCount} multiple choice questions for grade ${request.gradeLevel} ${request.subject}.
 
 STANDARDS TO ASSESS:
 ${standardsText}
-${materialSection}${customPromptSection}
+${materialSection}${instructionsSection}
 REQUIREMENTS:
 - Question types: ${request.questionTypes.join(', ')}
 - ${difficultyNote}${focusNote}${avoidNote}

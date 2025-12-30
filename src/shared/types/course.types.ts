@@ -18,6 +18,9 @@ export interface Course extends Entity {
 
   // Drive folder ID for this course
   driveFolderId?: string
+
+  // AI prompt supplement for question generation (course-level)
+  aiPromptSupplement?: string
 }
 
 // Summary for listing courses (lighter weight)
@@ -48,4 +51,5 @@ export interface UpdateCourseInput {
   subject?: string
   gradeLevel?: string
   description?: string
+  aiPromptSupplement?: string
 }

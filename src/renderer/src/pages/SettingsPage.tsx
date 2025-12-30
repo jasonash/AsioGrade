@@ -22,6 +22,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Chip from '@mui/material/Chip'
 import SettingsIcon from '@mui/icons-material/Settings'
 import MemoryIcon from '@mui/icons-material/Memory'
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
 import PersonIcon from '@mui/icons-material/Person'
 import InfoIcon from '@mui/icons-material/Info'
 import VisibilityIcon from '@mui/icons-material/Visibility'
@@ -35,7 +36,7 @@ import { getProviderName, getModelsForProvider } from '../../../shared/types/llm
 import { useAuthStore } from '../stores'
 import { APIKeyHelpModal } from '../components/settings'
 
-type SettingsSection = 'general' | 'ai-providers' | 'google-account' | 'about'
+type SettingsSection = 'general' | 'ai-generation' | 'ai-providers' | 'google-account' | 'about'
 
 interface ProviderCardState {
   apiKey: string
@@ -46,6 +47,7 @@ interface ProviderCardState {
 
 const sectionIcons = {
   general: SettingsIcon,
+  'ai-generation': AutoAwesomeIcon,
   'ai-providers': MemoryIcon,
   'google-account': PersonIcon,
   about: InfoIcon
@@ -53,6 +55,7 @@ const sectionIcons = {
 
 const sectionLabels = {
   general: 'General',
+  'ai-generation': 'AI Generation',
   'ai-providers': 'AI Providers',
   'google-account': 'Google Account',
   about: 'About'
@@ -66,6 +69,7 @@ export function SettingsPage(): ReactElement {
     sidebarExpanded: boolean
     autoSyncOnStart: boolean
     showSyncStatus: boolean
+    aiPromptSupplement: string
   } | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -97,6 +101,7 @@ export function SettingsPage(): ReactElement {
               sidebarExpanded: boolean
               autoSyncOnStart: boolean
               showSyncStatus: boolean
+              aiPromptSupplement: string
             }
           }>('storage:get', 'settings')
         ])
@@ -587,6 +592,77 @@ export function SettingsPage(): ReactElement {
     </Box>
   )
 
+  const handleAIPromptSupplementChange = useCallback(
+    async (value: string) => {
+      // Update local state immediately for responsiveness
+      setSettings((prev) => (prev ? { ...prev, aiPromptSupplement: value } : null))
+    },
+    []
+  )
+
+  const handleAIPromptSupplementSave = useCallback(async () => {
+    if (!settings) return
+    try {
+      await window.electronAPI.invoke('storage:set', 'settings', {
+        aiPromptSupplement: settings.aiPromptSupplement
+      })
+    } catch (error) {
+      console.error('Failed to save AI prompt supplement:', error)
+    }
+  }, [settings])
+
+  const renderAIGenerationSection = (): ReactElement => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box>
+        <Typography variant="h6" fontWeight={600} gutterBottom>
+          AI Generation
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          Configure default instructions for AI-powered question generation.
+        </Typography>
+      </Box>
+
+      <Paper variant="outlined" sx={{ p: 2.5 }}>
+        <Typography fontWeight={500} gutterBottom>
+          Global Prompt Supplement
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          These instructions will be included in ALL AI-generated questions across the entire app.
+          Use this for general preferences that apply to every assessment.
+        </Typography>
+        <TextField
+          multiline
+          rows={4}
+          fullWidth
+          placeholder="e.g., Always use simple vocabulary appropriate for English language learners. Avoid culturally specific references."
+          value={settings?.aiPromptSupplement ?? ''}
+          onChange={(e) => handleAIPromptSupplementChange(e.target.value)}
+          onBlur={handleAIPromptSupplementSave}
+          slotProps={{
+            input: {
+              sx: { fontSize: '0.875rem' }
+            }
+          }}
+        />
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+          <Typography variant="caption" color="text.secondary">
+            Changes are saved automatically
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {settings?.aiPromptSupplement?.length ?? 0}/1000
+          </Typography>
+        </Box>
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: 2.5, bgcolor: 'action.hover' }}>
+        <Typography variant="body2" color="text.secondary">
+          <strong>Tip:</strong> You can also set course-specific instructions on each course&apos;s settings page.
+          The instruction hierarchy is: Global (this setting) → Course → Individual generation request.
+        </Typography>
+      </Paper>
+    </Box>
+  )
+
   const renderGoogleAccountSection = (): ReactElement => (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
       <Box>
@@ -684,6 +760,8 @@ export function SettingsPage(): ReactElement {
     switch (activeSection) {
       case 'general':
         return renderGeneralSection()
+      case 'ai-generation':
+        return renderAIGenerationSection()
       case 'ai-providers':
         return renderAIProvidersSection()
       case 'google-account':

@@ -992,7 +992,21 @@ function registerAIHandlers(): void {
           }
         }
 
-        return aiService.generateQuestions(request, standardsText, materialContext)
+        // Fetch prompt supplements (app-level and course-level)
+        const appPromptSupplement = storageService.getAIPromptSupplement()
+        let coursePromptSupplement: string | undefined
+        const courseResult = await driveService.getCourse(request.courseId)
+        if (courseResult.success && courseResult.data.aiPromptSupplement) {
+          coursePromptSupplement = courseResult.data.aiPromptSupplement
+        }
+
+        return aiService.generateQuestions(
+          request,
+          standardsText,
+          materialContext,
+          appPromptSupplement,
+          coursePromptSupplement
+        )
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Generation failed'
         return { success: false, error: message }
@@ -1021,7 +1035,22 @@ function registerAIHandlers(): void {
           }
         }
 
-        return aiService.generateQuestionsWithStream(request, standardsText, event.sender, materialContext)
+        // Fetch prompt supplements (app-level and course-level)
+        const appPromptSupplement = storageService.getAIPromptSupplement()
+        let coursePromptSupplement: string | undefined
+        const courseResult = await driveService.getCourse(request.courseId)
+        if (courseResult.success && courseResult.data.aiPromptSupplement) {
+          coursePromptSupplement = courseResult.data.aiPromptSupplement
+        }
+
+        return aiService.generateQuestionsWithStream(
+          request,
+          standardsText,
+          event.sender,
+          materialContext,
+          appPromptSupplement,
+          coursePromptSupplement
+        )
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Generation failed'
         return { success: false, error: message }

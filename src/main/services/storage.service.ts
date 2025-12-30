@@ -24,6 +24,7 @@ interface StoreSchema {
     sidebarExpanded: boolean
     autoSyncOnStart: boolean
     showSyncStatus: boolean
+    aiPromptSupplement: string // Global AI prompt supplement for all question generation
   }
 
   // OAuth authentication (encrypted storage)
@@ -94,7 +95,8 @@ const defaults: StoreSchema = {
     theme: 'dark',
     sidebarExpanded: true,
     autoSyncOnStart: true,
-    showSyncStatus: true
+    showSyncStatus: true,
+    aiPromptSupplement: ''
   },
   auth: {
     tokens: null,
@@ -155,6 +157,15 @@ class StorageService {
   updateSettings(updates: Partial<StoreSchema['settings']>): void {
     const current = this.getSettings()
     this.store.set('settings', { ...current, ...updates })
+  }
+
+  // AI prompt supplement helpers
+  getAIPromptSupplement(): string {
+    return this.getSettings().aiPromptSupplement
+  }
+
+  setAIPromptSupplement(supplement: string): void {
+    this.updateSettings({ aiPromptSupplement: supplement })
   }
 
   // Auth helpers

@@ -669,6 +669,10 @@ class DriveService {
         subject: input.subject ?? existing.subject,
         gradeLevel: input.gradeLevel ?? existing.gradeLevel,
         description: input.description ?? existing.description,
+        aiPromptSupplement:
+          input.aiPromptSupplement !== undefined
+            ? input.aiPromptSupplement
+            : existing.aiPromptSupplement,
         updatedAt: new Date().toISOString(),
         version: existing.version + 1
       }
