@@ -482,9 +482,12 @@ function registerDriveHandlers(): void {
   })
 
   // Get a specific assessment
-  ipcMain.handle('drive:getAssessment', async (_event, assessmentId: string) => {
-    return driveService.getAssessment(assessmentId)
-  })
+  ipcMain.handle(
+    'drive:getAssessment',
+    async (_event, assessmentId: string, forceRefresh?: boolean) => {
+      return driveService.getAssessment(assessmentId, forceRefresh)
+    }
+  )
 
   // Create a new assessment
   ipcMain.handle('drive:createAssessment', async (_event, input: CreateAssessmentInput) => {
@@ -736,11 +739,13 @@ function registerPDFHandlers(): void {
 
       // Build student info list (only active students)
       // Include DOK level (from roster or override) and assigned version
+      // Prefer studentAssignments from request (fresh data) over assignment (may be cached)
+      const studentAssignmentsSource = request.studentAssignments ?? assignment.studentAssignments
       const students: ScantronStudentInfo[] = roster.students
         .filter((s) => s.active)
         .map((s) => {
           // Find this student's assignment to get DOK override and version
-          const studentAssignment = assignment.studentAssignments.find(
+          const studentAssignment = studentAssignmentsSource.find(
             (sa) => sa.studentId === s.id
           )
           // Use DOK override if set, otherwise use roster DOK
@@ -802,6 +807,7 @@ function registerPDFHandlers(): void {
         assignmentId: string
         sectionId: string
         options: ScantronOptions
+        studentAssignments?: import('../../shared/types').StudentAssignment[]
       }
     ) => {
       try {
@@ -847,11 +853,13 @@ function registerPDFHandlers(): void {
 
         // Build student info list (only active students)
         // Include DOK level (from roster or override) and assigned version
+        // Prefer studentAssignments from request (fresh data) over assignment (may be cached)
+        const studentAssignmentsSource = request.studentAssignments ?? assignment.studentAssignments
         const students: ScantronStudentInfo[] = roster.students
           .filter((s) => s.active)
           .map((s) => {
             // Find this student's assignment to get DOK override and version
-            const studentAssignment = assignment.studentAssignments.find(
+            const studentAssignment = studentAssignmentsSource.find(
               (sa) => sa.studentId === s.id
             )
             // Use DOK override if set, otherwise use roster DOK
@@ -907,6 +915,158 @@ function registerPDFHandlers(): void {
         return { success: false, error: result.error ?? 'Failed to generate quiz PDF' }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to generate quiz PDF'
+        return { success: false, error: message }
+      }
+    }
+  )
+
+  // Generate full test PDF (questions + scantron per student)
+  ipcMain.handle(
+    'pdf:exportTest',
+    async (
+      _event,
+      request: {
+        assignmentId: string
+        sectionId: string
+        options: ScantronOptions
+        studentAssignments?: import('../../shared/types').StudentAssignment[]
+      }
+    ) => {
+      try {
+        // Get assignment
+        const assignmentResult = await driveService.getAssignment(request.assignmentId)
+        if (!assignmentResult.success) {
+          return { success: false, error: assignmentResult.error }
+        }
+        const assignment = assignmentResult.data
+
+        // Get assessment (for questions, variants, versions)
+        const assessmentResult = await driveService.getAssessment(assignment.assessmentId)
+        if (!assessmentResult.success) {
+          return { success: false, error: assessmentResult.error }
+        }
+        const assessment = assessmentResult.data
+
+        // Get section for name
+        const sectionResult = await driveService.getSection(request.sectionId)
+        if (!sectionResult.success) {
+          return { success: false, error: sectionResult.error }
+        }
+        const section = sectionResult.data
+
+        // Get course for name
+        const courseResult = await driveService.getCourse(section.courseId)
+        if (!courseResult.success) {
+          return { success: false, error: courseResult.error }
+        }
+        const course = courseResult.data
+
+        // Get roster for student info
+        const rosterResult = await driveService.getRoster(request.sectionId)
+        if (!rosterResult.success) {
+          return { success: false, error: rosterResult.error }
+        }
+        const roster = rosterResult.data
+
+        // Prefer studentAssignments from request (fresh data) over assignment (may be cached)
+        const studentAssignmentsSource = request.studentAssignments ?? assignment.studentAssignments
+
+        // Build student info list (only active students)
+        const students: ScantronStudentInfo[] = roster.students
+          .filter((s) => s.active)
+          .map((s) => {
+            const studentAssignment = studentAssignmentsSource.find(
+              (sa) => sa.studentId === s.id
+            )
+            const dokLevel = studentAssignment?.dokOverride ?? s.dokLevel
+            const versionId = studentAssignment?.versionId ?? 'A'
+
+            return {
+              studentId: s.id,
+              firstName: s.firstName,
+              lastName: s.lastName,
+              studentNumber: s.studentNumber,
+              dokLevel,
+              versionId
+            }
+          })
+
+        if (students.length === 0) {
+          return { success: false, error: 'No active students in section' }
+        }
+
+        // Build versioned questions for each student based on their DOK level and version
+        const questionsPerStudent = new Map<string, import('../../shared/types').Question[]>()
+
+        for (const student of students) {
+          let questions: import('../../shared/types').Question[]
+
+          // Check if student should get a DOK variant (DOK 2 is the base)
+          if (student.dokLevel !== 2 && assessment.variants?.length) {
+            const variant = assessment.variants.find((v) => v.dokLevel === student.dokLevel)
+            if (variant) {
+              // Get version from the variant's versions
+              if (variant.versions?.length && student.versionId) {
+                const version = variant.versions.find((v) => v.versionId === student.versionId)
+                if (version) {
+                  questions = randomizationService.getVersionedQuestionsFromArray(
+                    variant.questions,
+                    version
+                  )
+                } else {
+                  questions = variant.questions
+                }
+              } else {
+                questions = variant.questions
+              }
+            } else {
+              // Fallback to base assessment if variant doesn't exist
+              questions = assessment.questions
+            }
+          } else {
+            // Use base assessment with version shuffling if applicable
+            if (assessment.versions?.length && student.versionId) {
+              const version = assessment.versions.find((v) => v.versionId === student.versionId)
+              if (version) {
+                questions = randomizationService.getVersionedQuestions(assessment, version)
+              } else {
+                questions = assessment.questions
+              }
+            } else {
+              questions = assessment.questions
+            }
+          }
+
+          questionsPerStudent.set(student.studentId, questions)
+        }
+
+        // Generate test PDF
+        const result = await pdfService.generateTestPDF(
+          students,
+          request.assignmentId,
+          assessment.title,
+          course.name,
+          section.name,
+          questionsPerStudent,
+          request.options
+        )
+
+        // Convert Buffer to base64 for IPC transfer
+        if (result.success && result.pdfBuffer) {
+          return {
+            success: true,
+            data: {
+              pdfBase64: result.pdfBuffer.toString('base64'),
+              studentCount: result.studentCount,
+              pageCount: result.pageCount,
+              generatedAt: result.generatedAt
+            }
+          }
+        }
+
+        return { success: false, error: result.error ?? 'Failed to generate test PDF' }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to generate test PDF'
         return { success: false, error: message }
       }
     }

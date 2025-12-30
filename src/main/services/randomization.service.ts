@@ -184,11 +184,28 @@ export function getVersionedQuestions(
     .map((q) => getVersionedQuestion(q, version))
 }
 
+/**
+ * Get versioned questions from a raw question array (for DOK variants)
+ * Same as getVersionedQuestions but takes a question array instead of Assessment
+ */
+export function getVersionedQuestionsFromArray(
+  questions: Question[],
+  version: AssessmentVersion
+): Question[] {
+  const questionMap = new Map(questions.map((q) => [q.id, q]))
+
+  return version.questionOrder
+    .map((id) => questionMap.get(id))
+    .filter((q): q is Question => q !== undefined)
+    .map((q) => getVersionedQuestion(q, version))
+}
+
 export const randomizationService = {
   generateVersions,
   generateVersionsForQuestions,
   getAnswerKey,
   getAllAnswerKeys,
   getVersionedQuestion,
-  getVersionedQuestions
+  getVersionedQuestions,
+  getVersionedQuestionsFromArray
 }

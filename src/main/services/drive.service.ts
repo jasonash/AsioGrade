@@ -1908,13 +1908,20 @@ class DriveService {
 
   /**
    * Get a specific assessment by ID
+   * @param assessmentId - The assessment ID
+   * @param forceRefresh - If true, bypass cache and fetch fresh data from Drive
    */
-  async getAssessment(assessmentId: string): Promise<ServiceResult<Assessment>> {
+  async getAssessment(
+    assessmentId: string,
+    forceRefresh = false
+  ): Promise<ServiceResult<Assessment>> {
     try {
-      // Check cache first
-      const cached = this.metadataCache.assessments[assessmentId]
-      if (this.isCacheValid(cached)) {
-        return { success: true, data: cached.data }
+      // Check cache first (unless forcing refresh)
+      if (!forceRefresh) {
+        const cached = this.metadataCache.assessments[assessmentId]
+        if (this.isCacheValid(cached)) {
+          return { success: true, data: cached.data }
+        }
       }
 
       const drive = await this.getDrive()

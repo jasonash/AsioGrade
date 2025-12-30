@@ -155,7 +155,7 @@ export function QuestionList({
 
                   {/* Choices */}
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, mb: 1.5 }}>
-                    {question.choices.map((choice) => (
+                    {question.choices.map((choice, choiceIndex) => (
                       <Box
                         key={choice.id}
                         sx={{
@@ -173,7 +173,7 @@ export function QuestionList({
                           <CheckCircleIcon sx={{ fontSize: 16 }} />
                         )}
                         <Typography variant="body2" fontWeight={500}>
-                          {choice.id.toUpperCase()}.
+                          {String.fromCharCode(65 + choiceIndex)}.
                         </Typography>
                         <Typography variant="body2">{choice.text}</Typography>
                       </Box>

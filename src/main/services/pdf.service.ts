@@ -42,6 +42,13 @@ const QUIZ_BUBBLE_GRID_HEIGHT = 85 // Height reserved for bubble grid at bottom 
 const QUIZ_BUBBLE_RADIUS = 7
 const QUIZ_BUBBLE_SPACING = 26
 
+// Test PDF layout constants (multi-page tests with questions + scantron at end)
+const TEST_MARGIN = 50
+const TEST_HEADER_HEIGHT = 70 // Space for header on page 1
+const TEST_FOOTER_HEIGHT = 30 // Space for footer on pages 2+
+const TEST_QUESTION_SPACING = 15 // Space between questions
+const TEST_CHOICE_INDENT = 25 // Indent for answer choices
+
 class PDFService {
   /**
    * Generate scantron PDF for an assignment
@@ -636,12 +643,12 @@ class PDFService {
     }
     y += 18
 
-    // Second row: Date and Version
+    // Second row: Date and Identifier (DOK + Version, e.g., "4B")
     doc.font('Helvetica-Bold').text('Date: ', leftColX, y, { continued: true })
     doc.font('Helvetica').text(date)
 
-    doc.font('Helvetica-Bold').text('Version: ', rightColX, y, { continued: true })
-    doc.font('Helvetica').text('A')
+    const identifier = `${student.dokLevel}${student.versionId}`
+    doc.font('Helvetica').text(identifier, rightColX, y)
     y += 18
 
     // Divider line
@@ -818,6 +825,355 @@ class PDFService {
           .lineTo(separatorX, startY + QUESTIONS_PER_COLUMN * ROW_HEIGHT)
           .stroke('#cccccc')
       }
+    }
+  }
+
+  // ============================================================
+  // Test PDF Generation (questions + scantron per student)
+  // ============================================================
+
+  /**
+   * Generate full test PDF with questions and scantron for each student
+   * Questions are paginated (never split across pages), scantron is the last page
+   */
+  async generateTestPDF(
+    students: ScantronStudentInfo[],
+    assignmentId: string,
+    assessmentTitle: string,
+    courseName: string,
+    sectionName: string,
+    questionsPerStudent: Map<string, Question[]>, // studentId -> their questions (versioned)
+    options: ScantronOptions
+  ): Promise<ScantronGenerationResult> {
+    try {
+      const { width, height } = this.getPageDimensions(options.paperSize)
+      const dateStr = new Date().toISOString().split('T')[0]
+
+      // Create PDF document
+      const doc = new PDFDocument({
+        size: options.paperSize === 'letter' ? 'LETTER' : 'A4',
+        margin: TEST_MARGIN,
+        bufferPages: true
+      })
+
+      // Collect PDF data in a buffer
+      const chunks: Buffer[] = []
+      doc.on('data', (chunk: Buffer) => chunks.push(chunk))
+
+      // Sort students alphabetically by last name, first name
+      const sortedStudents = [...students].sort((a, b) =>
+        `${a.lastName} ${a.firstName}`.localeCompare(`${b.lastName} ${b.firstName}`)
+      )
+
+      // Create lookup records for all students (for scantron QR codes)
+      const lookupInputs: CreateScantronLookupInput[] = sortedStudents.map((student) => ({
+        assignmentId,
+        studentId: student.studentId,
+        format: undefined, // Standard scantron format
+        dokLevel: student.dokLevel,
+        versionId: student.versionId,
+        assessmentTitle,
+        studentName: `${student.lastName}, ${student.firstName}`,
+        courseName
+      }))
+      const shortKeys = scantronLookupService.createLookupBatch(lookupInputs)
+
+      let totalPageCount = 0
+      let isFirstPage = true
+
+      // Generate pages for each student
+      for (let studentIndex = 0; studentIndex < sortedStudents.length; studentIndex++) {
+        const student = sortedStudents[studentIndex]
+        const shortKey = shortKeys[studentIndex]
+        const questions = questionsPerStudent.get(student.studentId) ?? []
+        const identifier = `${student.dokLevel}${student.versionId}` // e.g., "2A"
+
+        // Calculate which questions go on which page for this student
+        const questionPages = this.calculateTestQuestionPages(doc, questions, width, height)
+        const totalStudentPages = questionPages.length + 1 // +1 for scantron page
+
+        // Render question pages
+        for (let pageIndex = 0; pageIndex < questionPages.length; pageIndex++) {
+          if (!isFirstPage) {
+            doc.addPage()
+          }
+          isFirstPage = false
+          totalPageCount++
+
+          const pageQuestions = questionPages[pageIndex]
+          const studentPageNum = pageIndex + 1
+          const isFirstStudentPage = pageIndex === 0
+
+          if (isFirstStudentPage) {
+            // First page: draw header
+            await this.drawTestHeader(
+              doc,
+              student,
+              assessmentTitle,
+              courseName,
+              sectionName,
+              identifier,
+              dateStr,
+              width
+            )
+            // Draw questions starting after header
+            this.drawTestQuestions(doc, pageQuestions, TEST_MARGIN + TEST_HEADER_HEIGHT, width)
+          } else {
+            // Subsequent pages: draw questions from top, footer at bottom
+            this.drawTestQuestions(doc, pageQuestions, TEST_MARGIN, width)
+            this.drawTestFooter(
+              doc,
+              student,
+              identifier,
+              studentPageNum,
+              totalStudentPages,
+              width,
+              height
+            )
+          }
+        }
+
+        // Add scantron page as last page for this student
+        doc.addPage()
+        totalPageCount++
+        const qrString = scantronLookupService.formatKeyForQR(shortKey)
+        await this.generateStudentPage(
+          doc,
+          student,
+          qrString,
+          questions.length,
+          options,
+          width,
+          height,
+          dateStr,
+          assessmentTitle,
+          courseName,
+          sectionName
+        )
+      }
+
+      // Finalize PDF
+      doc.end()
+
+      // Wait for PDF to finish generating
+      return new Promise((resolve) => {
+        doc.on('end', () => {
+          const pdfBuffer = Buffer.concat(chunks)
+          resolve({
+            success: true,
+            pdfBuffer,
+            studentCount: sortedStudents.length,
+            pageCount: totalPageCount,
+            generatedAt: new Date().toISOString()
+          })
+        })
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to generate test PDF'
+      return {
+        success: false,
+        studentCount: 0,
+        pageCount: 0,
+        generatedAt: new Date().toISOString(),
+        error: message
+      }
+    }
+  }
+
+  /**
+   * Calculate which questions go on which page
+   * Ensures questions are never split across pages
+   * Adds _testIndex to each question for proper numbering
+   */
+  private calculateTestQuestionPages(
+    doc: PDFKit.PDFDocument,
+    questions: Question[],
+    pageWidth: number,
+    pageHeight: number
+  ): Array<Array<Question & { _testIndex: number }>> {
+    const pages: Array<Array<Question & { _testIndex: number }>> = []
+    let currentPage: Array<Question & { _testIndex: number }> = []
+    let currentY = TEST_MARGIN + TEST_HEADER_HEIGHT // First page starts after header
+    const contentWidth = pageWidth - 2 * TEST_MARGIN
+
+    for (let i = 0; i < questions.length; i++) {
+      const question = questions[i]
+      const questionHeight = this.measureTestQuestionHeight(doc, question, contentWidth)
+
+      // Check if question fits on current page
+      const isFirstPage = pages.length === 0 && currentPage.length === 0
+      const availableHeight = isFirstPage
+        ? pageHeight - TEST_HEADER_HEIGHT - 2 * TEST_MARGIN // First page (has header)
+        : pageHeight - TEST_FOOTER_HEIGHT - 2 * TEST_MARGIN // Subsequent pages (have footer)
+
+      if (currentY + questionHeight > TEST_MARGIN + availableHeight && currentPage.length > 0) {
+        // Start a new page
+        pages.push(currentPage)
+        currentPage = []
+        currentY = TEST_MARGIN // Subsequent pages start from top margin
+      }
+
+      // Add question with its 1-indexed test position
+      currentPage.push({ ...question, _testIndex: i + 1 })
+      currentY += questionHeight + TEST_QUESTION_SPACING
+    }
+
+    // Don't forget the last page
+    if (currentPage.length > 0) {
+      pages.push(currentPage)
+    }
+
+    return pages
+  }
+
+  /**
+   * Measure the height a question will take when rendered
+   */
+  private measureTestQuestionHeight(
+    doc: PDFKit.PDFDocument,
+    question: Question,
+    contentWidth: number
+  ): number {
+    const mcQuestion = question as MultipleChoiceQuestion
+    const textWidth = contentWidth - 25 // Account for question number
+
+    // Question text height
+    doc.font('Helvetica').fontSize(11)
+    let height = doc.heightOfString(mcQuestion.text, { width: textWidth })
+
+    // Add height for each choice (vertical layout)
+    if (mcQuestion.choices) {
+      const choiceWidth = contentWidth - TEST_CHOICE_INDENT - 20
+      doc.font('Helvetica').fontSize(10)
+      for (const choice of mcQuestion.choices) {
+        height += doc.heightOfString(choice.text, { width: choiceWidth }) + 4
+      }
+    }
+
+    return height
+  }
+
+  /**
+   * Draw test header on page 1
+   * Includes: title, course, student name, date, identifier
+   */
+  private async drawTestHeader(
+    doc: PDFKit.PDFDocument,
+    student: ScantronStudentInfo,
+    assessmentTitle: string,
+    courseName: string,
+    sectionName: string,
+    identifier: string,
+    date: string,
+    pageWidth: number
+  ): Promise<void> {
+    const contentWidth = pageWidth - 2 * TEST_MARGIN
+    let y = TEST_MARGIN
+
+    // Title (centered, bold, larger)
+    doc.font('Helvetica-Bold').fontSize(16)
+    doc.text(assessmentTitle, TEST_MARGIN, y, { width: contentWidth, align: 'center' })
+    y += 22
+
+    // Course and section (centered)
+    doc.font('Helvetica').fontSize(11)
+    doc.text(`${courseName} - ${sectionName}`, TEST_MARGIN, y, { width: contentWidth, align: 'center' })
+    y += 18
+
+    // Student info row: Name on left, Date and Identifier on right
+    doc.font('Helvetica-Bold').fontSize(11)
+    doc.text(`Name: ${student.lastName}, ${student.firstName}`, TEST_MARGIN, y)
+
+    // Date and identifier on right
+    const rightText = `Date: ${date}    ${identifier}`
+    doc.font('Helvetica').fontSize(10)
+    doc.text(rightText, TEST_MARGIN, y, { width: contentWidth, align: 'right' })
+
+    y += 16
+
+    // Divider line
+    doc
+      .moveTo(TEST_MARGIN, y)
+      .lineTo(pageWidth - TEST_MARGIN, y)
+      .stroke()
+  }
+
+  /**
+   * Draw test footer on pages 2+
+   * Format: "Student Name | 2A | Page X of Y"
+   */
+  private drawTestFooter(
+    doc: PDFKit.PDFDocument,
+    student: ScantronStudentInfo,
+    identifier: string,
+    pageNum: number,
+    totalPages: number,
+    pageWidth: number,
+    pageHeight: number
+  ): void {
+    const footerY = pageHeight - TEST_MARGIN - 15
+    const contentWidth = pageWidth - 2 * TEST_MARGIN
+
+    // Divider line above footer
+    doc
+      .moveTo(TEST_MARGIN, footerY - 5)
+      .lineTo(pageWidth - TEST_MARGIN, footerY - 5)
+      .stroke('#cccccc')
+
+    // Footer text
+    const footerText = `${student.lastName}, ${student.firstName}  |  ${identifier}  |  Page ${pageNum} of ${totalPages}`
+    doc.font('Helvetica').fontSize(9)
+    doc.text(footerText, TEST_MARGIN, footerY, { width: contentWidth, align: 'center' })
+  }
+
+  /**
+   * Draw questions for a test page (vertical choice layout)
+   */
+  private drawTestQuestions(
+    doc: PDFKit.PDFDocument,
+    questions: Array<Question & { _testIndex: number }>,
+    startY: number,
+    pageWidth: number
+  ): void {
+    const contentWidth = pageWidth - 2 * TEST_MARGIN
+    let currentY = startY
+
+    for (const question of questions) {
+      const mcQuestion = question as MultipleChoiceQuestion & { _testIndex: number }
+      const questionNum = mcQuestion._testIndex
+
+      // Question number and text
+      doc.font('Helvetica-Bold').fontSize(11)
+      doc.text(`${questionNum}.`, TEST_MARGIN, currentY)
+      doc.font('Helvetica').fontSize(11)
+      const textWidth = contentWidth - 25
+      const textX = TEST_MARGIN + 25
+      doc.text(mcQuestion.text, textX, currentY, { width: textWidth })
+
+      const textHeight = doc.heightOfString(mcQuestion.text, { width: textWidth })
+      currentY += textHeight + 6
+
+      // Answer choices (vertical layout)
+      if (mcQuestion.choices) {
+        const choiceX = TEST_MARGIN + TEST_CHOICE_INDENT
+        const choiceWidth = contentWidth - TEST_CHOICE_INDENT - 20
+
+        for (let c = 0; c < mcQuestion.choices.length; c++) {
+          const choice = mcQuestion.choices[c]
+          const choiceLabel = CHOICE_LABELS[c] || String.fromCharCode(65 + c)
+
+          doc.font('Helvetica-Bold').fontSize(10)
+          doc.text(`${choiceLabel}.`, choiceX, currentY)
+          doc.font('Helvetica').fontSize(10)
+          doc.text(choice.text, choiceX + 18, currentY, { width: choiceWidth })
+
+          const choiceHeight = doc.heightOfString(choice.text, { width: choiceWidth })
+          currentY += choiceHeight + 4
+        }
+      }
+
+      // Space between questions
+      currentY += TEST_QUESTION_SPACING
     }
   }
 }

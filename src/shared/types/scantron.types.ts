@@ -74,6 +74,17 @@ export interface ScantronGenerationRequest {
   assignmentId: string
   sectionId: string
   options: ScantronOptions
+  studentAssignments?: import('./assignment.types').StudentAssignment[] // Pass directly to avoid cache timing issues
+}
+
+/**
+ * Request to generate full test PDFs (questions + scantron)
+ */
+export interface TestPDFGenerationRequest {
+  assignmentId: string
+  sectionId: string
+  options: ScantronOptions
+  studentAssignments?: import('./assignment.types').StudentAssignment[] // Pass directly to avoid cache timing issues
 }
 
 /**

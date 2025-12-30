@@ -8,6 +8,8 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
+import Radio from '@mui/material/Radio'
+import RadioGroup from '@mui/material/RadioGroup'
 import Chip from '@mui/material/Chip'
 import Accordion from '@mui/material/Accordion'
 import AccordionSummary from '@mui/material/AccordionSummary'
@@ -17,6 +19,8 @@ import QuizIcon from '@mui/icons-material/Quiz'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ShuffleIcon from '@mui/icons-material/Shuffle'
 import TuneIcon from '@mui/icons-material/Tune'
+import DescriptionIcon from '@mui/icons-material/Description'
+import GridOnIcon from '@mui/icons-material/GridOn'
 import { Modal } from '../ui'
 import { DOKChecklist } from './DOKChecklist'
 import { useAssignmentStore } from '../../stores'
@@ -53,6 +57,8 @@ interface DOKOverride {
   dokLevel: DOKLevel
 }
 
+type GenerationMode = 'scantron' | 'fullTest'
+
 const VERSION_IDS: VersionId[] = ['A', 'B', 'C', 'D']
 
 export function ScantronGenerationModal({
@@ -75,6 +81,9 @@ export function ScantronGenerationModal({
   const [resultInfo, setResultInfo] = useState<{ studentCount: number; pageCount: number } | null>(
     null
   )
+  const [generationMode, setGenerationMode] = useState<GenerationMode>('scantron')
+  const [generatingTestPDF, setGeneratingTestPDF] = useState(false)
+  const [localError, setLocalError] = useState<string | null>(null)
 
   // DOK and version state
   const [students, setStudents] = useState<Student[]>([])
@@ -82,9 +91,17 @@ export function ScantronGenerationModal({
   const [assessment, setAssessment] = useState<Assessment | null>(null)
   const [loadingData, setLoadingData] = useState(false)
 
-  // Check if assessment has versions
+  // Check if assessment has versions (either on base or any DOK variant)
   const hasVersions = useMemo(() => {
-    return assessment?.versions && assessment.versions.length > 0
+    // Check base assessment versions
+    if (assessment?.versions && assessment.versions.length > 0) {
+      return true
+    }
+    // Check DOK variant versions
+    if (assessment?.variants?.some((v) => v.versions && v.versions.length > 0)) {
+      return true
+    }
+    return false
   }, [assessment])
 
   // Load roster and assessment when modal opens
@@ -104,10 +121,11 @@ export function ScantronGenerationModal({
             setStudents(activeStudents)
           }
 
-          // Load assessment to check for versions
+          // Load assessment to check for versions (force refresh to get latest data)
           const assessmentResult = await window.electronAPI.invoke<ServiceResult<Assessment>>(
             'drive:getAssessment',
-            assignment.assessmentId
+            assignment.assessmentId,
+            true // forceRefresh - bypass cache to ensure we have latest versions
           )
           if (assessmentResult.success) {
             setAssessment(assessmentResult.data)
@@ -123,7 +141,7 @@ export function ScantronGenerationModal({
     }
   }, [isOpen, assignment])
 
-  // Reset form when modal opens
+  // Reset form when modal opens/closes
   useEffect(() => {
     if (isOpen) {
       setFormData({
@@ -136,7 +154,13 @@ export function ScantronGenerationModal({
       setGenerationComplete(false)
       setResultInfo(null)
       setDokOverrides([])
+      setGenerationMode('scantron')
+      setLocalError(null)
       clearError()
+    } else {
+      // Reset loaded data when modal closes to ensure fresh load next time
+      setStudents([])
+      setAssessment(null)
     }
   }, [isOpen, clearError])
 
@@ -153,18 +177,16 @@ export function ScantronGenerationModal({
 
       // Assign version based on strategy
       let versionId: VersionId = 'A'
-      if (hasVersions) {
-        switch (formData.versionStrategy) {
-          case 'random':
-            versionId = VERSION_IDS[Math.floor(Math.random() * VERSION_IDS.length)]
-            break
-          case 'sequential':
-            versionId = VERSION_IDS[index % VERSION_IDS.length]
-            break
-          case 'single':
-          default:
-            versionId = 'A'
-        }
+      switch (formData.versionStrategy) {
+        case 'random':
+          versionId = VERSION_IDS[Math.floor(Math.random() * VERSION_IDS.length)]
+          break
+        case 'sequential':
+          versionId = VERSION_IDS[index % VERSION_IDS.length]
+          break
+        case 'single':
+        default:
+          versionId = 'A'
       }
 
       return {
@@ -173,10 +195,12 @@ export function ScantronGenerationModal({
         dokOverride
       }
     })
-  }, [students, dokOverrides, hasVersions, formData.versionStrategy])
+  }, [students, dokOverrides, formData.versionStrategy])
 
   const handleGenerate = useCallback(async () => {
     if (!assignment) return
+
+    setLocalError(null)
 
     // Build student assignments with DOK and version info
     const studentAssignments = buildStudentAssignments()
@@ -192,7 +216,7 @@ export function ScantronGenerationModal({
     )
 
     if (!updateResult.success) {
-      console.error('Failed to update assignment:', updateResult.error)
+      setLocalError(updateResult.error ?? 'Failed to update assignment')
       return
     }
 
@@ -206,31 +230,61 @@ export function ScantronGenerationModal({
     const isQuiz = assignment.assessmentType === 'quiz'
 
     let result: { pdfBase64: string; studentCount: number; pageCount: number } | null = null
+    let filePrefix = 'scantron'
 
     if (isQuiz) {
       // Use quiz PDF generation (single page with questions + bubbles)
+      // Pass studentAssignments directly to avoid cache timing issues with Drive
       const quizResult = await window.electronAPI.invoke<
         ServiceResult<{ pdfBase64: string; studentCount: number; pageCount: number }>
       >('pdf:generateQuiz', {
         assignmentId: assignment.id,
         sectionId: assignment.sectionId,
-        options
+        options,
+        studentAssignments
       })
 
       if (quizResult.success) {
         result = quizResult.data
+        filePrefix = 'quiz'
       } else {
-        console.error('Quiz PDF generation failed:', quizResult.error)
+        setLocalError(quizResult.error ?? 'Quiz PDF generation failed')
         return
+      }
+    } else if (generationMode === 'fullTest') {
+      // Generate full test PDF (questions + scantron)
+      setGeneratingTestPDF(true)
+      try {
+        const testResult = await window.electronAPI.invoke<
+          ServiceResult<{ pdfBase64: string; studentCount: number; pageCount: number }>
+        >('pdf:exportTest', {
+          assignmentId: assignment.id,
+          sectionId: assignment.sectionId,
+          options,
+          studentAssignments
+        })
+
+        if (testResult.success) {
+          result = testResult.data
+          filePrefix = 'test'
+        } else {
+          setLocalError(testResult.error ?? 'Test PDF generation failed')
+          return
+        }
+      } finally {
+        setGeneratingTestPDF(false)
       }
     } else {
       // Use standard scantron generation
+      // Pass studentAssignments directly to avoid cache timing issues with Drive
       const request: ScantronGenerationRequest = {
         assignmentId: assignment.id,
         sectionId: assignment.sectionId,
-        options
+        options,
+        studentAssignments
       }
       result = await generateScantron(request)
+      filePrefix = 'scantron'
     }
 
     if (result) {
@@ -241,7 +295,6 @@ export function ScantronGenerationModal({
 
       // Use save dialog (remembers last directory)
       // Build filename with section name if available
-      const filePrefix = isQuiz ? 'quiz' : 'scantron'
       const sanitizedTitle = assignment.assessmentTitle.replace(/[^a-zA-Z0-9]/g, '-')
       const sanitizedSection = sectionName ? `-${sectionName.replace(/[^a-zA-Z0-9]/g, '-')}` : ''
       const saveResult = await window.electronAPI.invoke<{ success: boolean }>('file:saveWithDialog', {
@@ -254,7 +307,7 @@ export function ScantronGenerationModal({
         setGenerationComplete(true)
       }
     }
-  }, [assignment, formData, buildStudentAssignments, generateScantron])
+  }, [assignment, formData, generationMode, buildStudentAssignments, generateScantron, sectionName])
 
   const handleClose = useCallback(() => {
     setGenerationComplete(false)
@@ -265,14 +318,26 @@ export function ScantronGenerationModal({
   if (!assignment) return <></>
 
   const isQuiz = assignment.assessmentType === 'quiz'
-  const modalTitle = isQuiz ? 'Generate Quiz PDF' : 'Generate Scantrons'
-  const isLoading = loadingData || generatingScantron
+  const isLoading = loadingData || generatingScantron || generatingTestPDF
+
+  // Dynamic title based on mode
+  let modalTitle = 'Generate Scantrons'
+  if (isQuiz) {
+    modalTitle = 'Generate Quiz PDF'
+  } else if (generationMode === 'fullTest') {
+    modalTitle = 'Generate Full Test PDF'
+  }
+
+  // Dynamic label for output type
+  const outputLabel = isQuiz ? 'quiz' : generationMode === 'fullTest' ? 'test' : 'scantron'
 
   return (
     <Modal isOpen={isOpen} onClose={handleClose} title={modalTitle} size="lg">
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        {/* Store error */}
-        {storeError && <Alert severity="error">{storeError}</Alert>}
+        {/* Errors */}
+        {(storeError || localError) && (
+          <Alert severity="error">{storeError || localError}</Alert>
+        )}
 
         {/* Quiz format info */}
         {isQuiz && (
@@ -284,7 +349,7 @@ export function ScantronGenerationModal({
         {/* Success message */}
         {generationComplete && resultInfo && (
           <Alert severity="success" icon={<CheckCircleIcon />} sx={{ mb: 1 }}>
-            Generated {resultInfo.pageCount} {isQuiz ? 'quiz' : 'scantron'} page
+            Generated {resultInfo.pageCount} {outputLabel} page
             {resultInfo.pageCount !== 1 ? 's' : ''} for {resultInfo.studentCount} student
             {resultInfo.studentCount !== 1 ? 's' : ''}. The PDF has been downloaded.
           </Alert>
@@ -302,6 +367,55 @@ export function ScantronGenerationModal({
             {assignment.studentCount !== 1 ? 's' : ''}
           </Typography>
         </Box>
+
+        {/* Generation Mode Selection (non-quiz only) */}
+        {!isQuiz && (
+          <Box sx={{ bgcolor: 'action.hover', p: 1.5, borderRadius: 1 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Output Format
+            </Typography>
+            <RadioGroup
+              value={generationMode}
+              onChange={(e) => setGenerationMode(e.target.value as GenerationMode)}
+              sx={{ gap: 0.5 }}
+            >
+              <FormControlLabel
+                value="scantron"
+                control={<Radio size="small" />}
+                disabled={isLoading}
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <GridOnIcon fontSize="small" color="action" />
+                    <Box>
+                      <Typography variant="body2">Scantron Only</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Bubble sheets for grading - print questions separately
+                      </Typography>
+                    </Box>
+                  </Box>
+                }
+                sx={{ m: 0, py: 0.5 }}
+              />
+              <FormControlLabel
+                value="fullTest"
+                control={<Radio size="small" />}
+                disabled={isLoading}
+                label={
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <DescriptionIcon fontSize="small" color="action" />
+                    <Box>
+                      <Typography variant="body2">Full Test PDF</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Questions + scantron for each student (DOK/version personalized)
+                      </Typography>
+                    </Box>
+                  </Box>
+                }
+                sx={{ m: 0, py: 0.5 }}
+              />
+            </RadioGroup>
+          </Box>
+        )}
 
         {/* DOK Checklist Section */}
         <Accordion defaultExpanded={false}>
