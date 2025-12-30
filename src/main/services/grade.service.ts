@@ -2151,7 +2151,19 @@ class GradeService {
   /**
    * Apply teacher overrides to grades
    */
-  applyOverrides(grades: AssignmentGrades, overrides: GradeOverride[]): AssignmentGrades {
+  applyOverrides(
+    grades: AssignmentGrades,
+    overrides: GradeOverride[],
+    answerKey?: AnswerKeyEntry[]
+  ): AssignmentGrades {
+    // Build answer key map for quick lookup
+    const answerKeyMap = new Map<number, string>()
+    if (answerKey) {
+      for (const entry of answerKey) {
+        answerKeyMap.set(entry.questionNumber, entry.correctAnswer.toUpperCase())
+      }
+    }
+
     const updatedRecords = grades.records.map((record) => {
       const recordOverrides = overrides.filter((o) => o.recordId === record.id)
       if (recordOverrides.length === 0) {
@@ -2164,23 +2176,30 @@ class GradeService {
           (a) => a.questionNumber === override.questionNumber
         )
         if (answerIndex >= 0) {
+          const correctAnswer = answerKeyMap.get(override.questionNumber)
+          const newSelected = override.newAnswer?.toUpperCase() ?? null
+          const isCorrect = correctAnswer ? newSelected === correctAnswer : updatedAnswers[answerIndex].correct
+
           updatedAnswers[answerIndex] = {
             ...updatedAnswers[answerIndex],
             selected: override.newAnswer,
-            unclear: false // Override clears the unclear flag
+            correct: isCorrect, // Update correct based on new answer
+            unclear: false, // Override clears the unclear flag
+            multipleSelected: false // Override clears the multiple selected flag
           }
         }
       }
 
-      // Recalculate score
-      const correct = updatedAnswers.filter((a) => a.correct).length
-      const percentage = updatedAnswers.length > 0 ? (correct / updatedAnswers.length) * 100 : 0
+      // Recalculate score based on updated correct flags
+      const correctCount = updatedAnswers.filter((a) => a.correct).length
+      const percentage = updatedAnswers.length > 0 ? (correctCount / updatedAnswers.length) * 100 : 0
 
       return {
         ...record,
         answers: updatedAnswers,
-        rawScore: correct,
+        rawScore: correctCount,
         percentage,
+        points: correctCount,
         reviewNotes: `${recordOverrides.length} answer(s) manually corrected`
       }
     })
@@ -2200,7 +2219,25 @@ class GradeService {
       // Apply any overrides
       let grades = input.grades
       if (input.overrides && input.overrides.length > 0) {
-        grades = this.applyOverrides(grades, input.overrides)
+        // Fetch the assessment to get the answer key for proper scoring
+        let answerKey: AnswerKeyEntry[] | undefined
+        try {
+          const assessmentResult = await driveService.getAssessment(grades.assessmentId)
+          if (assessmentResult.success && assessmentResult.data) {
+            answerKey = assessmentResult.data.questions
+              .filter((q) => q.type === 'multiple_choice')
+              .map((q, index) => ({
+                questionNumber: index + 1,
+                questionId: q.id,
+                correctAnswer: q.correctAnswer.toUpperCase(),
+                points: q.points
+              }))
+          }
+        } catch (e) {
+          console.warn('[GradeService] Could not fetch assessment for answer key:', e)
+        }
+
+        grades = this.applyOverrides(grades, input.overrides, answerKey)
       }
 
       // Update the gradedAt timestamp
