@@ -26,6 +26,8 @@ function loadOAuthConfig(): OAuthConfig {
   const configPaths = [
     // Development: project root
     path.join(process.cwd(), 'config', 'oauth.json'),
+    // Production: in extraResources folder (macOS/Linux)
+    path.join(process.resourcesPath ?? '', 'config', 'oauth.json'),
     // Production: next to the app executable
     path.join(app.getAppPath(), 'config', 'oauth.json'),
     // Production: in resources folder

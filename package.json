@@ -97,6 +97,13 @@
     "files": [
       "dist/**/*"
     ],
+    "extraResources": [
+      {
+        "from": "config",
+        "to": "config",
+        "filter": ["oauth.json"]
+      }
+    ],
     "icon": "resources/icon.png",
     "mac": {
       "category": "public.app-category.education",
