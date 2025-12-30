@@ -28,7 +28,7 @@ const PDF = {
   QUESTIONS_PER_COLUMN: 25,
 
   // Header section heights (from generateStudentPage)
-  HEADER_HEIGHT: 86,  // title(25) + divider(15) + student(18) + date(18) + divider(10)
+  HEADER_HEIGHT: 96,  // title(20) + subtitle(15) + divider(15) + student(18) + date(18) + divider(10)
   QR_SECTION_HEIGHT: 100, // QR(80) + spacing(10) + offset(10)
   PRE_GRID_SPACING: 20
 }

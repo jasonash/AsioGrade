@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { BrowserWindow } from 'electron'
 import { driveService } from './drive.service'
 import { scantronLookupService } from './scantron-lookup.service'
+import { randomizationService } from './randomization.service'
 import type { GradeProgressEvent, ResolvedScantronData, ScantronQRDataV1V2 } from '../../shared/types'
 // Note: registrationService removed - phone scan deskewing is not reliably supported
 
@@ -880,7 +881,7 @@ class GradeService {
     WIDTH: 1275, // 8.5" × 150 DPI
     HEIGHT: 1650, // 11" × 150 DPI
     MARGIN: 104, // 50pt × 150/72
-    BUBBLE_GRID_Y_START: 533, // 256pt × 150/72 = 533 at 150 DPI
+    BUBBLE_GRID_Y_START: 554, // 266pt × 150/72 = 554 at 150 DPI (50 margin + 96 header + 100 QR + 20 spacing)
     ROW_HEIGHT: 50, // 24pt × 150/72
     BUBBLE_SPACING: 46, // 22pt × 150/72
     BUBBLE_RADIUS: 15, // 7pt × 150/72
@@ -1173,30 +1174,49 @@ class GradeService {
 
     console.log(`[GradeService] Corner darkness: TL=${topLeftDarkness.toFixed(0)}%, TR=${topRightDarkness.toFixed(0)}%, BL=${bottomLeftDarkness.toFixed(0)}%, BR=${bottomRightDarkness.toFixed(0)}%`)
 
-    // Both TR and BL should have high darkness (filled shapes in both orientations)
-    // The key difference is WHICH shape is where:
-    // - Square samples ~70-80% (fills entire region)
-    // - Circle samples ~60-65% (only fills π/4 of bounding box)
+    // Registration mark layout:
+    // - CORRECT: TL has L-shape (low ~5-15%), TR has square (high ~70-95%), BL has circle (~60-85%), BR has L-shape (low ~10-25%)
+    // - UPSIDE DOWN: TL has circle (~60-85%), TR has L-shape (low), BL has square (high), BR has L-shape (low)
     //
-    // When CORRECT: TR has square (higher), BL has circle (lower) → TR > BL
-    // When UPSIDE DOWN: TR has circle (lower), BL has square (higher) → BL > TR
+    // Most reliable indicator: TL corner
+    // - If TL is low (<30%), L-shape is there → CORRECT orientation
+    // - If TL is high (>50%), circle is there → UPSIDE DOWN
+    //
+    // Secondary check: TR corner should have filled shape when correct
+    // - If TR is high (>60%) and TL is low (<30%), definitely CORRECT
+    // - If TL is high (>50%) and TR is low (<30%), definitely UPSIDE DOWN
 
-    const bothHaveFilledShapes = topRightDarkness > 40 && bottomLeftDarkness > 40
-
-    if (bothHaveFilledShapes) {
-      // Compare which corner has the denser shape (square vs circle)
-      // If BL is significantly darker than TR, the square is in BL → upside down
-      const isUpsideDown = bottomLeftDarkness > topRightDarkness + 5 // 5% threshold
-
-      console.log(`[GradeService] Shape comparison: TR=${topRightDarkness.toFixed(0)}% vs BL=${bottomLeftDarkness.toFixed(0)}% → ${isUpsideDown ? 'UPSIDE DOWN' : 'correct'}`)
-      return isUpsideDown
+    // Primary detection using TL and TR corners (most reliable)
+    if (topLeftDarkness < 30 && topRightDarkness > 60) {
+      console.log(`[GradeService] TL=${topLeftDarkness.toFixed(0)}% (L-shape), TR=${topRightDarkness.toFixed(0)}% (square) → CORRECT`)
+      return false
     }
 
-    // Fallback: if we don't detect both filled shapes, check for unexpected darkness
-    // If neither TR nor BL has marks, but TL and BR do, page is upside down
-    if (topLeftDarkness > 40 && bottomRightDarkness > 40 && topRightDarkness < 30 && bottomLeftDarkness < 30) {
-      console.log(`[GradeService] Fallback detection: marks in TL/BR instead of TR/BL → UPSIDE DOWN`)
+    if (topLeftDarkness > 50 && topRightDarkness < 30) {
+      console.log(`[GradeService] TL=${topLeftDarkness.toFixed(0)}% (circle), TR=${topRightDarkness.toFixed(0)}% (L-shape) → UPSIDE DOWN`)
       return true
+    }
+
+    // Fallback: if TL is clearly an L-shape, orientation is correct
+    if (topLeftDarkness < 25) {
+      console.log(`[GradeService] TL=${topLeftDarkness.toFixed(0)}% (clearly L-shape) → assuming CORRECT`)
+      return false
+    }
+
+    // Fallback: if TL is clearly a filled shape, orientation is upside down
+    if (topLeftDarkness > 55) {
+      console.log(`[GradeService] TL=${topLeftDarkness.toFixed(0)}% (clearly filled) → assuming UPSIDE DOWN`)
+      return true
+    }
+
+    // If we can't determine from TL, check TR vs BL as before but with larger margin
+    const bothHaveFilledShapes = topRightDarkness > 50 && bottomLeftDarkness > 50
+    if (bothHaveFilledShapes) {
+      // Use 15% margin instead of 5% to reduce false positives
+      const isUpsideDown = bottomLeftDarkness > topRightDarkness + 15
+
+      console.log(`[GradeService] Shape comparison: TR=${topRightDarkness.toFixed(0)}% vs BL=${bottomLeftDarkness.toFixed(0)}% (15% margin) → ${isUpsideDown ? 'UPSIDE DOWN' : 'correct'}`)
+      return isUpsideDown
     }
 
     console.log(`[GradeService] Could not reliably detect orientation, assuming correct`)
@@ -1890,14 +1910,46 @@ class GradeService {
       // Get questions based on student's DOK level (from QR code)
       const studentDOK = page.qrData.dokLevel
       const questionsForStudent = getQuestionsForDOK(studentDOK)
+      const studentVersionId = page.qrData.versionId as VersionId | undefined
 
       // Build answer key map for this student's questions
+      // Must account for version (A/B/C/D) shuffling if applicable
       const studentAnswerKeyMap = new Map<number, string>()
-      questionsForStudent.forEach((q, index) => {
-        if (q.type === 'multiple_choice') {
-          studentAnswerKeyMap.set(index + 1, q.correctAnswer.toUpperCase())
+
+      // First, determine which versions array to use (base or DOK variant)
+      let versionsForStudent = assessment.versions
+      if (studentDOK && assessment.variants) {
+        const variant = assessment.variants.find(v => v.dokLevel === studentDOK)
+        if (variant?.versions) {
+          versionsForStudent = variant.versions
+          console.log(`[GradeService] Using DOK ${studentDOK} variant's versions`)
         }
-      })
+      }
+
+      // Check if student has a version and we have version data
+      const studentVersion = studentVersionId && versionsForStudent
+        ? versionsForStudent.find(v => v.versionId === studentVersionId)
+        : undefined
+
+      if (studentVersion) {
+        // Use version-specific answer key (accounts for shuffled questions and choices)
+        console.log(`[GradeService] Using version ${studentVersionId} answer key for student`)
+        const versionAnswerKey = randomizationService.getAnswerKey(
+          { ...assessment, questions: questionsForStudent },
+          studentVersion
+        )
+        for (const entry of versionAnswerKey) {
+          studentAnswerKeyMap.set(entry.questionNumber, entry.correctLetter.toUpperCase())
+        }
+      } else {
+        // No version - use original question order
+        console.log(`[GradeService] No version found, using base answer key`)
+        questionsForStudent.forEach((q, index) => {
+          if (q.type === 'multiple_choice') {
+            studentAnswerKeyMap.set(index + 1, q.correctAnswer.toUpperCase())
+          }
+        })
+      }
 
       // Calculate answers and score
       const answers: AnswerResult[] = []
