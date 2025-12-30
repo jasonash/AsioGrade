@@ -153,6 +153,23 @@ export function GradeReviewPanel({ students }: GradeReviewPanelProps): ReactElem
                     borderColor: 'warning.light'
                   }}
                 >
+                  {/* Page thumbnail preview */}
+                  {page.imageDataBase64 && (
+                    <Box
+                      component="img"
+                      src={`data:image/jpeg;base64,${page.imageDataBase64}`}
+                      alt={`Page ${page.pageNumber}`}
+                      sx={{
+                        width: 60,
+                        height: 78,
+                        objectFit: 'cover',
+                        borderRadius: 0.5,
+                        border: 1,
+                        borderColor: 'divider',
+                        flexShrink: 0
+                      }}
+                    />
+                  )}
                   <Box sx={{ flex: 1 }}>
                     <Typography variant="body2" fontWeight={500}>
                       Page {page.pageNumber}

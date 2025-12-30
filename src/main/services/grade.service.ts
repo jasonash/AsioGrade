@@ -75,6 +75,7 @@ import type {
   GradeOverride,
   SaveGradesInput,
   BubbleDetectionOptions,
+  FlaggedBubbleImage,
   ServiceResult,
   Assignment,
   Assessment,
@@ -1051,6 +1052,49 @@ class GradeService {
       overallConfidence = Math.min(overallConfidence, maxConfidence)
     }
 
+    // Step 6: Generate cropped images for flagged questions (multiple bubbles or no answer)
+    // This provides visual context for teachers reviewing grading errors
+    const flaggedQuestions = detectedBubbles.filter(
+      (b) => b.multipleDetected || b.selected === null
+    )
+
+    const flaggedBubbleImages: FlaggedBubbleImage[] = []
+    for (const flagged of flaggedQuestions) {
+      try {
+        const imageBase64 = await this.cropBubbleRow(
+          processBuffer,
+          flagged.questionNumber,
+          isQuizFormat,
+          imageWidth,
+          imageHeight
+        )
+        flaggedBubbleImages.push({
+          questionNumber: flagged.questionNumber,
+          imageBase64
+        })
+      } catch (error) {
+        console.warn(
+          `[GradeService] Page ${pageNumber}: Failed to crop Q${flagged.questionNumber}:`,
+          error
+        )
+      }
+    }
+
+    // Step 7: For pages with QR errors, generate a compressed full page image
+    // This helps teachers identify which student the page belongs to
+    let pageImageBase64: string | undefined
+    if (!qrData) {
+      try {
+        const compressedPage = await sharp(processBuffer)
+          .resize(400, 518, { fit: 'inside' }) // ~30% of original 1275x1650
+          .jpeg({ quality: 70 })
+          .toBuffer()
+        pageImageBase64 = compressedPage.toString('base64')
+      } catch (error) {
+        console.warn(`[GradeService] Page ${pageNumber}: Failed to compress page image:`, error)
+      }
+    }
+
     const processingTimeMs = performance.now() - startTime
     console.log(`[GradeService] Page ${pageNumber}: Completed in ${processingTimeMs.toFixed(0)}ms`)
 
@@ -1065,7 +1109,9 @@ class GradeService {
       processingTimeMs,
       flags,
       imageWidth,
-      imageHeight
+      imageHeight,
+      flaggedBubbleImages: flaggedBubbleImages.length > 0 ? flaggedBubbleImages : undefined,
+      pageImageBase64
     }
   }
 
@@ -1599,6 +1645,50 @@ class GradeService {
   }
 
   /**
+   * Crop a single question's bubble row from the scantron image
+   * Returns base64 PNG of ~220x50 pixel region showing Q# and all 4 bubbles (A B C D)
+   * Used to provide visual context for flagged questions (multiple bubbles, no answer)
+   */
+  private async cropBubbleRow(
+    imageBuffer: Buffer,
+    questionNumber: number,
+    _isQuizFormat: boolean, // Reserved for future quiz-specific layout adjustments
+    imageWidth: number,
+    imageHeight: number
+  ): Promise<string> {
+    const layout = GradeService.NORMALIZED_LAYOUT
+    const scale = imageWidth / layout.WIDTH
+
+    // Calculate question position
+    const column = Math.floor((questionNumber - 1) / layout.QUESTIONS_PER_COLUMN)
+    const row = (questionNumber - 1) % layout.QUESTIONS_PER_COLUMN
+
+    // Calculate crop region (includes all 4 bubbles + padding)
+    const columnWidth = Math.floor((layout.WIDTH - 2 * layout.MARGIN) / 2)
+    const columnX = Math.floor(layout.MARGIN * scale) + column * Math.floor(columnWidth * scale)
+    const rowY = Math.floor((layout.BUBBLE_GRID_Y_START + row * layout.ROW_HEIGHT) * scale)
+
+    // Crop dimensions: ~220px wide (covers Q# + A B C D), ~50px tall
+    const cropWidth = Math.floor(220 * scale)
+    const cropHeight = Math.floor(50 * scale)
+    const cropX = Math.max(0, columnX - Math.floor(10 * scale))
+    const cropY = Math.max(0, rowY - Math.floor(10 * scale))
+
+    // Use sharp to crop and convert to base64
+    const croppedBuffer = await sharp(imageBuffer)
+      .extract({
+        left: cropX,
+        top: cropY,
+        width: Math.min(cropWidth, imageWidth - cropX),
+        height: Math.min(cropHeight, imageHeight - cropY)
+      })
+      .png()
+      .toBuffer()
+
+    return croppedBuffer.toString('base64')
+  }
+
+  /**
    * Calculate adaptive threshold based on distribution of intensities
    */
   private calculateAdaptiveThreshold(
@@ -1744,7 +1834,8 @@ class GradeService {
             qrError: page.qrError,
             ocrStudentName: page.ocrStudentName,
             suggestedStudents,
-            possibleStudents: ungradedStudentIds
+            possibleStudents: ungradedStudentIds,
+            imageDataBase64: page.pageImageBase64 // Compressed page image for review
           })
         } else {
           console.log(`[GradeService] Page ${page.pageNumber}: Classified as ${pageType} - skipping`)
@@ -1850,7 +1941,8 @@ class GradeService {
         answers,
         flags,
         needsReview,
-        scantronPageNumber: page.pageNumber
+        scantronPageNumber: page.pageNumber,
+        flaggedBubbleImages: page.flaggedBubbleImages // Cropped images for flagged questions
       }
 
       records.push(record)

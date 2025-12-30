@@ -6,6 +6,9 @@ import Collapse from '@mui/material/Collapse'
 import Chip from '@mui/material/Chip'
 import MenuItem from '@mui/material/MenuItem'
 import Select from '@mui/material/Select'
+import Tooltip from '@mui/material/Tooltip'
+import Dialog from '@mui/material/Dialog'
+import DialogContent from '@mui/material/DialogContent'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import WarningIcon from '@mui/icons-material/Warning'
@@ -27,6 +30,7 @@ export function StudentGradeRow({
   pendingOverrides
 }: StudentGradeRowProps): ReactElement {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null)
 
   const studentName = student
     ? `${student.lastName}, ${student.firstName}`
@@ -220,12 +224,56 @@ export function StudentGradeRow({
                       {(answer.confidence * 100).toFixed(0)}%
                     </Typography>
                   )}
+
+                  {/* Bubble thumbnail for flagged questions */}
+                  {needsAttention && record.flaggedBubbleImages?.find(
+                    (img) => img.questionNumber === answer.questionNumber
+                  ) && (
+                    <Tooltip title="Click to enlarge">
+                      <Box
+                        component="img"
+                        src={`data:image/png;base64,${record.flaggedBubbleImages.find(
+                          (img) => img.questionNumber === answer.questionNumber
+                        )?.imageBase64}`}
+                        alt={`Q${answer.questionNumber} bubbles`}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          const img = record.flaggedBubbleImages?.find(
+                            (i) => i.questionNumber === answer.questionNumber
+                          )
+                          setEnlargedImage(img?.imageBase64 || null)
+                        }}
+                        sx={{
+                          height: 28,
+                          borderRadius: 0.5,
+                          cursor: 'pointer',
+                          border: 1,
+                          borderColor: 'divider',
+                          '&:hover': { borderColor: 'primary.main' }
+                        }}
+                      />
+                    </Tooltip>
+                  )}
                 </Box>
               )
             })}
           </Box>
         </Box>
       </Collapse>
+
+      {/* Enlarged bubble image dialog */}
+      <Dialog open={!!enlargedImage} onClose={() => setEnlargedImage(null)}>
+        <DialogContent sx={{ p: 1 }}>
+          {enlargedImage && (
+            <Box
+              component="img"
+              src={`data:image/png;base64,${enlargedImage}`}
+              alt="Bubble detail"
+              sx={{ maxWidth: '100%', display: 'block' }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </Box>
   )
 }

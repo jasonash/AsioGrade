@@ -33,6 +33,19 @@ export interface GradeFlag {
 }
 
 // ============================================================
+// Flagged Bubble Image Types
+// ============================================================
+
+/**
+ * Cropped bubble image for a flagged question
+ * Used to show visual context for grading errors
+ */
+export interface FlaggedBubbleImage {
+  questionNumber: number
+  imageBase64: string // Base64 PNG (~200x50 pixels showing A B C D bubbles)
+}
+
+// ============================================================
 // Answer Result Types
 // ============================================================
 
@@ -82,6 +95,8 @@ export interface GradeRecord {
 
   scantronPageNumber: number
   scantronFileId?: string
+
+  flaggedBubbleImages?: FlaggedBubbleImage[] // Cropped images for questions with errors
 }
 
 /**
@@ -210,6 +225,8 @@ export interface ParsedScantron {
   flags: string[]
   imageWidth: number
   imageHeight: number
+  flaggedBubbleImages?: FlaggedBubbleImage[] // Cropped images for questions with errors
+  pageImageBase64?: string // Compressed full page image (for unidentified pages)
 }
 
 // ============================================================
