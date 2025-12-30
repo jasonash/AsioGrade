@@ -43,19 +43,17 @@ export function CourseCard({ course, onClick }: CourseCardProps): ReactElement {
             width: 40,
             height: 40,
             borderRadius: 2,
-            bgcolor: 'primary.main',
-            opacity: 0.1,
+            bgcolor: 'rgba(229, 168, 13, 0.15)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            flexShrink: 0,
-            position: 'relative'
+            flexShrink: 0
           }}
         >
           <MenuBookIcon
             sx={{
               color: 'primary.main',
-              position: 'absolute'
+              fontSize: 22
             }}
           />
         </Box>
