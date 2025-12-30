@@ -346,7 +346,7 @@ class AuthService {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>TeachingHelp - Login Successful</title>
+          <title>AsioGrade - Login Successful</title>
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -355,24 +355,40 @@ class AuthService {
               align-items: center;
               height: 100vh;
               margin: 0;
-              background: linear-gradient(135deg, #1e3a5f 0%, #2d5a87 100%);
-              color: white;
+              background: #0A0A0B;
+              color: #FAFAFA;
             }
             .container {
               text-align: center;
-              padding: 40px;
-              background: rgba(255,255,255,0.1);
+              padding: 48px;
+              background: #0F0F11;
               border-radius: 12px;
-              backdrop-filter: blur(10px);
+              border: 1px solid #3D3D42;
             }
-            h1 { margin-bottom: 16px; }
-            p { opacity: 0.9; }
+            .logo {
+              width: 72px;
+              height: 72px;
+              margin-bottom: 24px;
+              border-radius: 12px;
+            }
+            h1 {
+              margin: 0 0 8px 0;
+              font-size: 24px;
+              font-weight: 600;
+              color: #E5A80D;
+            }
+            p {
+              margin: 0;
+              color: #A1A1AA;
+              font-size: 14px;
+            }
           </style>
         </head>
         <body>
           <div class="container">
+            <img class="logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%23E5A80D' rx='12' width='100' height='100'/%3E%3Cpath fill='%23000' d='M50 20c-16 0-29 13-29 29 0 10 5 19 13 24l-4 12c0 1 1 2 2 2h36c1 0 2-1 2-2l-4-12c8-5 13-14 13-24 0-16-13-29-29-29zm-12 26c-3 0-5-2-5-5s2-5 5-5 5 2 5 5-2 5-5 5zm24 0c-3 0-5-2-5-5s2-5 5-5 5 2 5 5-2 5-5 5zm-12 14c-6 0-11-3-14-7h28c-3 4-8 7-14 7z'/%3E%3C/svg%3E" alt="AsioGrade" />
             <h1>Login Successful!</h1>
-            <p>You can close this window and return to TeachingHelp.</p>
+            <p>You can close this window and return to AsioGrade.</p>
           </div>
           <script>setTimeout(() => window.close(), 3000);</script>
         </body>
@@ -385,7 +401,7 @@ class AuthService {
       <!DOCTYPE html>
       <html>
         <head>
-          <title>TeachingHelp - Login Failed</title>
+          <title>AsioGrade - Login Failed</title>
           <style>
             body {
               font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
@@ -394,24 +410,49 @@ class AuthService {
               align-items: center;
               height: 100vh;
               margin: 0;
-              background: linear-gradient(135deg, #5f1e1e 0%, #872d2d 100%);
-              color: white;
+              background: #0A0A0B;
+              color: #FAFAFA;
             }
             .container {
               text-align: center;
-              padding: 40px;
-              background: rgba(255,255,255,0.1);
+              padding: 48px;
+              background: #0F0F11;
               border-radius: 12px;
-              backdrop-filter: blur(10px);
+              border: 1px solid #3D3D42;
             }
-            h1 { margin-bottom: 16px; }
-            p { opacity: 0.9; }
+            .logo {
+              width: 72px;
+              height: 72px;
+              margin-bottom: 24px;
+              border-radius: 12px;
+              opacity: 0.5;
+            }
+            h1 {
+              margin: 0 0 12px 0;
+              font-size: 24px;
+              font-weight: 600;
+              color: #DC2626;
+            }
+            p {
+              margin: 0 0 8px 0;
+              color: #A1A1AA;
+              font-size: 14px;
+            }
+            .error {
+              color: #FAFAFA;
+              background: rgba(220, 38, 38, 0.1);
+              padding: 12px 16px;
+              border-radius: 8px;
+              margin-bottom: 12px;
+              border: 1px solid rgba(220, 38, 38, 0.3);
+            }
           </style>
         </head>
         <body>
           <div class="container">
+            <img class="logo" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect fill='%23E5A80D' rx='12' width='100' height='100'/%3E%3Cpath fill='%23000' d='M50 20c-16 0-29 13-29 29 0 10 5 19 13 24l-4 12c0 1 1 2 2 2h36c1 0 2-1 2-2l-4-12c8-5 13-14 13-24 0-16-13-29-29-29zm-12 26c-3 0-5-2-5-5s2-5 5-5 5 2 5 5-2 5-5 5zm24 0c-3 0-5-2-5-5s2-5 5-5 5 2 5 5-2 5-5 5zm-12 14c-6 0-11-3-14-7h28c-3 4-8 7-14 7z'/%3E%3C/svg%3E" alt="AsioGrade" />
             <h1>Login Failed</h1>
-            <p>${error}</p>
+            <p class="error">${error}</p>
             <p>Please close this window and try again.</p>
           </div>
         </body>
