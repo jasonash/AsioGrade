@@ -18,7 +18,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jasonash/TeachingHelp.git"
+    "url": "git+https://github.com/jasonash/AsioGrade.git"
   },
   "keywords": [
     "education",
@@ -29,9 +29,9 @@
   "author": "",
   "license": "ISC",
   "bugs": {
-    "url": "https://github.com/jasonash/TeachingHelp/issues"
+    "url": "https://github.com/jasonash/AsioGrade/issues"
   },
-  "homepage": "https://github.com/jasonash/TeachingHelp#readme",
+  "homepage": "https://github.com/jasonash/AsioGrade#readme",
   "devDependencies": {
     "@electron-toolkit/utils": "^4.0.0",
     "@types/better-sqlite3": "^7.6.13",
