@@ -5,6 +5,37 @@ import { registerIpcHandlers } from './ipc/handlers'
 import { storageService } from './services/storage.service'
 import { scantronLookupService } from './services/scantron-lookup.service'
 
+let splashWindow: BrowserWindow | null = null
+
+function createSplashWindow(): void {
+  // Get the resources path - different in dev vs production
+  const resourcesPath = is.dev
+    ? join(__dirname, '../../resources')
+    : join(process.resourcesPath)
+
+  splashWindow = new BrowserWindow({
+    width: 400,
+    height: 320,
+    frame: false,
+    transparent: false,
+    resizable: false,
+    center: true,
+    show: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  })
+
+  splashWindow.loadFile(join(resourcesPath, 'splash.html'))
+
+  splashWindow.once('ready-to-show', () => {
+    splashWindow?.show()
+  })
+}
+
 function createWindow(): void {
   // Get saved window state
   const windowState = storageService.getWindowState()
@@ -44,6 +75,11 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
+    // Close splash and show main window
+    if (splashWindow && !splashWindow.isDestroyed()) {
+      splashWindow.close()
+    }
+    splashWindow = null
     mainWindow.show()
   })
 
@@ -62,7 +98,10 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   // Set app user model id for Windows
-  electronApp.setAppUserModelId('com.teachinghelp')
+  electronApp.setAppUserModelId('com.asiograde.app')
+
+  // Show splash screen first
+  createSplashWindow()
 
   // Initialize scantron lookup database (v3 QR codes)
   scantronLookupService.initialize()
@@ -76,6 +115,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // Create main window (splash will close when it's ready)
   createWindow()
 
   app.on('activate', () => {
