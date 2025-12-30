@@ -7,8 +7,11 @@ import Grid from '@mui/material/Grid'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import Chip from '@mui/material/Chip'
+import IconButton from '@mui/material/IconButton'
+import Tooltip from '@mui/material/Tooltip'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import AddIcon from '@mui/icons-material/Add'
+import SettingsIcon from '@mui/icons-material/Settings'
 import PeopleIcon from '@mui/icons-material/People'
 import ScheduleIcon from '@mui/icons-material/Schedule'
 import RoomIcon from '@mui/icons-material/Room'
@@ -18,8 +21,10 @@ import { useCourseStore, useSectionStore, useStandardsStore, useAssessmentStore 
 import { SectionCreationModal } from '../components/sections'
 import { StandardsImportModal } from '../components/standards'
 import { AssessmentCreationModal } from '../components/assessments'
+import { CourseSettingsModal } from '../components/courses'
 import { CourseMaterialsSection } from '../components/courseMaterials'
-import type { SectionSummary, AssessmentSummary } from '../../../shared/types'
+import type { SectionSummary, AssessmentSummary, Course } from '../../../shared/types'
+import type { ServiceResult } from '../../../shared/types/common.types'
 
 export interface CourseViewPageProps {
   onSectionSelect?: (section: SectionSummary) => void
@@ -45,6 +50,8 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isStandardsModalOpen, setIsStandardsModalOpen] = useState(false)
   const [isAssessmentModalOpen, setIsAssessmentModalOpen] = useState(false)
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
+  const [fullCourse, setFullCourse] = useState<Course | null>(null)
 
   // Fetch sections, standards, and assessments when course changes
   useEffect(() => {
@@ -63,6 +70,26 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
 
   const handleBackClick = (): void => {
     setCurrentCourse(null)
+  }
+
+  const handleOpenSettings = async (): Promise<void> => {
+    if (!currentCourse?.id) return
+    try {
+      const result = await window.electronAPI.invoke<ServiceResult<Course>>(
+        'drive:getCourse',
+        currentCourse.id
+      )
+      if (result.success) {
+        setFullCourse(result.data)
+        setIsSettingsModalOpen(true)
+      }
+    } catch (err) {
+      console.error('Failed to fetch course:', err)
+    }
+  }
+
+  const handleSettingsSuccess = (updatedCourse: Course): void => {
+    setFullCourse(updatedCourse)
   }
 
   if (!currentCourse) {
@@ -86,14 +113,23 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
         </Button>
 
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-          <Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant="h5" fontWeight={700}>
               {currentCourse.name}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {currentCourse.subject} | Grade {currentCourse.gradeLevel} | {currentCourse.academicYear}
-            </Typography>
+            <Tooltip title="Course AI Settings">
+              <IconButton
+                size="small"
+                onClick={handleOpenSettings}
+                sx={{ color: 'text.secondary' }}
+              >
+                <SettingsIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
           </Box>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {currentCourse.subject} | Grade {currentCourse.gradeLevel} | {currentCourse.academicYear}
+          </Typography>
         </Box>
       </Box>
 
@@ -386,6 +422,16 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
           console.log('Assessment created:', assessment.title)
         }}
       />
+
+      {/* Course Settings Modal */}
+      {fullCourse && (
+        <CourseSettingsModal
+          isOpen={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+          course={fullCourse}
+          onSuccess={handleSettingsSuccess}
+        />
+      )}
     </Box>
   )
 }
