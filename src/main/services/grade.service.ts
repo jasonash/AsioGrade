@@ -1646,41 +1646,71 @@ class GradeService {
 
   /**
    * Crop a single question's bubble row from the scantron image
-   * Returns base64 PNG of ~220x50 pixel region showing Q# and all 4 bubbles (A B C D)
+   * Returns base64 PNG of the bubble region for visual verification
    * Used to provide visual context for flagged questions (multiple bubbles, no answer)
+   *
+   * Handles two formats:
+   * - Normal scantron: Bubbles in vertical columns (25 questions per column)
+   * - Quiz format: Bubbles in horizontal rows at bottom of page (4 questions per row)
    */
   private async cropBubbleRow(
     imageBuffer: Buffer,
     questionNumber: number,
-    _isQuizFormat: boolean, // Reserved for future quiz-specific layout adjustments
+    isQuizFormat: boolean,
     imageWidth: number,
     imageHeight: number
   ): Promise<string> {
-    const layout = GradeService.NORMALIZED_LAYOUT
-    const scale = imageWidth / layout.WIDTH
+    let cropX: number
+    let cropY: number
+    let cropWidth: number
+    let cropHeight: number
 
-    // Calculate question position
-    const column = Math.floor((questionNumber - 1) / layout.QUESTIONS_PER_COLUMN)
-    const row = (questionNumber - 1) % layout.QUESTIONS_PER_COLUMN
+    if (isQuizFormat) {
+      // Quiz format: bubbles at bottom in horizontal rows of 4 questions
+      const layout = GradeService.QUIZ_NORMALIZED_LAYOUT
+      const scale = imageWidth / layout.WIDTH
 
-    // Calculate crop region (includes all 4 bubbles + padding)
-    const columnWidth = Math.floor((layout.WIDTH - 2 * layout.MARGIN) / 2)
-    const columnX = Math.floor(layout.MARGIN * scale) + column * Math.floor(columnWidth * scale)
-    const rowY = Math.floor((layout.BUBBLE_GRID_Y_START + row * layout.ROW_HEIGHT) * scale)
+      const row = Math.floor((questionNumber - 1) / layout.QUESTIONS_PER_ROW)
+      const col = (questionNumber - 1) % layout.QUESTIONS_PER_ROW
 
-    // Crop dimensions: ~220px wide (covers Q# + A B C D), ~50px tall
-    const cropWidth = Math.floor(220 * scale)
-    const cropHeight = Math.floor(50 * scale)
-    const cropX = Math.max(0, columnX - Math.floor(10 * scale))
-    const cropY = Math.max(0, rowY - Math.floor(10 * scale))
+      // Cell position for this question
+      const cellX = Math.floor(layout.MARGIN * scale) + col * Math.floor(layout.QUESTION_WIDTH * scale)
+      const bubbleY = Math.floor(layout.FIRST_ROW_BUBBLE_Y * scale) + row * Math.floor(layout.ROW_HEIGHT * scale)
+
+      // Crop the bubble area (4 bubbles wide + padding)
+      cropWidth = Math.floor(200 * scale)
+      cropHeight = Math.floor(40 * scale)
+      cropX = Math.max(0, cellX + Math.floor(layout.BUBBLE_START_OFFSET * scale) - Math.floor(10 * scale))
+      cropY = Math.max(0, bubbleY - Math.floor(20 * scale))
+    } else {
+      // Normal scantron: bubbles in vertical columns
+      const layout = GradeService.NORMALIZED_LAYOUT
+      const scale = imageWidth / layout.WIDTH
+
+      const column = Math.floor((questionNumber - 1) / layout.QUESTIONS_PER_COLUMN)
+      const row = (questionNumber - 1) % layout.QUESTIONS_PER_COLUMN
+
+      // Calculate bubble position using same logic as detectBubblesPositionBased
+      const columnCount = 2 // Typically 2 columns for 50 questions
+      const columnWidth = Math.floor((layout.WIDTH - 2 * layout.MARGIN) / columnCount * scale)
+      const columnX = Math.floor(layout.MARGIN * scale) + column * columnWidth
+      const firstBubbleOffset = Math.floor((layout.FIRST_BUBBLE_X - layout.MARGIN) * scale)
+      const rowY = Math.floor(layout.BUBBLE_GRID_Y_START * scale) + row * Math.floor(layout.ROW_HEIGHT * scale)
+
+      // Crop the bubble area (4 bubbles: A B C D + padding)
+      cropWidth = Math.floor(200 * scale)
+      cropHeight = Math.floor(40 * scale)
+      cropX = Math.max(0, columnX + firstBubbleOffset - Math.floor(15 * scale))
+      cropY = Math.max(0, rowY + Math.floor(layout.ROW_HEIGHT * scale / 2) - Math.floor(20 * scale))
+    }
 
     // Use sharp to crop and convert to base64
     const croppedBuffer = await sharp(imageBuffer)
       .extract({
-        left: cropX,
-        top: cropY,
-        width: Math.min(cropWidth, imageWidth - cropX),
-        height: Math.min(cropHeight, imageHeight - cropY)
+        left: Math.floor(cropX),
+        top: Math.floor(cropY),
+        width: Math.min(Math.floor(cropWidth), imageWidth - Math.floor(cropX)),
+        height: Math.min(Math.floor(cropHeight), imageHeight - Math.floor(cropY))
       })
       .png()
       .toBuffer()

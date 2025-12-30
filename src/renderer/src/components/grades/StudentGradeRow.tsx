@@ -14,6 +14,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import WarningIcon from '@mui/icons-material/Warning'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import CancelIcon from '@mui/icons-material/Cancel'
+import ImageIcon from '@mui/icons-material/Image'
 import type { GradeRecord, Student, GradeOverride } from '../../../../shared/types'
 
 interface StudentGradeRowProps {
@@ -225,17 +226,13 @@ export function StudentGradeRow({
                     </Typography>
                   )}
 
-                  {/* Bubble thumbnail for flagged questions */}
+                  {/* View bubble image icon for flagged questions */}
                   {needsAttention && record.flaggedBubbleImages?.find(
                     (img) => img.questionNumber === answer.questionNumber
                   ) && (
-                    <Tooltip title="Click to enlarge">
-                      <Box
-                        component="img"
-                        src={`data:image/png;base64,${record.flaggedBubbleImages.find(
-                          (img) => img.questionNumber === answer.questionNumber
-                        )?.imageBase64}`}
-                        alt={`Q${answer.questionNumber} bubbles`}
+                    <Tooltip title="View scanned bubbles">
+                      <IconButton
+                        size="small"
                         onClick={(e) => {
                           e.stopPropagation()
                           const img = record.flaggedBubbleImages?.find(
@@ -244,14 +241,13 @@ export function StudentGradeRow({
                           setEnlargedImage(img?.imageBase64 || null)
                         }}
                         sx={{
-                          height: 28,
-                          borderRadius: 0.5,
-                          cursor: 'pointer',
-                          border: 1,
-                          borderColor: 'divider',
-                          '&:hover': { borderColor: 'primary.main' }
+                          p: 0.25,
+                          color: 'info.main',
+                          '&:hover': { bgcolor: 'info.light' }
                         }}
-                      />
+                      >
+                        <ImageIcon fontSize="small" />
+                      </IconButton>
                     </Tooltip>
                   )}
                 </Box>
