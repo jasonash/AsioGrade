@@ -53,6 +53,7 @@
     "@anthropic-ai/sdk": "^0.71.2",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@fontsource/dm-serif-text": "^5.2.8",
     "@google/generative-ai": "^0.24.1",
     "@hookform/resolvers": "^5.2.2",
     "@mui/icons-material": "^7.3.6",
@@ -82,14 +83,15 @@
     "zxing-wasm": "^2.2.4"
   },
   "build": {
-    "appId": "com.teachinghelp.app",
-    "productName": "TeachingHelp",
+    "appId": "com.asiograde.app",
+    "productName": "AsioGrade",
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*"
     ],
+    "icon": "resources/icon.png",
     "mac": {
       "category": "public.app-category.education",
       "target": [

@@ -639,7 +639,7 @@ export function SettingsPage(): ReactElement {
           About
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Information about TeachingHelp.
+          Information about AsioGrade.
         </Typography>
       </Box>
 
@@ -659,14 +659,13 @@ export function SettingsPage(): ReactElement {
             <MenuBookIcon sx={{ fontSize: 28, color: 'primary.contrastText' }} />
           </Box>
           <Box>
-            <Typography fontWeight={600}>TeachingHelp</Typography>
+            <Typography fontWeight={600}>AsioGrade</Typography>
             <Typography variant="body2" color="text.secondary">Version 0.1.0</Typography>
           </Box>
         </Box>
 
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          An AI-powered desktop application designed to help teachers create lesson plans,
-          generate tests, and grade assessments efficiently.
+          Create, print, and grade assessments with ease.
         </Typography>
 
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>

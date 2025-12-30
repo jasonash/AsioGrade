@@ -15,7 +15,6 @@ import MuiTooltip from '@mui/material/Tooltip'
 import HomeIcon from '@mui/icons-material/Home'
 import SettingsIcon from '@mui/icons-material/Settings'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
-import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import MenuBookIcon from '@mui/icons-material/MenuBook'
@@ -24,6 +23,7 @@ import AddIcon from '@mui/icons-material/Add'
 import { useCourseStore, useUIStore, useAuthStore } from '../../stores'
 import type { CourseSummary, SectionSummary, ServiceResult } from '../../../../shared/types'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import logoImage from '../../assets/logo.png'
 
 export type NavItem =
   | 'dashboard'
@@ -181,11 +181,17 @@ export function Sidebar({
       >
         {isExpanded ? (
           <>
+            <Box
+              component="img"
+              src={logoImage}
+              alt="AsioGrade"
+              sx={{ width: 28, height: 28, borderRadius: 0.5, mr: 1 }}
+            />
             <Typography
-              variant="subtitle2"
-              sx={{ flex: 1, fontWeight: 600, color: 'text.primary' }}
+              variant="h6"
+              sx={{ flex: 1, fontFamily: '"DM Serif Text", serif', fontWeight: 400, color: 'text.primary' }}
             >
-              TeachingHelp
+              AsioGrade
             </Typography>
             <IconButton
               size="small"
@@ -196,13 +202,20 @@ export function Sidebar({
             </IconButton>
           </>
         ) : (
-          <IconButton
-            size="small"
-            onClick={onToggle}
-            sx={{ width: '100%', color: 'text.secondary' }}
-          >
-            <ChevronRightIcon fontSize="small" />
-          </IconButton>
+          <MuiTooltip title="Expand sidebar" placement="right" arrow>
+            <IconButton
+              size="small"
+              onClick={onToggle}
+              sx={{ width: '100%', p: 0 }}
+            >
+              <Box
+                component="img"
+                src={logoImage}
+                alt="AsioGrade"
+                sx={{ width: 32, height: 32, borderRadius: 0.5 }}
+              />
+            </IconButton>
+          </MuiTooltip>
         )}
       </Box>
 

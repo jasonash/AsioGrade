@@ -11,6 +11,7 @@ import MenuBookIcon from '@mui/icons-material/MenuBook'
 import { useAuthStore, useCourseStore } from '../stores'
 import { CourseCard } from '../components/courses'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import logoImage from '../assets/logo.png'
 
 interface DashboardPageProps {
   onOpenCreateModal?: () => void
@@ -118,13 +119,21 @@ export function DashboardPage({ onOpenCreateModal }: DashboardPageProps): ReactE
   return (
     <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 4 }}>
       <Box component="header" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box>
-          <Typography variant="h5" fontWeight={700}>
-            Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Your AI-powered teaching assistant
-          </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box
+            component="img"
+            src={logoImage}
+            alt="AsioGrade Logo"
+            sx={{ width: 64, height: 64, borderRadius: 1.5 }}
+          />
+          <Box>
+            <Typography variant="h5" sx={{ fontFamily: '"DM Serif Text", serif', fontWeight: 400 }}>
+              AsioGrade
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              Create, print, and grade assessments with ease
+            </Typography>
+          </Box>
         </Box>
         {user && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -202,43 +211,6 @@ export function DashboardPage({ onOpenCreateModal }: DashboardPageProps): ReactE
           </Grid>
         )}
       </Box>
-
-      {/* Quick Actions */}
-      <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Recent Activity</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Typography variant="body2" color="text.secondary">
-                No recent activity to show.
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 6 }}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Button variant="outlined" fullWidth sx={{ justifyContent: 'flex-start' }}>
-                  Create Test
-                </Button>
-                <Button variant="outlined" fullWidth sx={{ justifyContent: 'flex-start' }}>
-                  Generate Scantrons
-                </Button>
-                <Button variant="outlined" fullWidth sx={{ justifyContent: 'flex-start' }}>
-                  Grade Tests
-                </Button>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
     </Box>
   )
 }
