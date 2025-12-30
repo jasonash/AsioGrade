@@ -1673,15 +1673,15 @@ class GradeService {
       const row = Math.floor((questionNumber - 1) / layout.QUESTIONS_PER_ROW)
       const col = (questionNumber - 1) % layout.QUESTIONS_PER_ROW
 
-      // Cell position for this question
+      // Cell position for this question (includes Q# label and bubbles)
       const cellX = Math.floor(layout.MARGIN * scale) + col * Math.floor(layout.QUESTION_WIDTH * scale)
       const bubbleY = Math.floor(layout.FIRST_ROW_BUBBLE_Y * scale) + row * Math.floor(layout.ROW_HEIGHT * scale)
 
-      // Crop the bubble area (4 bubbles wide + padding)
-      cropWidth = Math.floor(200 * scale)
-      cropHeight = Math.floor(40 * scale)
-      cropX = Math.max(0, cellX + Math.floor(layout.BUBBLE_START_OFFSET * scale) - Math.floor(10 * scale))
-      cropY = Math.max(0, bubbleY - Math.floor(20 * scale))
+      // Crop the full question cell (Q# + A B C D bubbles + padding)
+      cropWidth = Math.floor(260 * scale) // Wider to include question number
+      cropHeight = Math.floor(55 * scale) // Taller for better visibility
+      cropX = Math.max(0, cellX - Math.floor(5 * scale)) // Start from question number
+      cropY = Math.max(0, bubbleY - Math.floor(28 * scale))
     } else {
       // Normal scantron: bubbles in vertical columns
       const layout = GradeService.NORMALIZED_LAYOUT
@@ -1694,14 +1694,13 @@ class GradeService {
       const columnCount = 2 // Typically 2 columns for 50 questions
       const columnWidth = Math.floor((layout.WIDTH - 2 * layout.MARGIN) / columnCount * scale)
       const columnX = Math.floor(layout.MARGIN * scale) + column * columnWidth
-      const firstBubbleOffset = Math.floor((layout.FIRST_BUBBLE_X - layout.MARGIN) * scale)
       const rowY = Math.floor(layout.BUBBLE_GRID_Y_START * scale) + row * Math.floor(layout.ROW_HEIGHT * scale)
 
-      // Crop the bubble area (4 bubbles: A B C D + padding)
-      cropWidth = Math.floor(200 * scale)
-      cropHeight = Math.floor(40 * scale)
-      cropX = Math.max(0, columnX + firstBubbleOffset - Math.floor(15 * scale))
-      cropY = Math.max(0, rowY + Math.floor(layout.ROW_HEIGHT * scale / 2) - Math.floor(20 * scale))
+      // Crop the full row (Q# + A B C D bubbles + padding)
+      cropWidth = Math.floor(260 * scale) // Wider to include question number
+      cropHeight = Math.floor(55 * scale) // Taller for better visibility
+      cropX = Math.max(0, columnX - Math.floor(5 * scale)) // Start from question number
+      cropY = Math.max(0, rowY + Math.floor(layout.ROW_HEIGHT * scale / 2) - Math.floor(28 * scale))
     }
 
     // Use sharp to crop and convert to base64
