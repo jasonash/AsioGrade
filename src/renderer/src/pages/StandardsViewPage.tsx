@@ -233,7 +233,21 @@ export function StandardsViewPage({ course, onBack }: StandardsViewPageProps): R
         </Box>
 
         <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-          <MenuBookIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: 2,
+              bgcolor: 'rgba(229, 168, 13, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mx: 'auto',
+              mb: 2
+            }}
+          >
+            <MenuBookIcon sx={{ fontSize: 28, color: 'primary.main' }} />
+          </Box>
           <Typography fontWeight={500} gutterBottom>
             No standards imported
           </Typography>

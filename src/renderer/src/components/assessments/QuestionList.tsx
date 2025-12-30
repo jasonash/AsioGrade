@@ -75,7 +75,21 @@ export function QuestionList({
             bgcolor: 'action.hover'
           }}
         >
-          <HelpOutlineIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 2 }} />
+          <Box
+            sx={{
+              width: 56,
+              height: 56,
+              borderRadius: 2,
+              bgcolor: 'rgba(229, 168, 13, 0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              mx: 'auto',
+              mb: 2
+            }}
+          >
+            <HelpOutlineIcon sx={{ fontSize: 28, color: 'primary.main' }} />
+          </Box>
           <Typography variant="h6" color="text.secondary" gutterBottom>
             No questions yet
           </Typography>

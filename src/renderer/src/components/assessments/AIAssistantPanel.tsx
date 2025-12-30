@@ -290,7 +290,21 @@ export function AIAssistantPanel({
         <Box sx={{ flex: 1, overflowY: 'auto', p: 2, minHeight: 200 }}>
           {conversation.length === 0 && (
             <Box sx={{ textAlign: 'center', py: 4 }}>
-              <SmartToyIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
+              <Box
+                sx={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 2,
+                  bgcolor: 'rgba(229, 168, 13, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mx: 'auto',
+                  mb: 2
+                }}
+              >
+                <SmartToyIcon sx={{ fontSize: 28, color: 'primary.main' }} />
+              </Box>
               <Typography variant="body2" color="text.secondary">
                 Ask me to generate questions, improve existing ones, or get suggestions for your
                 assessment.
