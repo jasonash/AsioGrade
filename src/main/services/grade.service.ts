@@ -1678,9 +1678,10 @@ class GradeService {
       const bubbleY = Math.floor(layout.FIRST_ROW_BUBBLE_Y * scale) + row * Math.floor(layout.ROW_HEIGHT * scale)
 
       // Crop the full question cell (Q# + A B C D bubbles + padding)
-      cropWidth = Math.floor(260 * scale) // Wider to include question number
+      // Extra left padding for 2-digit question numbers (e.g., "55.")
+      cropWidth = Math.floor(280 * scale) // Wide enough for Q# + all bubbles
       cropHeight = Math.floor(55 * scale) // Taller for better visibility
-      cropX = Math.max(0, cellX - Math.floor(5 * scale)) // Start from question number
+      cropX = Math.max(0, cellX - Math.floor(25 * scale)) // Extra left padding for 2-digit numbers
       cropY = Math.max(0, bubbleY - Math.floor(28 * scale))
     } else {
       // Normal scantron: bubbles in vertical columns
@@ -1697,9 +1698,10 @@ class GradeService {
       const rowY = Math.floor(layout.BUBBLE_GRID_Y_START * scale) + row * Math.floor(layout.ROW_HEIGHT * scale)
 
       // Crop the full row (Q# + A B C D bubbles + padding)
-      cropWidth = Math.floor(260 * scale) // Wider to include question number
+      // Extra left padding for 2-digit question numbers (e.g., "55.")
+      cropWidth = Math.floor(280 * scale) // Wide enough for Q# + all bubbles
       cropHeight = Math.floor(55 * scale) // Taller for better visibility
-      cropX = Math.max(0, columnX - Math.floor(5 * scale)) // Start from question number
+      cropX = Math.max(0, columnX - Math.floor(25 * scale)) // Extra left padding for 2-digit numbers
       cropY = Math.max(0, rowY + Math.floor(layout.ROW_HEIGHT * scale / 2) - Math.floor(28 * scale))
     }
 
