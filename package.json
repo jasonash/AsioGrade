@@ -125,6 +125,25 @@
         "zip"
       ]
     },
+    "dmg": {
+      "background": "resources/dmg_background.png",
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 135,
+          "y": 232
+        },
+        {
+          "x": 405,
+          "y": 232,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
+    },
     "win": {
       "target": [
         "nsis",
