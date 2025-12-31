@@ -6,12 +6,15 @@ import { storageService } from './services/storage.service'
 import { scantronLookupService } from './services/scantron-lookup.service'
 
 let splashWindow: BrowserWindow | null = null
+let splashShownAt: number = 0
+const MINIMUM_SPLASH_TIME_MS = 2000
 
 function createSplashWindow(): void {
   // Get the resources path - different in dev vs production
+  // In production, extraResources puts files in resources/resources/
   const resourcesPath = is.dev
     ? join(__dirname, '../../resources')
-    : join(process.resourcesPath)
+    : join(process.resourcesPath, 'resources')
 
   splashWindow = new BrowserWindow({
     width: 400,
@@ -23,6 +26,7 @@ function createSplashWindow(): void {
     show: false,
     skipTaskbar: true,
     alwaysOnTop: true,
+    backgroundColor: '#0A0A0B',
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true
@@ -32,6 +36,7 @@ function createSplashWindow(): void {
   splashWindow.loadFile(join(resourcesPath, 'splash.html'))
 
   splashWindow.once('ready-to-show', () => {
+    splashShownAt = Date.now()
     splashWindow?.show()
   })
 }
@@ -49,6 +54,7 @@ function createWindow(): void {
     minHeight: 600,
     show: false,
     autoHideMenuBar: true,
+    backgroundColor: '#0A0A0B',
     webPreferences: {
       preload: join(__dirname, '../preload/index.mjs'),
       sandbox: false,
@@ -75,12 +81,18 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    // Close splash and show main window
-    if (splashWindow && !splashWindow.isDestroyed()) {
-      splashWindow.close()
-    }
-    splashWindow = null
-    mainWindow.show()
+    // Ensure splash screen shows for at least MINIMUM_SPLASH_TIME_MS
+    const elapsed = Date.now() - splashShownAt
+    const remainingTime = Math.max(0, MINIMUM_SPLASH_TIME_MS - elapsed)
+
+    setTimeout(() => {
+      // Close splash and show main window
+      if (splashWindow && !splashWindow.isDestroyed()) {
+        splashWindow.close()
+      }
+      splashWindow = null
+      mainWindow.show()
+    }, remainingTime)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

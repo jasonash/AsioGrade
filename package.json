@@ -97,11 +97,24 @@
     "files": [
       "dist/**/*"
     ],
+    "asarUnpack": [
+      "node_modules/opencv-wasm/**/*",
+      "node_modules/zxing-wasm/**/*",
+      "node_modules/sharp/**/*",
+      "node_modules/canvas/**/*",
+      "node_modules/better-sqlite3/**/*",
+      "node_modules/mupdf/**/*"
+    ],
     "extraResources": [
       {
         "from": "config",
         "to": "config",
         "filter": ["oauth.json"]
+      },
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": ["splash.html", "icon.png"]
       }
     ],
     "icon": "resources/icon.png",

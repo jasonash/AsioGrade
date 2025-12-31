@@ -86,7 +86,8 @@ function App(): ReactElement {
     setCurrentAssignment(null)
     setViewingGradebook(false)
     setActiveNav('dashboard')
-    // Note: Sidebar handles its own section caching, no need to fetch here
+    // Fetch assessments for the course to populate cache (needed for grading)
+    fetchAssessments(course.id)
   }
 
   const handleNewCourse = (): void => {

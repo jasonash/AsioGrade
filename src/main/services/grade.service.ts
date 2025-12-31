@@ -12,7 +12,7 @@ import * as mupdf from 'mupdf'
 import { readFileSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import { driveService } from './drive.service'
 import { scantronLookupService } from './scantron-lookup.service'
 import { randomizationService } from './randomization.service'
@@ -27,11 +27,24 @@ async function initZXing(): Promise<void> {
 
   try {
     // Find the wasm file in node_modules
-    // In production, this will be bundled differently, but for dev we can find it
-    const possiblePaths = [
+    // Different paths for dev vs production (packaged) builds
+    const possiblePaths: string[] = []
+
+    // In packaged app, files are in app.asar.unpacked
+    if (app.isPackaged) {
+      // process.resourcesPath points to the resources directory in packaged app
+      possiblePaths.push(
+        join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'zxing-wasm', 'dist', 'reader', 'zxing_reader.wasm')
+      )
+    }
+
+    // Development paths
+    possiblePaths.push(
       join(process.cwd(), 'node_modules', 'zxing-wasm', 'dist', 'reader', 'zxing_reader.wasm'),
       join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'node_modules', 'zxing-wasm', 'dist', 'reader', 'zxing_reader.wasm')
-    ]
+    )
+
+    console.log('[GradeService] Looking for zxing_reader.wasm in paths:', possiblePaths)
 
     let wasmBuffer: Buffer | null = null
     for (const wasmPath of possiblePaths) {
@@ -45,7 +58,7 @@ async function initZXing(): Promise<void> {
     }
 
     if (!wasmBuffer) {
-      console.error('[GradeService] Could not find zxing_reader.wasm file')
+      console.error('[GradeService] Could not find zxing_reader.wasm file in any of the paths')
       return
     }
 
