@@ -48,6 +48,14 @@ jobs:
           echo "DEV_VERSION=$DEV_VERSION" >> $GITHUB_ENV
           npm version $DEV_VERSION --no-git-tag-version
 
+      - name: Create OAuth config
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          mkdir -p config
+          echo "{\"clientId\": \"$GOOGLE_CLIENT_ID\", \"clientSecret\": \"$GOOGLE_CLIENT_SECRET\"}" > config/oauth.json
+
       - name: Build application
         run: npm run build
 
@@ -139,6 +147,14 @@ jobs:
           echo "DEV_VERSION=$DEV_VERSION" >> $GITHUB_ENV
           npm version $DEV_VERSION --no-git-tag-version
 
+      - name: Create OAuth config
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          mkdir -p config
+          echo "{\"clientId\": \"$GOOGLE_CLIENT_ID\", \"clientSecret\": \"$GOOGLE_CLIENT_SECRET\"}" > config/oauth.json
+
       - name: Build application
         run: npm run build
 
@@ -228,6 +244,15 @@ jobs:
           echo "DEV_VERSION=$DEV_VERSION" >> $GITHUB_ENV
           npm version $DEV_VERSION --no-git-tag-version
 
+      - name: Create OAuth config
+        shell: bash
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          mkdir -p config
+          echo "{\"clientId\": \"$GOOGLE_CLIENT_ID\", \"clientSecret\": \"$GOOGLE_CLIENT_SECRET\"}" > config/oauth.json
+
       - name: Build application
         run: npm run build
 
@@ -292,6 +317,14 @@ jobs:
           echo "Building dev version: $DEV_VERSION"
           echo "DEV_VERSION=$DEV_VERSION" >> $GITHUB_ENV
           npm version $DEV_VERSION --no-git-tag-version
+
+      - name: Create OAuth config
+        env:
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        run: |
+          mkdir -p config
+          echo "{\"clientId\": \"$GOOGLE_CLIENT_ID\", \"clientSecret\": \"$GOOGLE_CLIENT_SECRET\"}" > config/oauth.json
 
       - name: Build application
         run: npm run build
