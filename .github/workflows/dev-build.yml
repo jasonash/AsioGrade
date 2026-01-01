@@ -374,53 +374,53 @@ jobs:
       # Delete existing dev-latest release and tag if they exist
       - name: Delete existing dev-latest release
         run: |
-          gh release delete dev-latest --yes || true
-          git push origin :refs/tags/dev-latest || true
+          gh release delete dev-latest --yes --cleanup-tag || true
+          sleep 5  # Wait for GitHub to process the deletion
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create dev-latest release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: dev-latest
-          name: "Development Build (v${{ steps.version.outputs.dev_version }})"
-          draft: false
-          prerelease: true
-          files: |
-            artifacts/**/*.dmg
-            artifacts/**/*.zip
-            artifacts/**/*.exe
-            artifacts/**/*.AppImage
-            artifacts/**/*.deb
-          body: |
-            ## Development Build
+        run: |
+          # Prepare release notes
+          cat > release-notes.md << 'NOTES'
+          ## Development Build
 
-            **Version:** ${{ steps.version.outputs.dev_version }}
-            **Branch:** ${{ inputs.branch }}
-            **Build:** #${{ github.run_number }}
-            **Date:** ${{ github.event.repository.updated_at }}
+          **Version:** ${{ steps.version.outputs.dev_version }}
+          **Branch:** ${{ inputs.branch }}
+          **Build:** #${{ github.run_number }}
 
-            ⚠️ **This is a development build for testing purposes.**
+          ⚠️ **This is a development build for testing purposes.**
 
-            ### Downloads
+          ### Downloads
 
-            | Platform | File |
-            |----------|------|
-            | macOS (Apple Silicon) | `AsioGrade-*-arm64.dmg` |
-            | macOS (Intel) | `AsioGrade-*.dmg` (no arch suffix) |
-            | Windows | `AsioGrade Setup *.exe` |
-            | Linux (AppImage) | `AsioGrade-*.AppImage` |
-            | Linux (Debian) | `asiograde_*_amd64.deb` |
+          | Platform | File |
+          |----------|------|
+          | macOS (Apple Silicon) | `AsioGrade-*-arm64.dmg` |
+          | macOS (Intel) | `AsioGrade-*.dmg` (no arch suffix) |
+          | Windows | `AsioGrade Setup *.exe` |
+          | Linux (AppImage) | `AsioGrade-*.AppImage` |
+          | Linux (Debian) | `asiograde_*_amd64.deb` |
 
-            ### Installation
+          ### Installation
 
-            **macOS**: Download the DMG, open it, and drag AsioGrade to your Applications folder. The app is signed and notarized.
+          **macOS**: Download the DMG, open it, and drag AsioGrade to your Applications folder. The app is signed and notarized.
 
-            **Windows**: Download and run the installer. You may see a SmartScreen warning since the Windows build is not code-signed. Click "More info" then "Run anyway".
+          **Windows**: Download and run the installer. You may see a SmartScreen warning since the Windows build is not code-signed. Click "More info" then "Run anyway".
 
-            **Linux (AppImage)**: Download the AppImage, make it executable (`chmod +x`), and run with: `./AsioGrade-*.AppImage --no-sandbox`
+          **Linux (AppImage)**: Download the AppImage, make it executable (`chmod +x`), and run with: `./AsioGrade-*.AppImage --no-sandbox`
 
-            **Linux (Debian/Ubuntu)**: Install the .deb package: `sudo dpkg -i asiograde_*.deb`
+          **Linux (Debian/Ubuntu)**: Install the .deb package: `sudo dpkg -i asiograde_*.deb`
+          NOTES
+
+          # Find all artifacts
+          FILES=$(find artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" \) | tr '\n' ' ')
+
+          # Create the release using gh CLI
+          gh release create dev-latest \
+            --title "Development Build (v${{ steps.version.outputs.dev_version }})" \
+            --notes-file release-notes.md \
+            --prerelease \
+            $FILES
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
