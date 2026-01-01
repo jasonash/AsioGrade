@@ -11,6 +11,7 @@ import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import AddIcon from '@mui/icons-material/Add'
+import EditIcon from '@mui/icons-material/Edit'
 import SettingsIcon from '@mui/icons-material/Settings'
 import PeopleIcon from '@mui/icons-material/People'
 import ScheduleIcon from '@mui/icons-material/Schedule'
@@ -21,7 +22,7 @@ import { useCourseStore, useSectionStore, useStandardsStore, useAssessmentStore 
 import { SectionCreationModal } from '../components/sections'
 import { StandardsImportModal } from '../components/standards'
 import { AssessmentCreationModal } from '../components/assessments'
-import { CourseSettingsModal } from '../components/courses'
+import { CourseSettingsModal, CourseEditModal } from '../components/courses'
 import { CourseMaterialsSection } from '../components/courseMaterials'
 import type { SectionSummary, AssessmentSummary, Course } from '../../../shared/types'
 import type { ServiceResult } from '../../../shared/types/common.types'
@@ -33,7 +34,7 @@ export interface CourseViewPageProps {
 }
 
 export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandardsSelect }: CourseViewPageProps): ReactElement {
-  const { currentCourse, setCurrentCourse } = useCourseStore()
+  const { currentCourse, setCurrentCourse, fetchCourses, invalidateSidebarCache } = useCourseStore()
   const { sections, loading, error, fetchSections, clearSections } = useSectionStore()
   const { summaries: standardsSummaries, fetchCollections: fetchStandardsCollections, clearStandards } = useStandardsStore()
   const {
@@ -51,6 +52,7 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
   const [isStandardsModalOpen, setIsStandardsModalOpen] = useState(false)
   const [isAssessmentModalOpen, setIsAssessmentModalOpen] = useState(false)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [fullCourse, setFullCourse] = useState<Course | null>(null)
 
   // Fetch sections, standards, and assessments when course changes
@@ -92,6 +94,36 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
     setFullCourse(updatedCourse)
   }
 
+  const handleOpenEdit = async (): Promise<void> => {
+    if (!currentCourse?.id) return
+    try {
+      const result = await window.electronAPI.invoke<ServiceResult<Course>>(
+        'drive:getCourse',
+        currentCourse.id
+      )
+      if (result.success) {
+        setFullCourse(result.data)
+        setIsEditModalOpen(true)
+      }
+    } catch (err) {
+      console.error('Failed to fetch course:', err)
+    }
+  }
+
+  const handleEditSuccess = (updatedCourse: Course): void => {
+    setFullCourse(updatedCourse)
+    // Update currentCourse with new data
+    setCurrentCourse({
+      ...currentCourse!,
+      name: updatedCourse.name,
+      subject: updatedCourse.subject,
+      gradeLevel: updatedCourse.gradeLevel
+    })
+    // Refresh courses list and sidebar cache
+    fetchCourses()
+    invalidateSidebarCache()
+  }
+
   if (!currentCourse) {
     return (
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
@@ -117,6 +149,15 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
             <Typography variant="h5" fontWeight={700}>
               {currentCourse.name}
             </Typography>
+            <Tooltip title="Edit Course">
+              <IconButton
+                size="small"
+                onClick={handleOpenEdit}
+                sx={{ color: 'text.secondary' }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
             <Tooltip title="Course AI Settings">
               <IconButton
                 size="small"
@@ -394,8 +435,10 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
         onClose={() => setIsCreateModalOpen(false)}
         courseId={currentCourse.id}
         courseName={currentCourse.name}
-        onSuccess={(section) => {
-          console.log('Section created:', section.name)
+        onSuccess={() => {
+          // Refresh courses list to update sectionCount, and invalidate sidebar's sections cache
+          fetchCourses()
+          invalidateSidebarCache()
         }}
       />
 
@@ -430,6 +473,16 @@ export function CourseViewPage({ onSectionSelect, onAssessmentSelect, onStandard
           onClose={() => setIsSettingsModalOpen(false)}
           course={fullCourse}
           onSuccess={handleSettingsSuccess}
+        />
+      )}
+
+      {/* Course Edit Modal */}
+      {fullCourse && (
+        <CourseEditModal
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          course={fullCourse}
+          onSuccess={handleEditSuccess}
         />
       )}
     </Box>

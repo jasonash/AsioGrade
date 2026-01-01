@@ -28,6 +28,7 @@ interface CourseState {
   loading: boolean
   error: string | null
   academicYear: string
+  sidebarCacheVersion: number // Incremented to invalidate sidebar's local sections cache
 
   // Actions
   setAcademicYear: (year: string) => void
@@ -35,6 +36,7 @@ interface CourseState {
   fetchCourses: (year?: string) => Promise<void>
   createCourse: (input: CreateCourseInput) => Promise<Course | null>
   clearError: () => void
+  invalidateSidebarCache: () => void
 }
 
 export const useCourseStore = create<CourseState>((set, get) => ({
@@ -44,9 +46,12 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   loading: false,
   error: null,
   academicYear: getCurrentAcademicYear(),
+  sidebarCacheVersion: 0,
 
   // Actions
   setAcademicYear: (academicYear) => set({ academicYear }),
+
+  invalidateSidebarCache: () => set((state) => ({ sidebarCacheVersion: state.sidebarCacheVersion + 1 })),
 
   setCurrentCourse: (course) => set({ currentCourse: course }),
 

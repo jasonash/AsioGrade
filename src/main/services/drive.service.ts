@@ -185,10 +185,12 @@ class DriveService {
    * Invalidate caches related to a section (call after mutations)
    */
   private invalidateSectionCache(sectionId: string, sectionFolderId?: string): void {
-    delete this.metadataCache.sections[sectionId]
+    // Note: sections cache is keyed by sectionFolderId, not sectionId
     if (sectionFolderId) {
+      delete this.metadataCache.sections[sectionFolderId]
       delete this.metadataCache.studentCounts[sectionFolderId]
     }
+    delete this.folderCache.sectionFolderIds[sectionId]
   }
 
   /**

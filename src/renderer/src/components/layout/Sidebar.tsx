@@ -56,13 +56,36 @@ export function Sidebar({
 }: SidebarProps): ReactElement {
   const { status } = useAuthStore()
   const isLoggedIn = status === 'authenticated'
-  const { courses, currentCourse, fetchCourses } = useCourseStore()
+  const { courses, currentCourse, fetchCourses, sidebarCacheVersion } = useCourseStore()
   const { expandedCourses, toggleCourseExpanded, setCourseExpanded } = useUIStore()
   // Local cache of sections per course (for displaying multiple expanded courses)
   // Note: Sidebar manages its own cache independently of the global section store
   // to avoid race conditions when switching between courses
   const [sectionsCache, setSectionsCache] = useState<Record<string, SectionSummary[]>>({})
   const [loadingSections, setLoadingSections] = useState<string | null>(null)
+
+  // Clear sections cache and re-fetch when sidebarCacheVersion changes (sections were added/deleted/edited elsewhere)
+  useEffect(() => {
+    if (sidebarCacheVersion > 0) {
+      setSectionsCache({})
+      // Immediately re-fetch for any expanded courses
+      courses.forEach((course) => {
+        if (expandedCourses.has(course.id)) {
+          window.electronAPI.invoke<ServiceResult<SectionSummary[]>>(
+            'drive:listSections',
+            course.id
+          ).then((result) => {
+            if (result.success) {
+              setSectionsCache((prev) => ({
+                ...prev,
+                [course.id]: result.data
+              }))
+            }
+          })
+        }
+      })
+    }
+  }, [sidebarCacheVersion, courses, expandedCourses])
 
   // Fetch courses when logged in
   useEffect(() => {

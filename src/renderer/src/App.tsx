@@ -156,6 +156,7 @@ function App(): ReactElement {
           course={currentCourse}
           section={currentSection}
           onBack={() => setCurrentSection(null)}
+          onSectionUpdate={(updated) => setCurrentSection(updated)}
           onAssignmentSelect={(assignment) => setCurrentAssignment(assignment)}
           onGradebookClick={() => setViewingGradebook(true)}
         />
