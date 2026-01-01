@@ -11,7 +11,7 @@ on:
       branch:
         description: 'Branch to build from'
         required: true
-        default: 'develop'
+        default: 'main'
         type: string
 
 env:
