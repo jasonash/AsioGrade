@@ -600,7 +600,7 @@ export function AssessmentViewPage({
             </Typography>
             {isViewingVariant && (
               <Chip
-                label="Viewing Variant (Read Only)"
+                label="Viewing Variant"
                 size="small"
                 color="info"
                 variant="outlined"
