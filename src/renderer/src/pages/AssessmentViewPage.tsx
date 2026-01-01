@@ -608,7 +608,7 @@ export function AssessmentViewPage({
             )}
             {isViewingVersion && (
               <Chip
-                label={`Version ${selectedVersionId} (Read Only)`}
+                label={`Version ${selectedVersionId}`}
                 size="small"
                 color="primary"
                 variant="outlined"
