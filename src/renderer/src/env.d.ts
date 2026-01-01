@@ -157,6 +157,7 @@ type EventChannel =
   | 'ai:questionStream'
   | 'ai:lessonProgress'
   | 'ai:batchVariantProgress'
+  | 'material:uploadProgress'
 
 interface ElectronAPI {
   platform: NodeJS.Platform

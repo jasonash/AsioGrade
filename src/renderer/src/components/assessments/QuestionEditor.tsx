@@ -73,6 +73,26 @@ export function QuestionEditor({
 
   const [errors, setErrors] = useState<{ text?: string; choices?: string }>({})
 
+  // Reset form when switching to a new question (no question prop provided)
+  // This handles the case where the component stays mounted but should show a fresh form
+  useEffect(() => {
+    if (!question && isNew) {
+      setFormData({
+        text: '',
+        choices: [
+          createEmptyChoice('a'),
+          createEmptyChoice('b'),
+          createEmptyChoice('c'),
+          createEmptyChoice('d')
+        ],
+        correctAnswer: 'a',
+        points: 1,
+        standardRef: ''
+      })
+      setErrors({})
+    }
+  }, [question, isNew])
+
   // Update correct answer in choices when correctAnswer changes
   useEffect(() => {
     setFormData((prev) => ({

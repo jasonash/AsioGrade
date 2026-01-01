@@ -9,6 +9,7 @@ import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import { useCourseMaterialStore } from '../../stores'
 import { CourseMaterialCard } from './CourseMaterialCard'
 import { MaterialUploadModal } from './MaterialUploadModal'
+import { MaterialPreviewModal } from './MaterialPreviewModal'
 import { ConfirmModal } from '../ui'
 
 interface CourseMaterialsSectionProps {
@@ -33,6 +34,7 @@ export function CourseMaterialsSection({
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
   const [materialToDelete, setMaterialToDelete] = useState<{ id: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [previewMaterialId, setPreviewMaterialId] = useState<string | null>(null)
 
   // Fetch materials on mount and when courseId changes
   useEffect(() => {
@@ -160,6 +162,7 @@ export function CourseMaterialsSection({
             <CourseMaterialCard
               key={material.id}
               material={material}
+              onClick={() => setPreviewMaterialId(material.id)}
               onDelete={() => handleDeleteClick(material.id, material.name)}
               isDeleting={isDeleting && materialToDelete?.id === material.id}
             />
@@ -188,6 +191,13 @@ export function CourseMaterialsSection({
         confirmText="Delete"
         variant="destructive"
         isLoading={isDeleting}
+      />
+
+      {/* Preview Modal */}
+      <MaterialPreviewModal
+        isOpen={previewMaterialId !== null}
+        onClose={() => setPreviewMaterialId(null)}
+        materialId={previewMaterialId}
       />
     </Box>
   )

@@ -24,7 +24,7 @@ export class OpenAIProvider extends AbstractLLMProvider {
   private client: OpenAI | null = null
   private defaultTemperature = 0.7
 
-  constructor(apiKey: string | null, model: string = 'gpt-4o') {
+  constructor(apiKey: string | null, model: string = 'gpt-4.1') {
     super(apiKey, model)
     this.initClient()
   }

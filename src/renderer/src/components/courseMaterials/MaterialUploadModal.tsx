@@ -5,11 +5,17 @@ import Button from '@mui/material/Button'
 import Alert from '@mui/material/Alert'
 import CircularProgress from '@mui/material/CircularProgress'
 import Typography from '@mui/material/Typography'
+import LinearProgress from '@mui/material/LinearProgress'
 import UploadFileIcon from '@mui/icons-material/UploadFile'
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile'
 import { Modal } from '../ui'
 import { useCourseMaterialStore } from '../../stores'
 import type { CourseMaterial, ServiceResult } from '../../../../shared/types'
+
+interface UploadProgress {
+  status: string
+  detail?: string
+}
 
 interface MaterialUploadModalProps {
   isOpen: boolean
@@ -32,6 +38,7 @@ export function MaterialUploadModal({
   const [filePath, setFilePath] = useState<string | null>(null)
   const [fileName, setFileName] = useState<string | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<UploadProgress | null>(null)
 
   // Reset form when modal opens
   useEffect(() => {
@@ -40,9 +47,30 @@ export function MaterialUploadModal({
       setFilePath(null)
       setFileName(null)
       setLocalError(null)
+      setProgress(null)
       clearError()
     }
   }, [isOpen, clearError])
+
+  // Listen for progress updates during upload
+  useEffect(() => {
+    if (!isUploading) {
+      setProgress(null)
+      return
+    }
+
+    const unsubscribe = window.electronAPI.on(
+      'material:uploadProgress',
+      (data: unknown) => {
+        const progressData = data as UploadProgress
+        setProgress(progressData)
+      }
+    )
+
+    return () => {
+      unsubscribe()
+    }
+  }, [isUploading])
 
   const handleSelectFile = useCallback(async () => {
     try {
@@ -112,6 +140,32 @@ export function MaterialUploadModal({
 
         {/* Error */}
         {displayError && <Alert severity="error">{displayError}</Alert>}
+
+        {/* Progress */}
+        {isUploading && progress && (
+          <Box
+            sx={{
+              p: 2,
+              bgcolor: 'action.hover',
+              borderRadius: 1,
+              border: 1,
+              borderColor: 'divider'
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
+              <CircularProgress size={18} />
+              <Typography variant="body2" fontWeight={500}>
+                {progress.status}
+              </Typography>
+            </Box>
+            {progress.detail && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                {progress.detail}
+              </Typography>
+            )}
+            <LinearProgress sx={{ borderRadius: 1 }} />
+          </Box>
+        )}
 
         {/* File Selection */}
         <Box

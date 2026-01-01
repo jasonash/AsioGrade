@@ -164,28 +164,34 @@ export type VisionExtractionResult = ServiceResult<VisionExtractionResponse>
 // Available models per provider
 export const OPENAI_MODELS: LLMModelInfo[] = [
   {
-    id: 'gpt-4o',
-    name: 'GPT-4o',
-    contextWindow: 128000,
-    description: 'Most capable model, multimodal'
+    id: 'gpt-4.1',
+    name: 'GPT-4.1',
+    contextWindow: 1000000,
+    description: 'Smartest non-reasoning model'
   },
   {
-    id: 'gpt-4o-mini',
-    name: 'GPT-4o Mini',
-    contextWindow: 128000,
+    id: 'gpt-4.1-mini',
+    name: 'GPT-4.1 Mini',
+    contextWindow: 1000000,
     description: 'Fast and cost-effective'
   },
   {
-    id: 'gpt-4-turbo',
-    name: 'GPT-4 Turbo',
-    contextWindow: 128000,
-    description: 'Latest GPT-4 Turbo model'
+    id: 'gpt-4.1-nano',
+    name: 'GPT-4.1 Nano',
+    contextWindow: 1000000,
+    description: 'Fastest and cheapest'
   },
   {
-    id: 'gpt-4',
-    name: 'GPT-4',
-    contextWindow: 8192,
-    description: 'Original GPT-4'
+    id: 'o4-mini',
+    name: 'O4 Mini',
+    contextWindow: 100000,
+    description: 'Reasoning model for math/coding'
+  },
+  {
+    id: 'gpt-4o',
+    name: 'GPT-4o',
+    contextWindow: 128000,
+    description: 'Legacy model, good for audio'
   }
 ]
 

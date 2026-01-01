@@ -33,6 +33,7 @@ export function QuestionList({
 }: QuestionListProps): ReactElement {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [isAddingNew, setIsAddingNew] = useState(false)
+  const [addEditorKey, setAddEditorKey] = useState(0)
 
   // In variant edit mode, we can edit but not add/delete
   const canEdit = !readOnly || variantEditMode
@@ -100,7 +101,10 @@ export function QuestionList({
             <Button
               variant="contained"
               startIcon={<AddIcon />}
-              onClick={() => setIsAddingNew(true)}
+              onClick={() => {
+                setAddEditorKey((k) => k + 1)
+                setIsAddingNew(true)
+              }}
             >
               Add Question
             </Button>
@@ -237,6 +241,7 @@ export function QuestionList({
       {/* Add new question */}
       <Collapse in={isAddingNew}>
         <QuestionEditor
+          key={addEditorKey}
           questionNumber={questions.length + 1}
           standards={standards}
           onSave={handleSaveQuestion}
@@ -250,7 +255,10 @@ export function QuestionList({
         <Button
           variant="outlined"
           startIcon={<AddIcon />}
-          onClick={() => setIsAddingNew(true)}
+          onClick={() => {
+            setAddEditorKey((k) => k + 1)
+            setIsAddingNew(true)
+          }}
           sx={{ alignSelf: 'flex-start' }}
         >
           Add Question

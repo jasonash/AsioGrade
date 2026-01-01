@@ -678,6 +678,7 @@ export function AssessmentViewPage({
               gradeLevel={course.gradeLevel}
               subject={course.subject}
               standards={allStandards}
+              collections={allCollections}
               existingQuestions={(currentAssessment.questions as MultipleChoiceQuestion[]) ?? []}
               onQuestionsAccepted={handleQuestionsAccepted}
               onQuestionRefined={handleQuestionRefined}

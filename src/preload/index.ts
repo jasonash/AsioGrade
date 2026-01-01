@@ -182,7 +182,8 @@ const validEventChannels = [
   'grade:progress',
   'ai:questionStream',
   'ai:lessonProgress',
-  'ai:batchVariantProgress'
+  'ai:batchVariantProgress',
+  'material:uploadProgress'
 ] as const
 
 type InvokeChannel = (typeof validInvokeChannels)[number]

@@ -106,7 +106,7 @@ const defaults: StoreSchema = {
     default: null,
     openai: {
       apiKey: null,
-      model: 'gpt-4'
+      model: 'gpt-4.1'
     },
     anthropic: {
       apiKey: null,
@@ -210,6 +210,20 @@ class StorageService {
   setLLMApiKey(provider: 'openai' | 'anthropic' | 'google', apiKey: string | null): void {
     const providers = this.getLLMProviders()
     providers[provider].apiKey = apiKey
+
+    // Auto-set as default if adding a key and no default is set
+    if (apiKey && !providers.default) {
+      providers.default = provider
+    }
+
+    // If removing the key of the default provider, clear the default
+    if (!apiKey && providers.default === provider) {
+      // Find another configured provider to be default
+      const otherProviders: Array<'openai' | 'anthropic' | 'google'> = ['openai', 'anthropic', 'google']
+      const newDefault = otherProviders.find(p => p !== provider && providers[p].apiKey)
+      providers.default = newDefault ?? null
+    }
+
     this.store.set('llmProviders', providers)
   }
 

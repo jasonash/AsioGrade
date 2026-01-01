@@ -76,6 +76,7 @@
     "opencv-wasm": "^4.3.0-10",
     "pdf-lib": "^1.17.1",
     "pdf-parse": "^1.1.1",
+    "pdf-to-img": "^5.0.0",
     "pdfjs-dist": "^5.4.449",
     "pdfkit": "^0.17.2",
     "qrcode": "^1.5.4",
@@ -109,12 +110,17 @@
       {
         "from": "config",
         "to": "config",
-        "filter": ["oauth.json"]
+        "filter": [
+          "oauth.json"
+        ]
       },
       {
         "from": "resources",
         "to": "resources",
-        "filter": ["splash.html", "icon.png"]
+        "filter": [
+          "splash.html",
+          "icon.png"
+        ]
       }
     ],
     "icon": "resources/icon.png",

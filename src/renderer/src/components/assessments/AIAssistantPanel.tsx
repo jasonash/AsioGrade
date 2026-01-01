@@ -28,7 +28,7 @@ import { GeneratedQuestionCard } from './GeneratedQuestionCard'
 import { QuestionGenerationModal } from './QuestionGenerationModal'
 import { QuestionImportModal } from './QuestionImportModal'
 import { CoverageAnalysis } from './CoverageAnalysis'
-import type { Standard, MultipleChoiceQuestion, AssessmentType } from '../../../../shared/types'
+import type { Standard, Standards, MultipleChoiceQuestion, AssessmentType } from '../../../../shared/types'
 import type { AIAssessmentContext, QuestionGenerationRequest } from '../../../../shared/types/ai.types'
 
 interface AIAssistantPanelProps {
@@ -39,6 +39,7 @@ interface AIAssistantPanelProps {
   gradeLevel: string
   subject: string
   standards: Standard[]
+  collections: Standards[]
   existingQuestions: MultipleChoiceQuestion[]
   selectedQuestion?: MultipleChoiceQuestion
   onQuestionsAccepted: (questions: MultipleChoiceQuestion[]) => void
@@ -53,6 +54,7 @@ export function AIAssistantPanel({
   gradeLevel,
   subject,
   standards,
+  collections,
   existingQuestions,
   selectedQuestion,
   onQuestionsAccepted
@@ -388,7 +390,7 @@ export function AIAssistantPanel({
         assessmentId={assessmentId}
         gradeLevel={gradeLevel}
         subject={subject}
-        standards={standards}
+        collections={collections}
         assessmentType={assessmentType}
         existingQuestionCount={existingQuestions.length}
       />

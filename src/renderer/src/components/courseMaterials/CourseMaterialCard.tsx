@@ -19,6 +19,7 @@ import { Card } from '@/components/ui/card'
 
 interface CourseMaterialCardProps {
   material: CourseMaterialSummary
+  onClick?: () => void
   onDelete?: () => void
   isDeleting?: boolean
 }
@@ -69,6 +70,7 @@ function getTypeLabel(type: CourseMaterialType): string {
 
 export function CourseMaterialCard({
   material,
+  onClick,
   onDelete,
   isDeleting
 }: CourseMaterialCardProps): ReactElement {
@@ -78,8 +80,12 @@ export function CourseMaterialCard({
         p: 2,
         display: 'flex',
         alignItems: 'flex-start',
-        gap: 2
+        gap: 2,
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'background-color 0.15s',
+        '&:hover': onClick ? { bgcolor: 'action.hover' } : {}
       }}
+      onClick={onClick}
     >
       {/* Icon */}
       <Box

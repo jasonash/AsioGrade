@@ -10,7 +10,19 @@ import { readFile } from 'fs/promises'
 import https from 'https'
 import mammoth from 'mammoth'
 import * as pdfjsLib from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { pdf } from 'pdf-to-img'
 import type { ServiceResult } from '../../shared/types/common.types'
+import { llmService } from './llm/llm.service'
+
+/**
+ * Send progress update to all renderer windows
+ */
+function sendProgressUpdate(status: string, detail?: string): void {
+  const windows = BrowserWindow.getAllWindows()
+  for (const win of windows) {
+    win.webContents.send('material:uploadProgress', { status, detail })
+  }
+}
 
 /**
  * Extract text from PDF buffer using pdfjs-dist directly
@@ -44,6 +56,95 @@ async function extractPdfText(data: Buffer): Promise<string> {
   }
 
   return textParts.join('\n\n')
+}
+
+/**
+ * Render PDF pages to PNG images for OCR
+ * Returns base64-encoded PNG images for each page
+ * Uses pdf-to-img for reliable PDF rendering
+ */
+async function renderPdfPagesToImages(
+  data: Buffer,
+  maxPages: number = 10
+): Promise<string[]> {
+  const images: string[] = []
+  let pageNum = 0
+
+  // pdf-to-img returns an async iterator of page images
+  const pdfDocument = await pdf(data, { scale: 2.0 })
+
+  for await (const pageImage of pdfDocument) {
+    if (pageNum >= maxPages) break
+
+    // pageImage is a Buffer containing PNG data
+    const base64 = pageImage.toString('base64')
+    images.push(base64)
+    pageNum++
+  }
+
+  return images
+}
+
+/**
+ * Extract text from PDF using OCR (vision API)
+ * Used as fallback for scanned PDFs without text layer
+ */
+async function extractPdfTextWithOCR(data: Buffer): Promise<ServiceResult<string>> {
+  try {
+    console.log('Starting PDF OCR extraction...')
+    sendProgressUpdate('Rendering PDF pages...', 'Converting pages to images for OCR')
+
+    // Render pages to images (limit to 10 pages for cost/time)
+    const pageImages = await renderPdfPagesToImages(data, 10)
+    console.log(`Rendered ${pageImages.length} pages to images`)
+
+    if (pageImages.length === 0) {
+      return { success: false, error: 'Could not render PDF pages to images' }
+    }
+
+    const pageTexts: string[] = []
+    const errors: string[] = []
+
+    for (let i = 0; i < pageImages.length; i++) {
+      const pageNum = i + 1
+      console.log(`Processing page ${pageNum}/${pageImages.length} with OCR...`)
+      sendProgressUpdate(
+        `Extracting text from page ${pageNum}/${pageImages.length}`,
+        'Using AI vision to read scanned content'
+      )
+
+      const result = await llmService.extractTextFromImage({
+        imageBase64: pageImages[i],
+        mimeType: 'image/png',
+        prompt: 'Extract all text from this scanned document page. Preserve the original formatting, paragraphs, headings, and structure. Include any captions, labels, or text in figures. Output only the extracted text.'
+      })
+
+      if (result.success) {
+        pageTexts.push(result.data.extractedText)
+        console.log(`Page ${pageNum}: extracted ${result.data.extractedText.length} characters`)
+      } else {
+        // Track errors for reporting
+        errors.push(result.error ?? 'Unknown error')
+        pageTexts.push(`[Page ${pageNum}: OCR failed - ${result.error}]`)
+        console.error(`Page ${pageNum} OCR failed:`, result.error)
+      }
+    }
+
+    sendProgressUpdate('Finalizing upload...', 'Saving to Google Drive')
+    const fullText = pageTexts.join('\n\n--- Page Break ---\n\n')
+
+    if (!fullText.trim() || pageTexts.every(t => t.startsWith('[Page'))) {
+      // Return the first error for better debugging
+      const firstError = errors[0] ?? 'Unknown error'
+      return { success: false, error: `OCR could not extract text from any pages. First error: ${firstError}` }
+    }
+
+    return { success: true, data: fullText }
+  } catch (error) {
+    console.error('PDF OCR extraction error:', error)
+    const message = error instanceof Error ? error.message : 'OCR extraction failed'
+    return { success: false, error: message }
+  }
 }
 
 /**
@@ -334,16 +435,34 @@ class ImportService {
 
   /**
    * Extract text from PDF file
+   * @param filePath - Path to the PDF file
+   * @param useOcrFallback - If true, uses AI vision OCR when no text layer is found (default: true)
    */
-  async readPdfText(filePath: string): Promise<ServiceResult<string>> {
+  async readPdfText(filePath: string, useOcrFallback: boolean = true): Promise<ServiceResult<string>> {
     try {
+      sendProgressUpdate('Reading PDF...', 'Extracting text content')
       const dataBuffer = await readFile(filePath)
       const text = await extractPdfText(dataBuffer)
 
       if (!text.trim()) {
+        // No text layer found - try OCR if enabled
+        if (useOcrFallback) {
+          console.log('No text layer in PDF, attempting OCR...')
+          sendProgressUpdate('No text layer found', 'Starting OCR for scanned PDF')
+          const ocrResult = await extractPdfTextWithOCR(dataBuffer)
+          if (ocrResult.success) {
+            return { success: true, data: ocrResult.data }
+          }
+          // OCR also failed - return informative error
+          return {
+            success: false,
+            error: `No text layer found and OCR failed: ${ocrResult.error}. Ensure an LLM provider is configured in Settings.`
+          }
+        }
         return { success: false, error: 'No text content found in PDF. It may contain only scanned images.' }
       }
 
+      sendProgressUpdate('Finalizing upload...', 'Saving to Google Drive')
       return { success: true, data: text }
     } catch (error) {
       console.error('PDF extraction error:', error)
@@ -400,11 +519,17 @@ class ImportService {
   /**
    * Extract text from a buffer based on MIME type
    * Used for extracting text from files downloaded from Google Drive
+   * @param useOcrFallback - If true, uses AI vision OCR when no text layer is found in PDFs (default: true)
    */
-  async extractTextFromBuffer(buffer: Buffer, mimeType: string): Promise<ServiceResult<string>> {
+  async extractTextFromBuffer(buffer: Buffer, mimeType: string, useOcrFallback: boolean = true): Promise<ServiceResult<string>> {
     try {
       if (mimeType === 'application/pdf') {
         const text = await extractPdfText(buffer)
+        if (!text.trim() && useOcrFallback) {
+          // No text layer - try OCR
+          console.log('No text layer in PDF buffer, attempting OCR...')
+          return extractPdfTextWithOCR(buffer)
+        }
         return { success: true, data: text }
       } else if (
         mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'

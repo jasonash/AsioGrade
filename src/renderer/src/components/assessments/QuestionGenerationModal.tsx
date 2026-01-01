@@ -2,32 +2,41 @@
  * QuestionGenerationModal Component
  *
  * Modal for configuring AI question generation parameters.
- * Shows course standards and materials for selection.
+ * Shows course standards grouped by domain with full descriptions and keywords.
  */
 
-import { type ReactElement, useState, useEffect } from 'react'
+import { type ReactElement, useState, useEffect, useMemo } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Button from '@mui/material/Button'
 import TextField from '@mui/material/TextField'
 import MenuItem from '@mui/material/MenuItem'
-import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
 import CircularProgress from '@mui/material/CircularProgress'
 import Accordion from '@mui/material/Accordion'
 import AccordionSummary from '@mui/material/AccordionSummary'
 import AccordionDetails from '@mui/material/AccordionDetails'
+import Chip from '@mui/material/Chip'
+import Paper from '@mui/material/Paper'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import DescriptionIcon from '@mui/icons-material/Description'
 import { Modal } from '../ui'
 import { useAIStore, useCourseMaterialStore } from '../../stores'
-import type { Standard } from '../../../../shared/types'
+import type { Standards, StandardDomain, Standard } from '../../../../shared/types'
 import type {
   QuestionDifficulty,
   QuestionGenerationRequest
 } from '../../../../shared/types/ai.types'
 import type { AssessmentType } from '../../../../shared/types'
 import { QUIZ_MAX_QUESTIONS } from '../../../../shared/types/assessment.types'
+
+// Flattened standard with domain context and global index
+interface IndexedStandard {
+  index: number
+  standard: Standard
+  domainCode: string
+  domainName: string
+}
 
 interface QuestionGenerationModalProps {
   isOpen: boolean
@@ -36,7 +45,7 @@ interface QuestionGenerationModalProps {
   assessmentId: string
   gradeLevel: string
   subject: string
-  standards: Standard[]
+  collections: Standards[]
   assessmentType?: AssessmentType
   existingQuestionCount?: number
 }
@@ -48,7 +57,7 @@ export function QuestionGenerationModal({
   assessmentId,
   gradeLevel,
   subject,
-  standards,
+  collections,
   assessmentType,
   existingQuestionCount = 0
 }: QuestionGenerationModalProps): ReactElement {
@@ -61,34 +70,110 @@ export function QuestionGenerationModal({
   const maxQuestionsAllowed = isQuiz ? remainingQuizSlots : 20
 
   const [questionCount, setQuestionCount] = useState(Math.min(5, maxQuestionsAllowed))
-  const [selectedStandards, setSelectedStandards] = useState<Set<string>>(new Set())
+  // Use indices for selection to handle duplicate codes
+  const [selectedIndices, setSelectedIndices] = useState<Set<number>>(new Set())
   const [selectedMaterials, setSelectedMaterials] = useState<Set<string>>(new Set())
   const [difficulty, setDifficulty] = useState<QuestionDifficulty>('mixed')
   const [focusTopics, setFocusTopics] = useState('')
   const [customPrompt, setCustomPrompt] = useState('')
+  const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set())
+
+  // Build flattened list with domain context and organize by domain
+  const { indexedStandards, domainGroups, totalCount } = useMemo(() => {
+    const indexed: IndexedStandard[] = []
+    const groups: Map<string, { domain: StandardDomain; standards: IndexedStandard[]; collectionName: string }> = new Map()
+    let globalIndex = 0
+
+    for (const collection of collections) {
+      for (const domain of collection.domains) {
+        const domainKey = `${collection.id}-${domain.code}`
+        const domainStandards: IndexedStandard[] = []
+
+        for (const standard of domain.standards) {
+          const indexedStd: IndexedStandard = {
+            index: globalIndex,
+            standard,
+            domainCode: domain.code,
+            domainName: domain.name
+          }
+          indexed.push(indexedStd)
+          domainStandards.push(indexedStd)
+          globalIndex++
+        }
+
+        if (domainStandards.length > 0) {
+          groups.set(domainKey, {
+            domain,
+            standards: domainStandards,
+            collectionName: collection.name
+          })
+        }
+      }
+    }
+
+    return { indexedStandards: indexed, domainGroups: groups, totalCount: globalIndex }
+  }, [collections])
 
   // Fetch materials and initialize standards when modal opens
   useEffect(() => {
     if (isOpen) {
-      setSelectedStandards(new Set(standards.map((s) => s.code)))
+      // Select all standards by index
+      setSelectedIndices(new Set(indexedStandards.map((s) => s.index)))
       setSelectedMaterials(new Set())
       setCustomPrompt('')
+      setExpandedDomains(new Set())
       fetchMaterials(courseId)
     }
-  }, [isOpen, standards, courseId, fetchMaterials])
+  }, [isOpen, indexedStandards, courseId, fetchMaterials])
 
   // Filter to only show materials with successful extraction
   const availableMaterials = materials.filter(
     (m) => m.extractionStatus === 'complete'
   )
 
-  const handleStandardToggle = (code: string): void => {
-    setSelectedStandards((prev) => {
+  const handleStandardToggle = (index: number): void => {
+    setSelectedIndices((prev) => {
       const next = new Set(prev)
-      if (next.has(code)) {
-        next.delete(code)
+      if (next.has(index)) {
+        next.delete(index)
       } else {
-        next.add(code)
+        next.add(index)
+      }
+      return next
+    })
+  }
+
+  const handleDomainToggle = (domainKey: string): void => {
+    const group = domainGroups.get(domainKey)
+    if (!group) return
+
+    const domainIndices = group.standards.map((s) => s.index)
+    const allSelected = domainIndices.every((i) => selectedIndices.has(i))
+
+    setSelectedIndices((prev) => {
+      const next = new Set(prev)
+      if (allSelected) {
+        // Deselect all in domain
+        for (const idx of domainIndices) {
+          next.delete(idx)
+        }
+      } else {
+        // Select all in domain
+        for (const idx of domainIndices) {
+          next.add(idx)
+        }
+      }
+      return next
+    })
+  }
+
+  const handleExpandDomain = (domainKey: string): void => {
+    setExpandedDomains((prev) => {
+      const next = new Set(prev)
+      if (next.has(domainKey)) {
+        next.delete(domainKey)
+      } else {
+        next.add(domainKey)
       }
       return next
     })
@@ -107,11 +192,11 @@ export function QuestionGenerationModal({
   }
 
   const handleSelectAll = (): void => {
-    setSelectedStandards(new Set(standards.map((s) => s.code)))
+    setSelectedIndices(new Set(indexedStandards.map((s) => s.index)))
   }
 
   const handleSelectNone = (): void => {
-    setSelectedStandards(new Set())
+    setSelectedIndices(new Set())
   }
 
   const handleSelectAllMaterials = (): void => {
@@ -123,12 +208,15 @@ export function QuestionGenerationModal({
   }
 
   const handleGenerate = async (): Promise<void> => {
-    if (selectedStandards.size === 0) return
+    if (selectedIndices.size === 0) return
+
+    // Convert selected indices to standard codes
+    const selectedCodes = [...selectedIndices].map((i) => indexedStandards[i].standard.code)
 
     const request: QuestionGenerationRequest = {
       courseId,
       assessmentId,
-      standardRefs: [...selectedStandards],
+      standardRefs: selectedCodes,
       questionCount,
       questionTypes: ['multiple_choice'],
       difficulty,
@@ -144,13 +232,35 @@ export function QuestionGenerationModal({
     onClose()
   }
 
+  // Check if all standards in a domain are selected
+  const isDomainFullySelected = (domainKey: string): boolean => {
+    const group = domainGroups.get(domainKey)
+    if (!group) return false
+    return group.standards.every((s) => selectedIndices.has(s.index))
+  }
+
+  // Check if some standards in a domain are selected
+  const isDomainPartiallySelected = (domainKey: string): boolean => {
+    const group = domainGroups.get(domainKey)
+    if (!group) return false
+    const selectedCount = group.standards.filter((s) => selectedIndices.has(s.index)).length
+    return selectedCount > 0 && selectedCount < group.standards.length
+  }
+
+  // Count selected in domain
+  const getSelectedCountInDomain = (domainKey: string): number => {
+    const group = domainGroups.get(domainKey)
+    if (!group) return 0
+    return group.standards.filter((s) => selectedIndices.has(s.index)).length
+  }
+
   return (
     <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Generate Questions"
       description="Select standards and configure generation settings"
-      size="md"
+      size="lg"
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, py: 1 }}>
         {/* Question Count */}
@@ -177,7 +287,7 @@ export function QuestionGenerationModal({
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="subtitle2">
-              Standards ({selectedStandards.size}/{standards.length} selected)
+              Standards ({selectedIndices.size}/{totalCount} selected)
             </Typography>
             <Box sx={{ display: 'flex', gap: 1 }}>
               <Button size="small" onClick={handleSelectAll}>
@@ -189,39 +299,130 @@ export function QuestionGenerationModal({
             </Box>
           </Box>
 
-          {standards.length === 0 ? (
+          {totalCount === 0 ? (
             <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
               No standards assigned to this course. Add standards to the course first.
             </Typography>
           ) : (
             <Box
               sx={{
-                maxHeight: 250,
+                maxHeight: 350,
                 overflowY: 'auto',
                 border: 1,
                 borderColor: 'divider',
-                borderRadius: 1,
-                p: 1
+                borderRadius: 1
               }}
             >
-              {standards.map((standard) => (
-                <FormControlLabel
-                  key={standard.code}
-                  control={
+              {[...domainGroups.entries()].map(([domainKey, { domain, standards: domainStandards }]) => (
+                <Accordion
+                  key={domainKey}
+                  expanded={expandedDomains.has(domainKey)}
+                  onChange={() => handleExpandDomain(domainKey)}
+                  disableGutters
+                  sx={{
+                    '&:before': { display: 'none' },
+                    boxShadow: 'none',
+                    '&:not(:last-child)': {
+                      borderBottom: 1,
+                      borderColor: 'divider'
+                    }
+                  }}
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreIcon />}
+                    sx={{
+                      '& .MuiAccordionSummary-content': {
+                        alignItems: 'center',
+                        gap: 1,
+                        my: 1
+                      }
+                    }}
+                  >
                     <Checkbox
-                      checked={selectedStandards.has(standard.code)}
-                      onChange={() => handleStandardToggle(standard.code)}
+                      checked={isDomainFullySelected(domainKey)}
+                      indeterminate={isDomainPartiallySelected(domainKey)}
+                      onChange={(e) => {
+                        e.stopPropagation()
+                        handleDomainToggle(domainKey)
+                      }}
+                      onClick={(e) => e.stopPropagation()}
                       size="small"
                     />
-                  }
-                  label={
-                    <Typography variant="body2">
-                      <strong>{standard.code}</strong> - {standard.description.slice(0, 60)}
-                      {standard.description.length > 60 ? '...' : ''}
+                    <Chip
+                      label={domain.code}
+                      size="small"
+                      color="primary"
+                      sx={{ fontWeight: 500 }}
+                    />
+                    <Typography variant="body2" fontWeight={500} sx={{ flex: 1 }}>
+                      {domain.name}
                     </Typography>
-                  }
-                  sx={{ display: 'flex', alignItems: 'flex-start', mb: 0.5 }}
-                />
+                    <Typography variant="caption" color="text.secondary">
+                      {getSelectedCountInDomain(domainKey)}/{domainStandards.length}
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ pt: 0, pb: 1, px: 2 }}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, ml: 4 }}>
+                      {domainStandards.map(({ index, standard }) => (
+                        <Paper
+                          key={index}
+                          variant="outlined"
+                          sx={{
+                            p: 1.5,
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            gap: 1,
+                            cursor: 'pointer',
+                            '&:hover': { bgcolor: 'action.hover' }
+                          }}
+                          onClick={() => handleStandardToggle(index)}
+                        >
+                          <Checkbox
+                            checked={selectedIndices.has(index)}
+                            onChange={() => handleStandardToggle(index)}
+                            onClick={(e) => e.stopPropagation()}
+                            size="small"
+                            sx={{ mt: -0.5 }}
+                          />
+                          <Box sx={{ flex: 1, minWidth: 0 }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                              <Chip
+                                label={standard.code}
+                                size="small"
+                                variant="outlined"
+                                sx={{ fontWeight: 500 }}
+                              />
+                            </Box>
+                            <Typography variant="body2" sx={{ mb: 0.5 }}>
+                              {standard.description}
+                            </Typography>
+                            {standard.keywords && standard.keywords.length > 0 && (
+                              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                                {standard.keywords.slice(0, 5).map((keyword) => (
+                                  <Chip
+                                    key={keyword}
+                                    label={keyword}
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{ fontSize: '0.65rem', height: 18 }}
+                                  />
+                                ))}
+                                {standard.keywords.length > 5 && (
+                                  <Chip
+                                    label={`+${standard.keywords.length - 5}`}
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{ fontSize: '0.65rem', height: 18 }}
+                                  />
+                                )}
+                              </Box>
+                            )}
+                          </Box>
+                        </Paper>
+                      ))}
+                    </Box>
+                  </AccordionDetails>
+                </Accordion>
               ))}
             </Box>
           )}
@@ -261,22 +462,30 @@ export function QuestionGenerationModal({
                 }}
               >
                 {availableMaterials.map((material) => (
-                  <FormControlLabel
+                  <Box
                     key={material.id}
-                    control={
-                      <Checkbox
-                        checked={selectedMaterials.has(material.id)}
-                        onChange={() => handleMaterialToggle(material.id)}
-                        size="small"
-                      />
-                    }
-                    label={
-                      <Typography variant="body2">
-                        {material.name}
-                      </Typography>
-                    }
-                    sx={{ display: 'flex', alignItems: 'center', mb: 0.5 }}
-                  />
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 1,
+                      py: 0.5,
+                      cursor: 'pointer',
+                      '&:hover': { bgcolor: 'action.hover' },
+                      borderRadius: 1,
+                      px: 0.5
+                    }}
+                    onClick={() => handleMaterialToggle(material.id)}
+                  >
+                    <Checkbox
+                      checked={selectedMaterials.has(material.id)}
+                      onChange={() => handleMaterialToggle(material.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      size="small"
+                    />
+                    <Typography variant="body2">
+                      {material.name}
+                    </Typography>
+                  </Box>
                 ))}
               </Box>
             </AccordionDetails>
@@ -324,10 +533,10 @@ export function QuestionGenerationModal({
           <Button
             variant="contained"
             onClick={handleGenerate}
-            disabled={isGenerating || selectedStandards.size === 0 || (isQuiz && remainingQuizSlots === 0)}
+            disabled={isGenerating || selectedIndices.size === 0 || (isQuiz && remainingQuizSlots === 0)}
             startIcon={isGenerating ? <CircularProgress size={16} color="inherit" /> : undefined}
           >
-            {isGenerating ? 'Generating...' : `Generate (${selectedStandards.size} standards)`}
+            {isGenerating ? 'Generating...' : `Generate (${selectedIndices.size} standards)`}
           </Button>
         </Box>
       </Box>

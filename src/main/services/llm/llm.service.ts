@@ -312,7 +312,19 @@ class LLMService {
       this.refreshProviders()
 
       const config = storageService.getLLMProviders()
-      const providerId = request.provider ?? config.default
+      let providerId = request.provider ?? config.default
+
+      // If no default set, find any configured provider
+      if (!providerId) {
+        const providerTypes: LLMProviderType[] = ['openai', 'anthropic', 'google']
+        for (const type of providerTypes) {
+          const provider = this.providers.get(type)
+          if (provider?.isConfigured()) {
+            providerId = type
+            break
+          }
+        }
+      }
 
       if (!providerId) {
         return {
