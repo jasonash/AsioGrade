@@ -412,15 +412,12 @@ jobs:
           **Linux (Debian/Ubuntu)**: Install the .deb package: `sudo dpkg -i asiograde_*.deb`
           NOTES
 
-          # Find all artifacts
-          FILES=$(find artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" \) | tr '\n' ' ')
-
-          # Create the release using gh CLI
-          gh release create dev-latest \
-            --title "Development Build (v${{ steps.version.outputs.dev_version }})" \
-            --notes-file release-notes.md \
-            --prerelease \
-            $FILES
+          # Find all artifacts and upload them using xargs to handle filenames with spaces
+          find artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" \) -print0 | \
+            xargs -0 gh release create dev-latest \
+              --title "Development Build (v${{ steps.version.outputs.dev_version }})" \
+              --notes-file release-notes.md \
+              --prerelease
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
