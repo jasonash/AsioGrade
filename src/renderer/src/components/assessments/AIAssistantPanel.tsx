@@ -44,6 +44,8 @@ interface AIAssistantPanelProps {
   selectedQuestion?: MultipleChoiceQuestion
   onQuestionsAccepted: (questions: MultipleChoiceQuestion[]) => void
   onQuestionRefined: (questionId: string, refined: MultipleChoiceQuestion) => void
+  /** Taught content - defines what can be assessed */
+  taughtContent?: string
 }
 
 export function AIAssistantPanel({
@@ -57,7 +59,8 @@ export function AIAssistantPanel({
   collections,
   existingQuestions,
   selectedQuestion,
-  onQuestionsAccepted
+  onQuestionsAccepted,
+  taughtContent
 }: AIAssistantPanelProps): ReactElement {
   const {
     conversation,
@@ -393,6 +396,7 @@ export function AIAssistantPanel({
         collections={collections}
         assessmentType={assessmentType}
         existingQuestionCount={existingQuestions.length}
+        assessmentTaughtContent={taughtContent}
       />
 
       {/* Question Import Modal */}

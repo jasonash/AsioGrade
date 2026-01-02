@@ -48,6 +48,8 @@ interface QuestionGenerationModalProps {
   collections: Standards[]
   assessmentType?: AssessmentType
   existingQuestionCount?: number
+  /** Taught content from assessment - defines scope for question generation */
+  assessmentTaughtContent?: string
 }
 
 export function QuestionGenerationModal({
@@ -59,7 +61,8 @@ export function QuestionGenerationModal({
   subject,
   collections,
   assessmentType,
-  existingQuestionCount = 0
+  existingQuestionCount = 0,
+  assessmentTaughtContent
 }: QuestionGenerationModalProps): ReactElement {
   const { generateQuestions, isGenerating } = useAIStore()
   const { materials, fetchMaterials } = useCourseMaterialStore()
@@ -75,6 +78,7 @@ export function QuestionGenerationModal({
   const [selectedMaterials, setSelectedMaterials] = useState<Set<string>>(new Set())
   const [difficulty, setDifficulty] = useState<QuestionDifficulty>('mixed')
   const [focusTopics, setFocusTopics] = useState('')
+  const [taughtContentOverride, setTaughtContentOverride] = useState('')
   const [customPrompt, setCustomPrompt] = useState('')
   const [expandedDomains, setExpandedDomains] = useState<Set<string>>(new Set())
 
@@ -213,6 +217,9 @@ export function QuestionGenerationModal({
     // Convert selected indices to standard codes
     const selectedCodes = [...selectedIndices].map((i) => indexedStandards[i].standard.code)
 
+    // Use override if provided, otherwise use assessment's taught content
+    const effectiveTaughtContent = taughtContentOverride.trim() || assessmentTaughtContent
+
     const request: QuestionGenerationRequest = {
       courseId,
       assessmentId,
@@ -223,7 +230,9 @@ export function QuestionGenerationModal({
       gradeLevel,
       subject,
       focusTopics: focusTopics ? focusTopics.split(',').map((t) => t.trim()) : undefined,
-      // Phase 4: Include selected materials and custom prompt
+      // Taught content defines what can be assessed
+      taughtContent: effectiveTaughtContent || undefined,
+      // Materials provide context for wording/examples (not scope expansion)
       materialIds: selectedMaterials.size > 0 ? [...selectedMaterials] : undefined,
       customPrompt: customPrompt.trim() || undefined
     }
@@ -514,7 +523,22 @@ export function QuestionGenerationModal({
           helperText="Comma-separated list of topics to emphasize"
         />
 
-        {/* Custom Prompt (Phase 4) */}
+        {/* Taught Content Override */}
+        <TextField
+          label="Taught Content (for this generation)"
+          value={taughtContentOverride}
+          onChange={(e) => setTaughtContentOverride(e.target.value)}
+          placeholder={assessmentTaughtContent || "List what was explicitly taught - this defines what can be assessed"}
+          helperText={
+            assessmentTaughtContent
+              ? "Leave empty to use assessment's taught content, or enter here to override for this generation"
+              : "Define what was taught - AI will only generate questions about this content"
+          }
+          multiline
+          rows={3}
+        />
+
+        {/* Custom Prompt */}
         <TextField
           label="Custom Instructions (optional)"
           value={customPrompt}

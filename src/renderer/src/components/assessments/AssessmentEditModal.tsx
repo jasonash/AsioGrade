@@ -25,6 +25,7 @@ interface FormData {
   type: AssessmentType
   purpose: AssessmentPurpose
   description: string
+  taughtContent: string
 }
 
 interface FormErrors {
@@ -52,7 +53,8 @@ export function AssessmentEditModal({
     title: assessment.title,
     type: assessment.type,
     purpose: assessment.purpose,
-    description: assessment.description ?? ''
+    description: assessment.description ?? '',
+    taughtContent: assessment.taughtContent ?? ''
   })
   const [errors, setErrors] = useState<FormErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -64,7 +66,8 @@ export function AssessmentEditModal({
         title: assessment.title,
         type: assessment.type,
         purpose: assessment.purpose,
-        description: assessment.description ?? ''
+        description: assessment.description ?? '',
+        taughtContent: assessment.taughtContent ?? ''
       })
       setErrors({})
       clearError()
@@ -93,7 +96,8 @@ export function AssessmentEditModal({
       title: formData.title.trim(),
       type: formData.type,
       purpose: formData.purpose,
-      description: formData.description.trim() || undefined
+      description: formData.description.trim() || undefined,
+      taughtContent: formData.taughtContent.trim() || undefined
     })
 
     setIsSubmitting(false)
@@ -179,6 +183,19 @@ export function AssessmentEditModal({
           rows={2}
           fullWidth
           disabled={isSubmitting}
+        />
+
+        {/* Taught Content */}
+        <TextField
+          label="Taught Content / Learning Intentions"
+          value={formData.taughtContent}
+          onChange={(e) => handleFieldChange('taughtContent', e.target.value)}
+          multiline
+          rows={4}
+          fullWidth
+          disabled={isSubmitting}
+          placeholder="List what was explicitly taught for this assessment. This defines what can be assessed by AI question generation."
+          helperText="Specify concepts, facts, or skills students were taught. AI will only generate questions about content listed here."
         />
 
         {/* Actions */}

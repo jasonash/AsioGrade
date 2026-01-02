@@ -682,6 +682,7 @@ export function AssessmentViewPage({
               existingQuestions={(currentAssessment.questions as MultipleChoiceQuestion[]) ?? []}
               onQuestionsAccepted={handleQuestionsAccepted}
               onQuestionRefined={handleQuestionRefined}
+              taughtContent={currentAssessment.taughtContent}
             />
           </Grid>
         )}

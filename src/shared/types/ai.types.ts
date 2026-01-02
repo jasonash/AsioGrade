@@ -44,10 +44,13 @@ export interface QuestionGenerationRequest {
   gradeLevel: string
   subject: string
 
-  // Course materials for context (Phase 4)
+  // Taught content - defines what CAN be assessed (scope boundary)
+  taughtContent?: string
+
+  // Course materials for context (wording/examples only, not scope expansion)
   materialIds?: string[]
 
-  // Custom teacher instructions (Phase 4)
+  // Custom teacher instructions
   customPrompt?: string
 }
 

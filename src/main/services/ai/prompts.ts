@@ -21,20 +21,29 @@ import type { DOKLevel } from '../../../shared/types/roster.types'
  * System prompts for different AI operations
  */
 export const SYSTEM_PROMPTS = {
-  questionGeneration: `You are an expert educational assessment developer. Your task is to create high-quality assessment questions that:
-1. Align directly to the provided learning standards
-2. Use age-appropriate vocabulary and reading level
-3. Test understanding, not just recall
-4. Have plausible distractors based on common misconceptions
-5. Are clear, unambiguous, and free from bias
+  questionGeneration: `You are an expert educational assessment designer working with secondary teachers (Grades 6–12). Your task is to generate instructionally valid quiz questions that reflect real classroom assessment practices.
 
-GUIDELINES:
-- Distribute questions evenly across standards when possible
-- Vary question complexity within the difficulty level
-- Avoid "all of the above" or "none of the above"
-- Make distractors plausible but clearly incorrect to someone who understands the concept
-- Avoid negative phrasing ("Which is NOT...")
-- Keep question stems concise but complete`,
+INSTRUCTIONAL SCOPE:
+- Assess ONLY concepts explicitly named in the provided learning intentions, success criteria, or taught content
+- Course materials (textbooks, PDFs) provide context for wording and examples but do NOT expand assessment scope
+- If a concept is not explicitly identified as taught content, it must not be assessed
+- Rule: if a teacher could reasonably say "I did not teach this," the question is invalid
+
+QUESTION DESIGN:
+- Use multiple-choice format with one clearly correct answer
+- Distractors must reflect plausible student misconceptions, not advanced or untaught facts
+- Avoid trick questions, ambiguous wording, unnecessary reading load, and "all/none of the above"
+- Keep question stems concise but complete
+
+STUDENT POPULATION:
+- Assume a mixed-ability classroom including English learners, students with IEPs/504s, and students who struggle with reading or abstract reasoning
+- Prioritize clarity, fairness, and alignment over cleverness
+
+FINAL VALIDATION:
+Before presenting any question, verify:
+1. The content was explicitly identified as taught
+2. A reasonable student would not feel blindsided
+If either condition fails, revise or discard the item.`,
 
   questionRefinement: `You are an expert educational assessment specialist helping teachers improve their assessment questions. You provide specific, actionable improvements while maintaining the original learning objective.`,
 
@@ -74,34 +83,43 @@ GUIDELINES FOR DISTRACTORS:
 
   dokVariantGeneration: `You are an expert in educational assessment design and Webb's Depth of Knowledge (DOK) framework.
 
-Your task is to create assessment variants that adjust question difficulty while maintaining alignment to learning standards.
+CRITICAL PRINCIPLE - THE "IDEA SPINE":
+DOK describes the TYPE OF THINKING required, not content complexity. Increasing DOK must NOT introduce new topics, mechanisms, vocabulary, or facts. The core scientific idea (the "idea spine") must remain identical. Only the STUDENT'S COGNITIVE TASK changes.
 
 WEBB'S DOK FRAMEWORK:
-- DOK 1 (Recall): Basic recall of facts, terms, definitions, simple procedures
-- DOK 2 (Skill/Concept): Use of information, concepts, skills in new situations, some reasoning required
-- DOK 3 (Strategic Thinking): Complex reasoning, planning, synthesis, analyzing multiple sources
-- DOK 4 (Extended Thinking): Complex reasoning over extended time, designing investigations, making connections
+- DOK 1 (Recall): Recall or identify taught facts, terms, definitions
+- DOK 2 (Skill/Concept): Explain, compare, classify, or interpret using ONE step of reasoning
+- DOK 3 (Strategic Thinking): Justify, evaluate evidence, or choose between explanations using ONLY taught content
+- DOK 4 (Extended Thinking): Synthesis over extended time - only generate if explicitly requested
 
-GUIDELINES FOR VARIANT GENERATION:
-- When targeting lower DOK: Simplify vocabulary, reduce complexity, focus on key concepts, make distractors more obviously wrong
-- When targeting higher DOK: Add analytical depth, require synthesis, increase cognitive demand, make distractors more nuanced
-- Always maintain alignment to the same learning standards
-- Keep question format consistent (multiple choice with 4 options)
-- Ensure distractors reflect DOK level appropriateness
-- Provide clear explanations for why the correct answer is correct`
+VARIANT GENERATION RULES:
+- DOK variants must preserve the SAME core idea as the base question
+- Variants may change the task or framing but NOT the topic, evidence type, or instructional scope
+- If raising the DOK would require introducing new content, do NOT generate that variant
+- When targeting lower DOK: Change the task to recall/identify, make distractors more obviously different
+- When targeting higher DOK: Change the task to require reasoning/justification about the SAME content
+
+VALIDATION:
+Before presenting any variant, verify:
+1. The scientific content is identical to the original question
+2. Only the cognitive task has changed
+3. No new facts, mechanisms, or vocabulary were introduced
+If any condition fails, revise or discard the variant.`
 }
 
 /**
  * Build the user prompt for question generation
  * @param request - The question generation request
  * @param standardsText - The formatted standards text
- * @param materialContext - Optional extracted text from course materials
+ * @param taughtContent - What was explicitly taught (defines assessable scope)
+ * @param materialContext - Optional extracted text from course materials (context only, not scope)
  * @param appPromptSupplement - Optional global app-level prompt supplement
  * @param coursePromptSupplement - Optional course-level prompt supplement
  */
 export function buildQuestionGenerationPrompt(
   request: QuestionGenerationRequest,
   standardsText: string,
+  taughtContent?: string,
   materialContext?: string,
   appPromptSupplement?: string,
   coursePromptSupplement?: string
@@ -118,13 +136,20 @@ export function buildQuestionGenerationPrompt(
     ? `\n- Avoid these topics: ${request.avoidTopics.join(', ')}`
     : ''
 
-  // Build material context section if materials provided
+  // Build taught content section - THIS DEFINES WHAT CAN BE ASSESSED
+  const taughtContentSection = taughtContent?.trim()
+    ? `\nTAUGHT CONTENT (This defines what CAN be assessed - do not assess anything outside this scope):
+${taughtContent.trim()}
+
+CRITICAL: Only assess concepts explicitly listed above. If something is not mentioned here, it is NOT assessable, even if it appears in standards or materials.\n`
+    : ''
+
+  // Build material context section - for wording/examples only, NOT scope expansion
   const materialSection = materialContext
-    ? `\nCOURSE MATERIALS (use as source content for questions):
+    ? `\nCOURSE MATERIALS (Use for wording, examples, and distractors - NOT to expand assessment scope):
 ${materialContext}
 
-IMPORTANT: Base questions on the content from the course materials above when applicable.
-Questions should assess understanding of the material while aligning to the standards.\n`
+NOTE: These materials provide context for HOW to phrase questions and generate realistic distractors. They do NOT expand what can be assessed beyond the taught content above.\n`
     : ''
 
   // Build instruction sections for each level (app → course → request)
@@ -149,11 +174,18 @@ ${request.customPrompt.trim()}`)
     ? `\n${instructionSections.join('\n\n')}\n`
     : ''
 
+  // Scope guidance based on what's provided
+  const scopeGuidance = taughtContent?.trim()
+    ? 'Assess ONLY the taught content listed above. Standards provide alignment context.'
+    : 'Assess concepts from the standards. Keep questions focused and avoid introducing untaught complexity.'
+
   return `Generate ${request.questionCount} multiple choice questions for grade ${request.gradeLevel} ${request.subject}.
 
-STANDARDS TO ASSESS:
+STANDARDS (for alignment):
 ${standardsText}
-${materialSection}${instructionsSection}
+${taughtContentSection}${materialSection}${instructionsSection}
+SCOPE: ${scopeGuidance}
+
 REQUIREMENTS:
 - Question types: ${request.questionTypes.join(', ')}
 - ${difficultyNote}${focusNote}${avoidNote}
@@ -438,13 +470,44 @@ Convert all ${request.questions.length} questions now:`
 }
 
 /**
- * DOK level descriptions for prompts
+ * DOK level descriptions for prompts - focused on TASK type, not content complexity
  */
 const DOK_DESCRIPTIONS: Record<DOKLevel, string> = {
-  1: 'Recall - Basic recall of facts, terms, definitions, simple procedures',
-  2: 'Skill/Concept - Use of information, concepts, skills with some reasoning',
-  3: 'Strategic Thinking - Complex reasoning, planning, synthesis, using evidence',
-  4: 'Extended Thinking - Complex reasoning over time, designing investigations'
+  1: 'Recall - Recall or identify taught facts, terms, definitions',
+  2: 'Skill/Concept - Explain, compare, classify using ONE step of reasoning',
+  3: 'Strategic Thinking - Justify, evaluate evidence, choose between explanations',
+  4: 'Extended Thinking - Synthesis over extended time (only if explicitly requested)'
+}
+
+/**
+ * DOK-specific task instructions - what the STUDENT must do (not content changes)
+ */
+const DOK_TASK_INSTRUCTIONS: Record<DOKLevel, string> = {
+  1: `For DOK 1 (Recall):
+- Ask students to IDENTIFY or RECALL the taught concept directly
+- Use simple, direct question stems like "What is...", "Which of these is..."
+- The correct answer should be a direct fact from instruction
+- Distractors should be clearly different (wrong terms, unrelated concepts)
+- No reasoning required - just recognition of taught information`,
+
+  2: `For DOK 2 (Skill/Concept):
+- Ask students to EXPLAIN, COMPARE, or CLASSIFY using the taught concept
+- Requires ONE step of reasoning or application
+- Question might ask "Why does...", "How would you classify...", "What is the difference..."
+- Distractors should represent common procedural errors or partial understanding
+- Student applies knowledge but doesn't need to synthesize multiple ideas`,
+
+  3: `For DOK 3 (Strategic Thinking):
+- Ask students to JUSTIFY, EVALUATE, or CHOOSE between explanations
+- Requires reasoning with evidence USING ONLY the taught content
+- Question might ask "Which explanation best...", "What evidence supports...", "Why would X occur instead of Y..."
+- Distractors should represent plausible but flawed reasoning about the SAME concept
+- Student must think strategically but NOT learn new content to answer`,
+
+  4: `For DOK 4 (Extended Thinking):
+- Only generate if explicitly requested
+- Requires synthesis across multiple taught concepts over time
+- Complex but still bounded by what was taught`
 }
 
 /**
@@ -467,27 +530,37 @@ export function buildDOKVariantPrompt(
   // Different instructions based on strategy
   const strategyInstructions =
     request.strategy === 'questions'
-      ? `Generate ${assessment.questions.length} NEW questions that:
-- Test the SAME standards as the original assessment
-- Target DOK Level ${request.targetDOK}: ${DOK_DESCRIPTIONS[request.targetDOK]}
-- Maintain similar point values
-- Are appropriate for the target DOK level
-- Include clear explanations for each answer
+      ? `Generate ${assessment.questions.length} NEW questions that preserve the "IDEA SPINE" of each original question.
 
-For DOK ${request.targetDOK}:
-${request.targetDOK === 1 ? '- Focus on recall of facts, definitions, and simple procedures\n- Use direct, straightforward question stems\n- Make distractors obviously different from the correct answer' : ''}${request.targetDOK === 2 ? '- Require application of concepts or skills\n- Include some inference or comparison\n- Make distractors based on procedural errors' : ''}${request.targetDOK === 3 ? '- Require analysis, reasoning, or evidence evaluation\n- May involve multiple steps or considerations\n- Make distractors represent sophisticated but incorrect reasoning' : ''}${request.targetDOK === 4 ? '- Require synthesis, evaluation, or complex reasoning\n- Connect multiple concepts or contexts\n- Make distractors represent advanced but flawed thinking' : ''}`
-      : `Update the DISTRACTORS (wrong answer choices) for each question to better target DOK Level ${request.targetDOK}.
+THE IDEA SPINE RULE:
+Each new question must test the EXACT SAME scientific concept/fact as the corresponding original question.
+You are changing the COGNITIVE TASK the student performs, NOT the content they must know.
+If the original asks about water's chemical formula, the variant ALSO asks about water's chemical formula.
+DO NOT introduce new facts, mechanisms, vocabulary, or adjacent topics.
+
+Target: DOK Level ${request.targetDOK} - ${DOK_DESCRIPTIONS[request.targetDOK]}
+
+${DOK_TASK_INSTRUCTIONS[request.targetDOK]}
+
+For each question:
+1. Identify the core concept being tested (the "idea spine")
+2. Rewrite the question to change only the TASK (recall → explain → justify)
+3. Ensure distractors match the DOK level
+4. Verify NO new content was introduced`
+      : `Update the DISTRACTORS for each question to match DOK Level ${request.targetDOK}.
 
 KEEP UNCHANGED:
 - Question stems (the question text)
 - Correct answers
-- Standard alignment
+- The core concept being tested
 
-MODIFY:
-- All three distractors for each question
+MODIFY ONLY:
+- The three incorrect answer choices (distractors)
 
-For DOK ${request.targetDOK} distractors:
-${request.targetDOK === 1 ? '- Make distractors more obviously wrong\n- Use clearly different terms or concepts\n- Avoid subtle distinctions that require deep understanding' : ''}${request.targetDOK === 2 ? '- Base distractors on common procedural mistakes\n- Include answers that would result from skipping steps\n- Use related but clearly incorrect terms' : ''}${request.targetDOK === 3 ? '- Make distractors represent plausible but incomplete reasoning\n- Include partially correct answers\n- Require careful analysis to distinguish from correct answer' : ''}${request.targetDOK === 4 ? '- Make distractors represent sophisticated misconceptions\n- Include answers that would be correct in different contexts\n- Require synthesis of multiple concepts to eliminate' : ''}`
+${DOK_TASK_INSTRUCTIONS[request.targetDOK]}
+
+Distractor guidelines for DOK ${request.targetDOK}:
+${request.targetDOK === 1 ? '- Make distractors obviously different from the correct answer\n- Use unrelated terms or clearly wrong facts\n- A student who learned the content should easily eliminate these' : ''}${request.targetDOK === 2 ? '- Base distractors on common procedural errors\n- Include answers that skip a step or misapply a rule\n- Related to the concept but clearly wrong with one step of reasoning' : ''}${request.targetDOK === 3 ? '- Make distractors represent plausible but incomplete reasoning\n- Include answers that would be correct if a key detail were different\n- Require careful analysis of the SAME concept to eliminate' : ''}${request.targetDOK === 4 ? '- Make distractors represent sophisticated but flawed synthesis\n- Answers that connect ideas incorrectly\n- Still bounded by taught content' : ''}`
 
   const outputFormat =
     request.strategy === 'questions'
@@ -503,7 +576,7 @@ ${request.targetDOK === 1 ? '- Make distractors more obviously wrong\n- Use clea
     ],
     "correctAnswer": "b",
     "standardRef": "STANDARD-CODE",
-    "explanation": "Why this is the correct answer"
+    "explanation": "Why this is correct AND what idea spine was preserved"
   }
 ]`
       : `Return ONLY a valid JSON object with updated questions:
@@ -523,14 +596,20 @@ ${request.targetDOK === 1 ? '- Make distractors more obviously wrong\n- Use clea
 
   return `Create a DOK Level ${request.targetDOK} variant of this assessment for grade ${request.gradeLevel} ${request.subject}.
 
+CRITICAL RULE - IDEA SPINE PRESERVATION:
+DOK changes the TYPE OF THINKING required, NOT the content.
+Each variant question must test the SAME core concept as the original.
+DO NOT introduce new topics, mechanisms, vocabulary, or facts.
+If you cannot create a valid DOK ${request.targetDOK} variant without adding new content, keep the question closer to its original form.
+
 ORIGINAL ASSESSMENT: "${assessment.title}"
 Question Count: ${assessment.questions.length}
-Strategy: ${request.strategy === 'questions' ? 'Generate new questions' : 'Update distractors only'}
+Strategy: ${request.strategy === 'questions' ? 'Generate new questions (same concepts, different tasks)' : 'Update distractors only'}
 
 ORIGINAL QUESTIONS:
 ${JSON.stringify(questionsJson, null, 2)}
 
-STANDARDS TO MAINTAIN:
+STANDARDS (for alignment reference):
 ${standardsText}
 
 TASK:
@@ -538,6 +617,13 @@ ${strategyInstructions}
 
 OUTPUT FORMAT:
 ${outputFormat}
+
+VALIDATION BEFORE RESPONDING:
+For each question, verify:
+1. The core concept (idea spine) is IDENTICAL to the original
+2. Only the cognitive task changed (not the content)
+3. No new facts, terms, or mechanisms were introduced
+4. A student who learned only what the original tested could still answer
 
 Generate the DOK ${request.targetDOK} variant now:`
 }

@@ -74,9 +74,11 @@ class AIService {
       sender.send('ai:questionStream', startEvent)
 
       // Build the prompt with optional context and prompt supplements
+      // taughtContent defines scope, materialContext provides context for wording/examples
       const prompt = buildQuestionGenerationPrompt(
         request,
         standardsText,
+        request.taughtContent,
         materialContext,
         appPromptSupplement,
         coursePromptSupplement
@@ -172,6 +174,7 @@ class AIService {
       const prompt = buildQuestionGenerationPrompt(
         request,
         standardsText,
+        request.taughtContent,
         materialContext,
         appPromptSupplement,
         coursePromptSupplement

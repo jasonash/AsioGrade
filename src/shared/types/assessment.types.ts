@@ -69,6 +69,10 @@ export interface Assessment extends Entity {
   status: AssessmentStatus
   publishedAt?: string
 
+  // Taught content / learning intentions - defines what is assessable
+  // This is the scope boundary for AI question generation
+  taughtContent?: string
+
   // DOK-based variants (Phase 5)
   variants?: AssessmentVariant[]
 
@@ -101,6 +105,7 @@ export interface CreateAssessmentInput {
   description?: string
   purpose: AssessmentPurpose
   questions?: Question[] // Can start empty
+  taughtContent?: string // What was explicitly taught - defines assessable scope
 }
 
 /**
@@ -115,6 +120,7 @@ export interface UpdateAssessmentInput {
   purpose?: AssessmentPurpose
   questions?: Question[]
   status?: AssessmentStatus
+  taughtContent?: string
   variants?: AssessmentVariant[]
   versions?: AssessmentVersion[]
 }
