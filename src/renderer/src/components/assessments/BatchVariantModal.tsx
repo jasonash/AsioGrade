@@ -4,8 +4,6 @@ import Button from '@mui/material/Button'
 import Checkbox from '@mui/material/Checkbox'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import FormGroup from '@mui/material/FormGroup'
-import Select from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
 import Alert from '@mui/material/Alert'
 import Typography from '@mui/material/Typography'
 import Divider from '@mui/material/Divider'
@@ -14,7 +12,7 @@ import Chip from '@mui/material/Chip'
 import WarningIcon from '@mui/icons-material/Warning'
 import { Modal } from '../ui'
 import { useAssessmentStore } from '../../stores'
-import type { VariantStrategy, AssessmentVariant, AssessmentVersion } from '../../../../shared/types'
+import type { AssessmentVariant, AssessmentVersion } from '../../../../shared/types'
 import type { DOKLevel } from '../../../../shared/types/roster.types'
 import type { BatchVariantConfig } from '../../../../shared/types/ai.types'
 
@@ -33,7 +31,6 @@ interface BatchVariantModalProps {
 
 interface DOKSelection {
   selected: boolean
-  strategy: VariantStrategy
   exists: boolean
   hasVersions: boolean
 }
@@ -44,11 +41,6 @@ const DOK_INFO: Record<DOKLevel, { label: string; description: string }> = {
   3: { label: 'DOK 3 - Strategic', description: 'Complex reasoning, synthesis, evidence' },
   4: { label: 'DOK 4 - Extended', description: 'Extended reasoning over time' }
 }
-
-const STRATEGY_OPTIONS: { value: VariantStrategy; label: string }[] = [
-  { value: 'questions', label: 'New Questions' },
-  { value: 'distractors', label: 'Modified Distractors' }
-]
 
 export function BatchVariantModal({
   isOpen,
@@ -67,10 +59,10 @@ export function BatchVariantModal({
 
   // DOK selection state (DOK 2 is always disabled as base)
   const [dokSelections, setDokSelections] = useState<Record<DOKLevel, DOKSelection>>({
-    1: { selected: false, strategy: 'distractors', exists: false, hasVersions: false },
-    2: { selected: false, strategy: 'distractors', exists: true, hasVersions: false }, // Base
-    3: { selected: false, strategy: 'distractors', exists: false, hasVersions: false },
-    4: { selected: false, strategy: 'distractors', exists: false, hasVersions: false }
+    1: { selected: false, exists: false, hasVersions: false },
+    2: { selected: false, exists: true, hasVersions: false }, // Base
+    3: { selected: false, exists: false, hasVersions: false },
+    4: { selected: false, exists: false, hasVersions: false }
   })
   const [generateVersions, setGenerateVersions] = useState(true)
 
@@ -79,17 +71,16 @@ export function BatchVariantModal({
     if (isOpen) {
       // Initialize based on existing variants
       const newSelections: Record<DOKLevel, DOKSelection> = {
-        1: { selected: false, strategy: 'distractors', exists: false, hasVersions: false },
-        2: { selected: false, strategy: 'distractors', exists: true, hasVersions: !!existingBaseVersions?.length },
-        3: { selected: false, strategy: 'distractors', exists: false, hasVersions: false },
-        4: { selected: false, strategy: 'distractors', exists: false, hasVersions: false }
+        1: { selected: false, exists: false, hasVersions: false },
+        2: { selected: false, exists: true, hasVersions: !!existingBaseVersions?.length },
+        3: { selected: false, exists: false, hasVersions: false },
+        4: { selected: false, exists: false, hasVersions: false }
       }
 
       for (const variant of existingVariants) {
         if (variant.dokLevel !== 2) {
           newSelections[variant.dokLevel] = {
             selected: true, // Pre-check existing
-            strategy: variant.strategy,
             exists: true,
             hasVersions: !!variant.versions?.length
           }
@@ -111,15 +102,10 @@ export function BatchVariantModal({
     }))
   }
 
-  const handleStrategyChange = (dok: DOKLevel, strategy: VariantStrategy): void => {
-    setDokSelections((prev) => ({
-      ...prev,
-      [dok]: { ...prev[dok], strategy }
-    }))
-  }
-
   const handleGenerate = async (): Promise<void> => {
     // Build variants array from selections
+    // Always use 'questions' strategy - the AI determines the best transformation
+    // based on pedagogical soundness (idea spine principle)
     const variants: BatchVariantConfig[] = []
     for (const dokStr of Object.keys(dokSelections)) {
       const dok = Number(dokStr) as DOKLevel
@@ -127,7 +113,7 @@ export function BatchVariantModal({
       if (dok !== 2 && selection.selected) {
         variants.push({
           dokLevel: dok,
-          strategy: selection.strategy,
+          strategy: 'questions', // AI intelligently transforms questions while preserving idea spine
           regenerate: selection.exists // Will replace if exists
         })
       }
@@ -161,7 +147,6 @@ export function BatchVariantModal({
       .filter(([dok, sel]) => Number(dok) !== 2 && sel.selected)
       .map(([dok, sel]) => ({
         dok: Number(dok) as DOKLevel,
-        strategy: sel.strategy,
         isRegenerate: sel.exists
       }))
 
@@ -202,7 +187,8 @@ export function BatchVariantModal({
             DOK Variants
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Select which DOK levels to generate. Each creates a different difficulty version.
+            Select which DOK levels to generate. Each changes the cognitive task while preserving
+            the same content.
           </Typography>
 
           <FormGroup>
@@ -258,21 +244,6 @@ export function BatchVariantModal({
                     }
                     sx={{ flex: 1, m: 0 }}
                   />
-
-                  {!isBase && selection.selected && (
-                    <Select
-                      size="small"
-                      value={selection.strategy}
-                      onChange={(e) => handleStrategyChange(dok, e.target.value as VariantStrategy)}
-                      sx={{ minWidth: 180 }}
-                    >
-                      {STRATEGY_OPTIONS.map((opt) => (
-                        <MenuItem key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  )}
                 </Paper>
               )
             })}

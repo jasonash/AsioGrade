@@ -13,7 +13,7 @@ import Chip from '@mui/material/Chip'
 import Paper from '@mui/material/Paper'
 import { Modal } from '../ui'
 import { useAssessmentStore } from '../../stores'
-import type { VariantStrategy, AssessmentVariant } from '../../../../shared/types'
+import type { AssessmentVariant } from '../../../../shared/types'
 import type { DOKLevel } from '../../../../shared/types/roster.types'
 
 interface VariantGenerationModalProps {
@@ -51,19 +51,6 @@ const DOK_LEVELS: { value: DOKLevel; label: string; description: string }[] = [
   }
 ]
 
-const STRATEGIES: { value: VariantStrategy; label: string; description: string }[] = [
-  {
-    value: 'questions',
-    label: 'Generate New Questions',
-    description: 'Create entirely new questions at the target DOK level while maintaining the same standard coverage'
-  },
-  {
-    value: 'distractors',
-    label: 'Update Distractors Only',
-    description: 'Keep question stems unchanged but regenerate distractors appropriate for the target DOK level'
-  }
-]
-
 export function VariantGenerationModal({
   isOpen,
   onClose,
@@ -78,7 +65,6 @@ export function VariantGenerationModal({
   const { generateDOKVariant, generatingVariant, error: storeError, clearError } = useAssessmentStore()
 
   const [targetDOK, setTargetDOK] = useState<DOKLevel>(2)
-  const [strategy, setStrategy] = useState<VariantStrategy>('distractors')
 
   // Reset form when modal opens
   useEffect(() => {
@@ -88,17 +74,18 @@ export function VariantGenerationModal({
       if (availableDOKs.length > 0) {
         setTargetDOK(availableDOKs[0].value)
       }
-      setStrategy('distractors')
       clearError()
     }
   }, [isOpen, existingVariantDOKs, clearError])
 
   const handleGenerate = async (): Promise<void> => {
+    // Always use 'questions' strategy - the AI determines the best transformation
+    // based on pedagogical soundness (idea spine principle)
     const result = await generateDOKVariant(
       assessmentId,
       courseId,
       targetDOK,
-      strategy,
+      'questions', // AI intelligently transforms questions while preserving idea spine
       standardRefs,
       gradeLevel,
       subject
@@ -212,49 +199,6 @@ export function VariantGenerationModal({
                 </Paper>
               )
             })}
-          </RadioGroup>
-        </FormControl>
-
-        {/* Strategy Selection */}
-        <FormControl component="fieldset">
-          <FormLabel component="legend" sx={{ fontWeight: 600, mb: 1 }}>
-            Generation Strategy
-          </FormLabel>
-          <RadioGroup
-            value={strategy}
-            onChange={(e) => setStrategy(e.target.value as VariantStrategy)}
-          >
-            {STRATEGIES.map((strat) => (
-              <Paper
-                key={strat.value}
-                variant="outlined"
-                sx={{
-                  p: 1.5,
-                  mb: 1,
-                  cursor: 'pointer',
-                  border: strategy === strat.value ? '2px solid' : '1px solid',
-                  borderColor: strategy === strat.value ? 'primary.main' : 'divider',
-                  '&:hover': { borderColor: 'primary.light' }
-                }}
-                onClick={() => setStrategy(strat.value)}
-              >
-                <FormControlLabel
-                  value={strat.value}
-                  control={<Radio size="small" />}
-                  label={
-                    <Box>
-                      <Typography variant="body2" fontWeight={600}>
-                        {strat.label}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {strat.description}
-                      </Typography>
-                    </Box>
-                  }
-                  sx={{ m: 0, width: '100%' }}
-                />
-              </Paper>
-            ))}
           </RadioGroup>
         </FormControl>
 
