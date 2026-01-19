@@ -80,38 +80,59 @@ export function QuestionStatsModal({
     }
   }, [isOpen, assessmentId, assessment])
 
+  // Build a map of all question IDs to questions (includes base and variant questions)
+  const questionMap = useMemo((): Map<string, Question> => {
+    const map = new Map<string, Question>()
+    if (!assessment) return map
+
+    // Add base assessment questions
+    for (const q of assessment.questions) {
+      map.set(q.id, q)
+    }
+
+    // Add variant questions (DOK variants have different question IDs)
+    if (assessment.variants) {
+      for (const variant of assessment.variants) {
+        for (const q of variant.questions) {
+          map.set(q.id, q)
+        }
+      }
+    }
+
+    return map
+  }, [assessment])
+
   // Build question stats rows
   const questionStats = useMemo((): QuestionStatRow[] => {
     if (!gradeStats.byQuestion || gradeRecords.length === 0) return []
 
-    // Get unique question IDs from grade records (preserves order)
-    const questionIds: string[] = []
-    if (gradeRecords[0]?.answers) {
-      gradeRecords[0].answers.forEach((answer) => {
-        if (!questionIds.includes(answer.questionId)) {
-          questionIds.push(answer.questionId)
-        }
-      })
-    }
+    // Get question info from the first grade record's answers
+    // Each answer has questionNumber (1-indexed) and questionId
+    const firstRecordAnswers = gradeRecords[0]?.answers || []
 
-    return questionIds.map((questionId, index) => {
-      const stats = gradeStats.byQuestion[questionId]
-      const question = assessment?.questions.find((q) => q.id === questionId) || null
+    // Sort by question number to ensure correct order
+    const sortedAnswers = [...firstRecordAnswers].sort((a, b) => a.questionNumber - b.questionNumber)
+
+    return sortedAnswers.map((answer) => {
+      // Stats are keyed by question number as string (e.g., "1", "2", "3")
+      const stats = gradeStats.byQuestion[answer.questionNumber.toString()]
+      // Look up question from our combined map (handles both base and variant questions)
+      const question = questionMap.get(answer.questionId) || null
 
       const totalCount = stats ? stats.correctCount + stats.incorrectCount + stats.skippedCount : 0
       const missedCount = stats ? stats.incorrectCount + stats.skippedCount : 0
       const percentMissed = totalCount > 0 ? (missedCount / totalCount) * 100 : 0
 
       return {
-        questionNumber: index + 1,
-        questionId,
+        questionNumber: answer.questionNumber,
+        questionId: answer.questionId,
         question,
         percentMissed,
         missedCount,
         totalCount
       }
     })
-  }, [gradeStats.byQuestion, gradeRecords, assessment])
+  }, [gradeStats.byQuestion, gradeRecords, questionMap])
 
   // Sort by percent missed (highest first)
   const sortedStats = useMemo(() => {
