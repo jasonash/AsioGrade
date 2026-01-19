@@ -10,6 +10,7 @@ import List from '@mui/material/List'
 import ListItem from '@mui/material/ListItem'
 import ListItemText from '@mui/material/ListItemText'
 import Divider from '@mui/material/Divider'
+import IconButton from '@mui/material/IconButton'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import PrintIcon from '@mui/icons-material/Print'
 import DeleteIcon from '@mui/icons-material/Delete'
@@ -17,9 +18,10 @@ import PeopleIcon from '@mui/icons-material/People'
 import QuizIcon from '@mui/icons-material/Quiz'
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday'
 import GradingIcon from '@mui/icons-material/Grading'
+import BarChartIcon from '@mui/icons-material/BarChart'
 import { useAssignmentStore, useRosterStore, useGradeStore } from '../stores'
 import { ScantronGenerationModal } from '../components/assignments'
-import { ScantronUploadModal, GradeReviewPanel } from '../components/grades'
+import { ScantronUploadModal, GradeReviewPanel, QuestionStatsModal } from '../components/grades'
 import { ConfirmModal } from '../components/ui'
 import type {
   CourseSummary,
@@ -90,6 +92,7 @@ export function AssignmentViewPage({
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [showGradeReview, setShowGradeReview] = useState(false)
+  const [isStatsModalOpen, setIsStatsModalOpen] = useState(false)
 
   // Fetch full assignment, roster, and existing grades when page loads
   useEffect(() => {
@@ -299,11 +302,25 @@ export function AssignmentViewPage({
                   Grades
                 </Typography>
                 {currentGrades && (
-                  <Chip
-                    label={`${currentGrades.records.length} graded`}
-                    size="small"
-                    color="success"
-                  />
+                  <>
+                    <Chip
+                      label={`${currentGrades.records.length} graded`}
+                      size="small"
+                      color="success"
+                    />
+                    <IconButton
+                      size="small"
+                      onClick={() => setIsStatsModalOpen(true)}
+                      sx={{
+                        ml: 1,
+                        bgcolor: 'action.hover',
+                        '&:hover': { bgcolor: 'action.selected' }
+                      }}
+                      title="View Question Statistics"
+                    >
+                      <BarChartIcon fontSize="small" />
+                    </IconButton>
+                  </>
                 )}
               </Box>
               {!currentGrades && !isLoadingGrades && (
@@ -357,6 +374,18 @@ export function AssignmentViewPage({
         variant="danger"
         isLoading={isDeleting}
       />
+
+      {/* Question Statistics Modal */}
+      {currentGrades && roster && (
+        <QuestionStatsModal
+          isOpen={isStatsModalOpen}
+          onClose={() => setIsStatsModalOpen(false)}
+          assessmentId={currentGrades.assessmentId}
+          gradeStats={currentGrades.stats}
+          gradeRecords={currentGrades.records}
+          students={roster.students}
+        />
+      )}
     </Box>
   )
 }
