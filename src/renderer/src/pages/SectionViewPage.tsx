@@ -7,6 +7,8 @@ import CircularProgress from '@mui/material/CircularProgress'
 import Divider from '@mui/material/Divider'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
+import Collapse from '@mui/material/Collapse'
+import Paper from '@mui/material/Paper'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
@@ -16,6 +18,8 @@ import ScheduleIcon from '@mui/icons-material/Schedule'
 import RoomIcon from '@mui/icons-material/Room'
 import AssignmentIcon from '@mui/icons-material/Assignment'
 import GradeIcon from '@mui/icons-material/Grade'
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import { useRosterStore, useAssignmentStore, useCourseStore } from '../stores'
 import { StudentList, StudentFormModal, CSVImportModal } from '../components/roster'
 import { AssignmentCard, AssignmentCreationModal } from '../components/assignments'
@@ -51,6 +55,7 @@ export function SectionViewPage({ course, section, onBack, onSectionUpdate, onAs
   const [editingStudent, setEditingStudent] = useState<Student | null>(null)
   const [deletingStudent, setDeletingStudent] = useState<Student | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isRosterExpanded, setIsRosterExpanded] = useState(false)
 
   // Fetch roster and assignments when section changes
   useEffect(() => {
@@ -142,52 +147,106 @@ export function SectionViewPage({ course, section, onBack, onSectionUpdate, onAs
         </Box>
       </Box>
 
-      {/* Actions */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setIsAddModalOpen(true)}>
-          Add Student
-        </Button>
-        <Button variant="outlined" startIcon={<UploadIcon />} onClick={() => setIsImportModalOpen(true)}>
-          Import CSV
-        </Button>
-        <Button
-          variant="outlined"
-          startIcon={<GradeIcon />}
-          onClick={onGradebookClick}
-          disabled={!onGradebookClick}
+      {/* Roster Section - Collapsible */}
+      <Paper variant="outlined" sx={{ overflow: 'hidden' }}>
+        {/* Roster Header */}
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            p: 2,
+            cursor: 'pointer',
+            '&:hover': { bgcolor: 'action.hover' }
+          }}
+          onClick={() => setIsRosterExpanded(!isRosterExpanded)}
         >
-          View Gradebook
-        </Button>
-      </Box>
-
-      {/* Loading state */}
-      {loading && !roster && (
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 6 }}>
-          <CircularProgress size={24} />
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <PeopleIcon sx={{ color: 'text.secondary' }} />
+            <Typography variant="h6" fontWeight={600}>
+              Roster
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              ({activeStudentCount} students)
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Action buttons - stop propagation to prevent collapse toggle */}
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<AddIcon />}
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsAddModalOpen(true)
+              }}
+            >
+              Add Student
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<UploadIcon />}
+              onClick={(e) => {
+                e.stopPropagation()
+                setIsImportModalOpen(true)
+              }}
+            >
+              Import CSV
+            </Button>
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<GradeIcon />}
+              onClick={(e) => {
+                e.stopPropagation()
+                onGradebookClick?.()
+              }}
+              disabled={!onGradebookClick}
+            >
+              View Gradebook
+            </Button>
+            <IconButton size="small">
+              {isRosterExpanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            </IconButton>
+          </Box>
         </Box>
-      )}
 
-      {/* Error state */}
-      {error && (
-        <Alert
-          severity="error"
-          action={
-            <Button size="small" onClick={() => fetchRoster(section.id)}>Try again</Button>
-          }
-        >
-          {error}
-        </Alert>
-      )}
+        {/* Collapsible Content */}
+        <Collapse in={isRosterExpanded}>
+          <Divider />
+          <Box sx={{ p: 2 }}>
+            {/* Loading state */}
+            {loading && !roster && (
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 6 }}>
+                <CircularProgress size={24} />
+              </Box>
+            )}
 
-      {/* Student list */}
-      {roster && (
-        <StudentList
-          students={roster.students}
-          onEdit={(student) => setEditingStudent(student)}
-          onDelete={(student) => setDeletingStudent(student)}
-          onUpdateDOK={handleUpdateDOK}
-        />
-      )}
+            {/* Error state */}
+            {error && (
+              <Alert
+                severity="error"
+                action={
+                  <Button size="small" onClick={() => fetchRoster(section.id)}>Try again</Button>
+                }
+              >
+                {error}
+              </Alert>
+            )}
+
+            {/* Student list */}
+            {roster && (
+              <StudentList
+                students={roster.students}
+                onEdit={(student) => setEditingStudent(student)}
+                onDelete={(student) => setDeletingStudent(student)}
+                onUpdateDOK={handleUpdateDOK}
+              />
+            )}
+          </Box>
+        </Collapse>
+      </Paper>
 
       {/* Assignments Section */}
       <Divider sx={{ my: 2 }} />
